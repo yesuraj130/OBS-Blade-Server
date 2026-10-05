@@ -138,8 +138,6 @@ const el = {
   fullPreviewTimestamp: document.getElementById('full-preview-timestamp'),
   fullPreviewSceneHint: document.getElementById('full-preview-scene-hint'),
   fullPreviewResHint: document.getElementById('full-preview-res-hint'),
-  btnFullPreviewToggleVis: document.getElementById('btn-full-preview-toggle-vis'),
-  textFullPreviewVis: document.getElementById('text-full-preview-vis'),
   btnFullPreviewRefresh: document.getElementById('btn-full-preview-refresh'),
 
   // OBS Host Filesystem Browser Modal
@@ -616,12 +614,6 @@ function setupEventListeners() {
     el.btnFullPreviewRefresh.addEventListener('click', (e) => {
       e.preventDefault();
       refreshFullPreview();
-    });
-  }
-  if (el.btnFullPreviewToggleVis) {
-    el.btnFullPreviewToggleVis.addEventListener('click', (e) => {
-      e.preventDefault();
-      toggleFullPreviewVisibility();
     });
   }
 
@@ -1279,6 +1271,13 @@ function closeContextMenu() {
 function openSceneContextMenu(x, y, sceneName) {
   const items = [];
 
+  // Preview Scene / Preview Page: Available for ALL users
+  items.push({
+    label: 'Preview Scene',
+    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+    onClick: () => openSourceFullPreview({ sourceName: sceneName, inputKind: 'scene' }, sceneName),
+  });
+
   // Rename scene is available when advanced options is enabled
   if (state.advancedOptionsEnabled) {
     items.push({
@@ -1342,6 +1341,13 @@ function isMediaSource(item) {
 function openSourceContextMenu(x, y, sceneName, item) {
   const isMedia = isMediaSource(item);
   const menuItems = [];
+
+  // Preview Source / Preview Page: Available for ALL users
+  menuItems.push({
+    label: 'Preview Source',
+    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+    onClick: () => openSourceFullPreview(item, sceneName),
+  });
 
   // Edit media(s): Available for ALL users on known image and video sources
   if (isMedia) {
@@ -1763,6 +1769,12 @@ function renderCategoryGrid() {
     ? `Current <span class="tab-scene-hint">(${escapeHtml(currentTarget)})</span>`
     : `Current`;
   btnCurrent.title = `Current Program/Preview Output: ${currentTarget || 'None'}`;
+
+  if (currentTarget) {
+    attachLongPressAndContextMenu(btnCurrent, (x, y) => {
+      openSceneContextMenu(x, y, currentTarget);
+    });
+  }
 
   btnCurrent.addEventListener('click', (e) => {
     e.preventDefault();
@@ -2203,8 +2215,9 @@ async function openSourceFullPreview(item, sceneName) {
   if (!item || !item.sourceName) return;
   activePreviewTarget = { item, sceneName };
 
-  const category = getSourceTypeCategory(item);
-  const categoryLabel = category.toUpperCase();
+  const isScene = item.inputKind === 'scene' || (item.sourceName === sceneName && item.sceneItemId == null);
+  const category = isScene ? 'screen' : getSourceTypeCategory(item);
+  const categoryLabel = isScene ? 'SCENE' : category.toUpperCase();
 
   if (el.fullPreviewTitle) {
     el.fullPreviewTitle.textContent = item.sourceName;
@@ -2215,19 +2228,19 @@ async function openSourceFullPreview(item, sceneName) {
   }
   if (el.fullPreviewSceneHint) {
     const sceneDisplay =
-      sceneName === '__CURRENT__'
-        ? getCurrentTargetScene() || 'Current'
-        : sceneName || 'Current';
+      isScene
+        ? item.sourceName
+        : (sceneName === '__CURRENT__'
+            ? getCurrentTargetScene() || 'Current'
+            : sceneName || 'Current');
     el.fullPreviewSceneHint.textContent = `Scene: ${sceneDisplay}`;
   }
   if (el.fullPreviewResHint) {
-    el.fullPreviewResHint.textContent = item.inputKind || 'Source Preview';
+    el.fullPreviewResHint.textContent = isScene ? 'Scene Program' : (item.inputKind || 'Source Preview');
   }
 
-  updateFullPreviewVisButton(item.sceneItemEnabled !== false);
-
   // Audio-only source handling
-  if (category === 'audio') {
+  if (!isScene && category === 'audio') {
     if (el.fullPreviewImg) el.fullPreviewImg.style.display = 'none';
     if (el.fullPreviewLoading) el.fullPreviewLoading.style.display = 'none';
     if (el.fullPreviewFallback) {
@@ -2260,19 +2273,6 @@ async function openSourceFullPreview(item, sceneName) {
   if (el.modalFullPreview) el.modalFullPreview.classList.add('open');
 
   await fetchFullPreviewFrame(item.sourceName);
-}
-
-function updateFullPreviewVisButton(enabled) {
-  if (!el.btnFullPreviewToggleVis || !el.textFullPreviewVis) return;
-  if (enabled) {
-    el.textFullPreviewVis.textContent = 'Visible in Scene';
-    el.btnFullPreviewToggleVis.classList.remove('btn-red-outline');
-    el.btnFullPreviewToggleVis.classList.add('btn-blue-outline');
-  } else {
-    el.textFullPreviewVis.textContent = 'Hidden in Scene';
-    el.btnFullPreviewToggleVis.classList.remove('btn-blue-outline');
-    el.btnFullPreviewToggleVis.classList.add('btn-red-outline');
-  }
 }
 
 async function fetchFullPreviewFrame(sourceName) {
@@ -2329,27 +2329,6 @@ async function fetchFullPreviewFrame(sourceName) {
 async function refreshFullPreview() {
   if (!activePreviewTarget || !activePreviewTarget.item) return;
   await fetchFullPreviewFrame(activePreviewTarget.item.sourceName);
-}
-
-async function toggleFullPreviewVisibility() {
-  if (!activePreviewTarget || !activePreviewTarget.item) return;
-  const { item, sceneName } = activePreviewTarget;
-  const targetScene =
-    sceneName === '__CURRENT__' ? getCurrentTargetScene() : sceneName;
-  if (!targetScene || item.sceneItemId == null) return;
-
-  try {
-    const next = !item.sceneItemEnabled;
-    await state.obs.setSceneItemEnabled(targetScene, item.sceneItemId, next);
-    item.sceneItemEnabled = next;
-    updateFullPreviewVisButton(next);
-    renderSourcesList(state.selectedCategoryScene, state.sceneItems);
-    setTimeout(() => {
-      fetchFullPreviewFrame(item.sourceName);
-    }, 200);
-  } catch (err) {
-    console.error(err);
-  }
 }
 
 function closeFullPreviewModal() {
