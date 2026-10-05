@@ -1,0 +1,555 @@
+/* Exact OBS Blade Replication Based on User Screenshots */
+:root {
+  --obs-bg: #000000;              /* Pure Black list background */
+  --obs-header-bg: #090e17;       /* Deep Navy AppBar */
+  --obs-panel-bg: #0d121c;        /* Panel & category section background */
+  --obs-btn-inactive: #151b27;    /* Inactive Scene Button */
+  --obs-btn-inactive-border: #1e2637;
+  --obs-red: #ff4766;             /* OBS Blade Red/Coral Accent */
+  
+  --obs-blue: #2196f3;            /* OBS Blade Blue Accent */
+  --obs-eye-visible: #1e88e5;     /* Visible Blue Eye */
+  --obs-eye-hidden: #ff3b30;      /* Hidden Red Crossed Eye */
+  --obs-icon-gray: #6b7280;
+
+  --obs-text-white: #ffffff;
+  --obs-text-gray: #9ca3af;
+
+  --safe-bottom: env(safe-area-inset-bottom, 16px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--obs-bg);
+  color: var(--obs-text-white);
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  padding-bottom: calc(var(--safe-bottom) + 20px);
+}
+
+/* 1. Top App Bar */
+.top-nav-bar {
+  background-color: var(--obs-header-bg);
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.nav-link-btn {
+  background: none;
+  border: none;
+  color: var(--obs-blue);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+
+.nav-link-btn:active {
+  opacity: 0.7;
+}
+
+.nav-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.2px;
+}
+
+.nav-dots-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  cursor: pointer;
+  letter-spacing: 2px;
+  padding: 4px 8px;
+}
+
+.nav-dots-btn:active {
+  color: var(--obs-blue);
+}
+
+/* 2. Top Scene Buttons Grid */
+.scenes-top-section {
+  background-color: var(--obs-header-bg);
+  padding: 12px 14px 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.scenes-grid-4col {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.scene-block-btn {
+  background-color: var(--obs-btn-inactive);
+  border: 1px solid var(--obs-btn-inactive-border);
+  border-radius: 12px;
+  min-height: 48px;
+  padding: 6px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.15s ease;
+  word-break: break-word;
+}
+
+.scene-block-btn:active {
+  transform: scale(0.96);
+}
+
+/* Program Scene Highlight: Solid Red Filled */
+.scene-block-btn.active-program {
+  background-color: var(--obs-red);
+  border: 1.5px solid var(--obs-red);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 10px rgba(255, 71, 102, 0.3);
+}
+
+/* Preview Scene Highlight: Red Outline (matches user screenshot Testimony button) */
+.scene-block-btn.active-preview {
+  background-color: var(--obs-btn-inactive);
+  border: 2px solid var(--obs-red);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Studio Mode Row: Checkbox on left, Transition Button on right */
+.studio-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 2px 4px 2px;
+}
+
+.studio-mode-checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.checkbox-custom {
+  width: 18px;
+  height: 18px;
+  border: 1.8px solid #ffffff;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: all 0.15s;
+}
+
+/* Studio Mode checked: Solid Red with white checkmark */
+.checkbox-custom.checked {
+  background: var(--obs-red);
+  border-color: var(--obs-red);
+}
+
+.checkbox-custom svg {
+  display: none;
+}
+
+.checkbox-custom.checked svg {
+  display: block;
+}
+
+.studio-mode-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+/* Transition Button: Oval capsule with red border and black background */
+.btn-transition-oval {
+  display: none;
+  background-color: #000000;
+  border: 1.8px solid var(--obs-red);
+  border-radius: 9999px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 24px;
+  min-height: 38px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.15s ease;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-transition-oval.show {
+  display: inline-flex;
+}
+
+.btn-transition-oval:active {
+  transform: scale(0.96);
+  background-color: rgba(255, 71, 102, 0.15);
+}
+
+/* 3. Collapsible Scene Preview Section */
+.preview-accordion-header {
+  background-color: var(--obs-panel-bg);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.preview-accordion-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.accordion-chevron {
+  width: 20px;
+  height: 20px;
+  color: #ffffff;
+  transition: transform 0.25s ease;
+}
+
+.accordion-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.preview-accordion-body {
+  display: none;
+  background: #000000;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.preview-accordion-body.open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-accordion-body img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.btn-refresh-overlay {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* 4. Category / Scene Text Grid */
+.category-text-grid {
+  background-color: var(--obs-panel-bg);
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.category-text-btn {
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 0;
+}
+
+.category-text-btn.selected {
+  color: var(--obs-blue);
+  font-weight: 700;
+}
+
+/* 5. Pure Black Sources List */
+.sources-list-section {
+  background-color: #000000;
+  flex: 1;
+}
+
+.source-item-row-blade {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #11141b;
+}
+
+.source-left-col {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.source-icon-outline {
+  width: 24px;
+  height: 24px;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.source-name-blade {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.btn-blade-eye {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+.btn-blade-eye.visible svg {
+  color: var(--obs-eye-visible);
+}
+
+.btn-blade-eye.hidden svg {
+  color: var(--obs-eye-hidden);
+}
+
+.btn-blade-filters {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #636b7b;
+  padding: 4px;
+}
+
+.btn-blade-filters:active {
+  color: var(--obs-blue);
+}
+
+/* Three-Dots Anchored Dropdown Popup Menu */
+.dropdown-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: none;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.dropdown-menu-overlay.open {
+  display: block;
+}
+
+.dropdown-menu-card {
+  position: absolute;
+  top: 48px;
+  right: 12px;
+  z-index: 100;
+  background: #141a27;
+  border: 1px solid #232d42;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.4);
+  min-width: 230px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  animation: dropdownPop 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top right;
+}
+
+.dropdown-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.1s;
+}
+
+.dropdown-menu-item:active {
+  background: #1e283b;
+  color: var(--obs-blue);
+}
+
+.dropdown-menu-item svg {
+  color: var(--obs-blue);
+  flex-shrink: 0;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #232d42;
+  margin: 4px 0;
+}
+
+@keyframes dropdownPop {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Sheets & Dialogs (Modals) */
+.blade-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.blade-dialog-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.blade-dialog-content {
+  background: #111622;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 20px;
+  padding-bottom: calc(var(--safe-bottom) + 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-top: 1px solid #1f2738;
+}
+
+.dialog-header-blade {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-title-blade {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.dialog-close-btn {
+  background: none;
+  border: none;
+  color: var(--obs-text-gray);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.input-blade {
+  background: #090c14;
+  border: 1px solid #1e2638;
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+
+.input-blade:focus {
+  border-color: var(--obs-blue);
+}
+
+.btn-blue-primary {
+  background: var(--obs-blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scene-checkbox-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #090c14;
+  border: 1px solid #1b2333;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.scene-checkbox-row:active {
+  border-color: var(--obs-blue);
+}

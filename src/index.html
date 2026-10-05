@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>OBS Dashboard</title>
+    <meta name="theme-color" content="#090e17" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!-- 1. Top App Bar -->
+    <header class="top-nav-bar">
+      <button id="btn-top-close" type="button" class="nav-link-btn" title="Disconnect & Exit">Close</button>
+      <span id="nav-top-title" class="nav-title">OBS Dashboard</span>
+      <button id="btn-top-menu" type="button" class="nav-dots-btn" title="Menu">•••</button>
+    </header>
+
+    <!-- Three Dots Anchored Dropdown Popup Menu -->
+    <div id="dropdown-menu-overlay" class="dropdown-menu-overlay">
+      <div id="dropdown-menu-card" class="dropdown-menu-card">
+        <button id="btn-menu-edit-buttons" type="button" class="dropdown-menu-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Edit Scene Button Visibility
+        </button>
+
+        <button id="btn-menu-edit-tabs" type="button" class="dropdown-menu-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          Edit Scene Tab Visibility
+        </button>
+
+        <div class="dropdown-divider"></div>
+
+        <button id="btn-menu-settings" type="button" class="dropdown-menu-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          OBS Connection Settings
+        </button>
+
+        <div class="dropdown-divider"></div>
+
+        <button id="btn-menu-toggle-stream" type="button" class="dropdown-menu-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+          <span id="text-menu-stream">Start Streaming</span>
+        </button>
+
+        <button id="btn-menu-toggle-record" type="button" class="dropdown-menu-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+          <span id="text-menu-record">Start Recording</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. Top Scene Buttons Grid Section -->
+    <section class="scenes-top-section">
+      <div id="scenes-grid-top" class="scenes-grid-4col">
+        <!-- Dynamically rendered 4-col buttons -->
+      </div>
+
+      <!-- Studio Mode Row: Checkbox on left + Oval Transition Button on right -->
+      <div class="studio-mode-row">
+        <div id="studio-mode-toggle" class="studio-mode-checkbox-group">
+          <div id="checkbox-studio" class="checkbox-custom">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <span class="studio-mode-label">Studio Mode</span>
+        </div>
+
+        <!-- Oval Transition Button (shown when Studio Mode is checked) -->
+        <button id="btn-trigger-transition" type="button" class="btn-transition-oval" title="Transition Staged Scene to Live Program">
+          Transition
+        </button>
+      </div>
+    </section>
+
+    <!-- 3. Collapsible "Current OBS scene preview" Section -->
+    <section>
+      <div id="preview-toggle-bar" class="preview-accordion-header">
+        <span class="preview-accordion-title">Current OBS scene preview</span>
+        <svg id="preview-chevron" class="accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+      <div id="preview-accordion-body" class="preview-accordion-body">
+        <img id="preview-live-img" style="display: none;" alt="Live Scene Preview" />
+        <div id="preview-empty-text" style="color: var(--obs-text-gray); font-size: 13px;">Tap Refresh to load preview</div>
+        <button id="btn-preview-refresh" type="button" class="btn-refresh-overlay">↻ Refresh</button>
+      </div>
+    </section>
+
+    <!-- 4. Category / Scene Text Grid (Lower Scene Tabs) -->
+    <section id="category-text-grid" class="category-text-grid">
+      <!-- Dynamically rendered scene links with selected one in blue -->
+    </section>
+
+    <!-- 5. Pure Black Sources List -->
+    <section class="sources-list-section">
+      <div id="sources-list-container">
+        <!-- Dynamically rendered source rows with eye & filter icons -->
+      </div>
+    </section>
+
+    <!-- Edit Scene Buttons Modal -->
+    <div id="modal-edit-scenes" class="blade-dialog-overlay">
+      <div class="blade-dialog-content">
+        <div class="dialog-header-blade">
+          <span class="dialog-title-blade">Scene Button Visibility</span>
+          <button id="btn-close-edit-scenes" type="button" class="dialog-close-btn">✕</button>
+        </div>
+        <div style="font-size: 12px; color: var(--obs-text-gray);">
+          Select which scenes appear as quick buttons in the top grid:
+        </div>
+        <div id="edit-scenes-checkbox-list" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Dynamically populated scene checkbox rows -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Scene Tabs Modal (Lower Grid) -->
+    <div id="modal-edit-tabs" class="blade-dialog-overlay">
+      <div class="blade-dialog-content">
+        <div class="dialog-header-blade">
+          <span class="dialog-title-blade">Scene Tab Visibility</span>
+          <button id="btn-close-edit-tabs" type="button" class="dialog-close-btn">✕</button>
+        </div>
+        <div style="font-size: 12px; color: var(--obs-text-gray);">
+          Select which scenes appear in the lower scene tabs:
+        </div>
+        <div id="edit-tabs-checkbox-list" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Dynamically populated scene tabs checkbox rows -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings / Connect Modal -->
+    <div id="modal-settings" class="blade-dialog-overlay">
+      <div class="blade-dialog-content">
+        <div class="dialog-header-blade">
+          <span class="dialog-title-blade">OBS Connection</span>
+          <button id="btn-close-settings" type="button" class="dialog-close-btn">✕</button>
+        </div>
+
+        <form id="form-settings-conn" style="display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="set-ip">OBS IP Address</label>
+            <input id="set-ip" class="input-blade" type="text" placeholder="192.168.1.100" style="width: 100%; margin-top: 4px;" />
+          </div>
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="set-port">WebSocket Port</label>
+            <input id="set-port" class="input-blade" type="number" value="4455" style="width: 100%; margin-top: 4px;" />
+          </div>
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="set-pass">Server Password</label>
+            <input id="set-pass" class="input-blade" type="password" placeholder="Leave empty if none" style="width: 100%; margin-top: 4px;" />
+          </div>
+          <button type="submit" class="btn-blue-primary">Connect to OBS</button>
+        </form>
+
+        <button id="btn-use-sim" type="button" style="background: #171f30; color: #93c5fd; border: 1px solid #253350; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer;">
+          ⚡ Connect to Built-in Simulator
+        </button>
+      </div>
+    </div>
+
+    <!-- Media File Switcher Modal -->
+    <div id="modal-media-file" class="blade-dialog-overlay">
+      <div class="blade-dialog-content">
+        <div class="dialog-header-blade">
+          <span id="media-source-title" class="dialog-title-blade">Source Settings</span>
+          <button id="btn-close-media-modal" type="button" class="dialog-close-btn">✕</button>
+        </div>
+        <div>
+          <label style="font-size: 12px; color: var(--obs-text-gray);">Current PC File Path</label>
+          <div id="media-current-path-text" style="font-size: 12px; color: var(--obs-blue); background: #080c14; padding: 10px; border-radius: 6px; word-break: break-all; font-family: monospace; margin-top: 4px;">Loading...</div>
+        </div>
+        <div>
+          <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-new-media-path">New Host File Path</label>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <input id="input-new-media-path" class="input-blade" style="flex: 1;" placeholder="C:\Streams\Assets\verse.png" />
+            <button id="btn-apply-path" type="button" class="btn-blue-primary" style="padding: 10px 14px;">Apply</button>
+          </div>
+        </div>
+        <div>
+          <label style="font-size: 12px; color: var(--obs-text-gray);">Quick Presets</label>
+          <div id="media-preset-container" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
