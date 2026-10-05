@@ -8,7 +8,7 @@
     "start": "node server.js",
     "build": "node build.js",
     "clean": "rm -rf dist",
-    "lint": "node --check server.js && node --check build.js && node --check src/app.js && node --check src/obs-client.js && node --check src/presets.js"
+    "lint": "node --check server.js && node --check build.js && node --check src/app.js && node --check src/obs-client.js && node --check src/obs-properties-builder.js"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

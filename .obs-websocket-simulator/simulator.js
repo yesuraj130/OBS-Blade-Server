@@ -79,17 +79,26 @@ export class ObsWebSocketSimulator {
     ];
 
     this.sourceSettings = new Map([
-      ['Sermon Slide', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/sermon_slide_01.png' } }],
-      ['Countdown Video', { inputKind: 'ffmpeg_source', inputSettings: { local_file: 'C:/OBS/Assets/countdown_5min.mp4' } }],
-      ['Testimony Video', { inputKind: 'ffmpeg_source', inputSettings: { local_file: 'C:/OBS/Videos/testimony_maria.mp4' } }],
-      ['Graphic Overlay', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/overlay_frame.png' } }],
-      ['QR Code Banner', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/tithe_qr.png' } }],
-      ['Welcome Graphic', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/welcome_banner.jpg' } }],
-      ['Church Logo', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/church_logo_white.png' } }],
-      ['Live Web Page', { inputKind: 'browser_source', inputSettings: { url: 'https://obsblade.app', width: 1920, height: 1080 } }],
-      ['Praise Lyrics', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'Amazing Grace, how sweet the sound\nThat saved a wretch like me' } }],
-      ['Scripture LowerThird', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'John 3:16 - For God so loved the world...' } }],
-      ['Credits Scroll', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'Pastor: John Doe\nMusic: Worship Team\nAudio/Video: Blade Web Crew' } }],
+      ['Sermon Slide', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/sermon_slide_01.png', unload: false } }],
+      ['Countdown Video', { inputKind: 'ffmpeg_source', inputSettings: { local_file: 'C:/OBS/Assets/countdown_5min.mp4', looping: true, restart_on_activate: true, speed_percent: 100, buffering_mb: 2, is_local_file: true } }],
+      ['Testimony Video', { inputKind: 'ffmpeg_source', inputSettings: { local_file: 'C:/OBS/Videos/testimony_maria.mp4', looping: false, restart_on_activate: true, speed_percent: 100, buffering_mb: 2, is_local_file: true } }],
+      ['Graphic Overlay', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/overlay_frame.png', unload: false } }],
+      ['QR Code Banner', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/tithe_qr.png', unload: false } }],
+      ['Welcome Graphic', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/welcome_banner.jpg', unload: false } }],
+      ['Church Logo', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/church_logo_white.png', unload: false } }],
+      ['Live Web Page', { inputKind: 'browser_source', inputSettings: { url: 'https://obsblade.app', width: 1920, height: 1080, fps: 60, custom_css: 'body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }', shutdown: false, restart_when_active: false, reroute_audio: false } }],
+      ['Praise Lyrics', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'Amazing Grace, how sweet the sound\nThat saved a wretch like me', color: 16777215, opacity: 100, gradient: false, outline: true, outline_color: 0, outline_size: 2, read_from_file: false } }],
+      ['Scripture LowerThird', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'John 3:16 - For God so loved the world...', color: 16777215, opacity: 100, gradient: false, outline: true, outline_color: 0, outline_size: 2, read_from_file: false } }],
+      ['Credits Scroll', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'Pastor: John Doe\nMusic: Worship Team\nAudio/Video: Blade Web Crew', color: 16777215, opacity: 100, gradient: false, outline: false, read_from_file: false } }],
+      ['Pastor Camera', { inputKind: 'dshow_input', inputSettings: { video_device_id: 'Elgato Cam Link 4K', res_type: 1, resolution: '3840x2160', frame_interval: 166666, video_format: 0, flip_vertically: false, audio_output_mode: 0 } }],
+      ['Interview Camera', { inputKind: 'dshow_input', inputSettings: { video_device_id: 'Logitech Brio 4K', res_type: 0, flip_vertically: false, audio_output_mode: 0 } }],
+      ['Congregation Cam', { inputKind: 'dshow_input', inputSettings: { video_device_id: 'Integrated Webcam (04f2:b61e)', res_type: 1, resolution: '1920x1080', frame_interval: 166666, video_format: 1, flip_vertically: false, audio_output_mode: 0 } }],
+      ['Host Mic', { inputKind: 'wasapi_input_capture', inputSettings: { device_id: 'Microphone (Realtek(R) Audio)', use_device_timing: true } }],
+      ['Pulpit Mic', { inputKind: 'wasapi_input_capture', inputSettings: { device_id: 'Shure MV7 USB Microphone', use_device_timing: true } }],
+      ['Offertory Music', { inputKind: 'wasapi_input_capture', inputSettings: { device_id: 'Line In (Audio Interface)', use_device_timing: true } }],
+      ['Ambient Music', { inputKind: 'wasapi_input_capture', inputSettings: { device_id: 'Default Audio In', use_device_timing: true } }],
+      ['Lower Third Background', { inputKind: 'color_source_v3', inputSettings: { color: 4278190080, width: 1920, height: 160 } }],
+      ['Sermon PPT Display', { inputKind: 'monitor_capture', inputSettings: { monitor: 0, capture_cursor: true, method: 0 } }],
     ]);
 
     this.sourceFilters = new Map([
@@ -408,6 +417,21 @@ export class ObsWebSocketSimulator {
           inputSettings: {},
         };
         return { data: entry };
+      }
+
+      case 'GetInputDefaultSettings': {
+        const defaults = this.getDefaultSettingsForKind(data.inputKind);
+        return { data: { defaultInputSettings: defaults } };
+      }
+
+      case 'GetInputPropertiesListPropertyItems': {
+        const items = this.getPropertyListItems(data.inputName, data.propertyName);
+        return { data: { propertyItems: items } };
+      }
+
+      case 'PressInputPropertiesButton': {
+        console.log(`[Simulator] Button pressed: "${data.propertyName}" on "${data.inputName}"`);
+        return { data: {} };
       }
 
       case 'SetInputSettings': {
@@ -757,5 +781,108 @@ export class ObsWebSocketSimulator {
       <text x="80" y="52" fill="#ffffff" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" text-anchor="middle" letter-spacing="-0.2">${safeName}</text>
       <circle cx="146" cy="14" r="3.5" fill="${accent}"/>
     </svg>`;
+  }
+
+  getDefaultSettingsForKind(kind) {
+    switch (kind) {
+      case 'image_source':
+        return { file: '', unload: false };
+      case 'ffmpeg_source':
+        return {
+          local_file: '',
+          is_local_file: true,
+          looping: false,
+          restart_on_activate: true,
+          buffering_mb: 2,
+          speed_percent: 100,
+          color_range: 0,
+          linear_alpha: false,
+        };
+      case 'browser_source':
+        return {
+          url: 'https://obsblade.app',
+          is_local_file: false,
+          width: 1920,
+          height: 1080,
+          fps: 60,
+          custom_css: 'body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }',
+          shutdown: false,
+          restart_when_active: false,
+          reroute_audio: false,
+        };
+      case 'text_gdiplus_v2':
+      case 'text_gdiplus':
+      case 'text_ft2_source_v2':
+        return {
+          text: '',
+          read_from_file: false,
+          file: '',
+          color: 16777215,
+          opacity: 100,
+          gradient: false,
+          outline: false,
+          outline_size: 2,
+          outline_color: 0,
+        };
+      case 'color_source_v3':
+      case 'color_source':
+        return { color: 4278190080, width: 1920, height: 1080 };
+      case 'dshow_input':
+        return {
+          video_device_id: 'Elgato Cam Link 4K',
+          res_type: 0,
+          resolution: '1920x1080',
+          frame_interval: 166666,
+          video_format: 0,
+          flip_vertically: false,
+          audio_output_mode: 0,
+        };
+      case 'wasapi_input_capture':
+      case 'wasapi_output_capture':
+        return { device_id: 'default', use_device_timing: true };
+      case 'monitor_capture':
+        return { monitor: 0, capture_cursor: true, method: 0 };
+      default:
+        return {};
+    }
+  }
+
+  getPropertyListItems(inputName, propertyName) {
+    if (propertyName === 'video_device_id') {
+      return [
+        { itemName: 'Elgato Cam Link 4K', itemValue: 'Elgato Cam Link 4K', itemEnabled: true },
+        { itemName: 'Logitech Brio 4K Webcam', itemValue: 'Logitech Brio 4K', itemEnabled: true },
+        { itemName: 'Integrated Webcam (04f2:b61e)', itemValue: 'Integrated Webcam (04f2:b61e)', itemEnabled: true },
+      ];
+    }
+    if (propertyName === 'resolution') {
+      return [
+        { itemName: '3840x2160 (4K UHD)', itemValue: '3840x2160', itemEnabled: true },
+        { itemName: '1920x1080 (1080p FHD)', itemValue: '1920x1080', itemEnabled: true },
+        { itemName: '1280x720 (720p HD)', itemValue: '1280x720', itemEnabled: true },
+      ];
+    }
+    if (propertyName === 'device_id') {
+      return [
+        { itemName: 'Default Audio In', itemValue: 'default', itemEnabled: true },
+        { itemName: 'Shure MV7 USB Microphone', itemValue: 'Shure MV7 USB Microphone', itemEnabled: true },
+        { itemName: 'Microphone (Realtek(R) Audio)', itemValue: 'Microphone (Realtek(R) Audio)', itemEnabled: true },
+        { itemName: 'Line In (Audio Interface)', itemValue: 'Line In (Audio Interface)', itemEnabled: true },
+      ];
+    }
+    if (propertyName === 'monitor') {
+      return [
+        { itemName: 'Primary Display (1920x1080 @ 0,0)', itemValue: 0, itemEnabled: true },
+        { itemName: 'Secondary Display (2560x1440 @ 1920,0)', itemValue: 1, itemEnabled: true },
+      ];
+    }
+    if (propertyName === 'audio_output_mode') {
+      return [
+        { itemName: 'Capture audio only', itemValue: 0, itemEnabled: true },
+        { itemName: 'Output desktop audio (WaveOut)', itemValue: 1, itemEnabled: true },
+        { itemName: 'Output desktop audio (DirectSound)', itemValue: 2, itemEnabled: true },
+      ];
+    }
+    return [];
   }
 }

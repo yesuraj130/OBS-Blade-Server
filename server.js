@@ -2,7 +2,7 @@
  * OBS Blade Server (Node.js Express + WebSocket Server)
  * Full-stack backend providing:
  * 1. Direct Media File Uploads (multer) into local storage
- * 2. Media Library APIs (list, delete, presets)
+ * 2. Media Library APIs (list, delete)
  * 3. OBS WebSocket v5 Bridge & Built-in Simulator
  * 4. Vite middleware for frontend development and static hosting for production
  */
@@ -148,6 +148,66 @@ async function startServer() {
       res.json({ success: true, message: 'File deleted' });
     } catch (err) {
       res.status(500).json({ error: 'Failed to delete file', details: err.message });
+    }
+  });
+
+  /**
+   * OBS Host Filesystem Browser API
+   * Enables browsing files and folders on the OBS host machine
+   */
+  app.get('/api/fs/browse', (req, res) => {
+    try {
+      let requestedDir = req.query.dir ? String(req.query.dir) : '';
+      if (!requestedDir || requestedDir === '__UPLOADS__') {
+        requestedDir = uploadsDir;
+      } else if (requestedDir === '__PROJECT__') {
+        requestedDir = __dirname;
+      }
+
+      const targetDir = fs.existsSync(requestedDir) && fs.statSync(requestedDir).isDirectory()
+        ? path.resolve(requestedDir)
+        : uploadsDir;
+
+      const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+      const items = [];
+
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue;
+        try {
+          const fullPath = path.join(targetDir, entry.name);
+          const isDir = entry.isDirectory();
+          let size = 0;
+          if (!isDir) {
+            const st = fs.statSync(fullPath);
+            size = st.size;
+          }
+          items.push({
+            name: entry.name,
+            path: fullPath,
+            isDirectory: isDir,
+            size: size,
+            ext: path.extname(entry.name).toLowerCase(),
+          });
+        } catch (_) {}
+      }
+
+      items.sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      });
+
+      const parentDir = path.dirname(targetDir);
+
+      res.json({
+        currentDir: targetDir,
+        parentDir: parentDir !== targetDir ? parentDir : null,
+        uploadsDir: uploadsDir,
+        projectDir: __dirname,
+        entries: items,
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to browse directory', details: err.message });
     }
   });
 

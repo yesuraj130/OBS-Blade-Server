@@ -4,7 +4,7 @@
  */
 
 import { ObsClient } from './obs-client.js';
-import { getMediaPresets, saveMediaPreset } from './presets.js';
+import { buildPropertiesView } from './obs-properties-builder.js';
 
 // State
 const state = {
@@ -97,36 +97,40 @@ const el = {
   toggleWakeLock: document.getElementById('toggle-wake-lock'),
   toggleClientStudio: document.getElementById('toggle-client-studio'),
 
-  // Edit Source / Source Settings Modal
+  // Edit Source / Source Settings Modal (Native Dynamic OBS Properties)
   modalMediaFile: document.getElementById('modal-media-file'),
   btnBackMediaModal: document.getElementById('btn-back-media-modal'),
   btnCloseMediaModal: document.getElementById('btn-close-media-modal'),
   mediaSourceTitle: document.getElementById('media-source-title'),
   sourceTypePill: document.getElementById('source-type-pill'),
-  sourceSectionMedia: document.getElementById('source-section-media'),
-  sourceSectionBrowser: document.getElementById('source-section-browser'),
-  sourceSectionText: document.getElementById('source-section-text'),
-  sourceSectionGeneric: document.getElementById('source-section-generic'),
-  mediaCurrentPathText: document.getElementById('media-current-path-text'),
-  inputNewMediaPath: document.getElementById('input-new-media-path'),
-  btnApplyPath: document.getElementById('btn-apply-path'),
-  mediaPresetContainer: document.getElementById('media-preset-container'),
-  mediaUploadedContainer: document.getElementById('media-uploaded-container'),
-  mediaFileInput: document.getElementById('media-file-input'),
-  mediaUploadDropzone: document.getElementById('media-upload-dropzone'),
-  uploadStatus: document.getElementById('upload-status'),
-  tabBtnUploaded: document.getElementById('tab-btn-uploaded'),
-  tabBtnPresets: document.getElementById('tab-btn-presets'),
-  inputBrowserUrl: document.getElementById('input-browser-url'),
-  inputBrowserWidth: document.getElementById('input-browser-width'),
-  inputBrowserHeight: document.getElementById('input-browser-height'),
-  btnApplyBrowserUrl: document.getElementById('btn-apply-browser-url'),
-  btnRefreshBrowser: document.getElementById('btn-refresh-browser'),
-  inputTextContent: document.getElementById('input-text-content'),
-  btnApplyText: document.getElementById('btn-apply-text'),
-  genericSourceInfo: document.getElementById('generic-source-info'),
-  btnModalRenameSource: document.getElementById('btn-modal-rename-source'),
-  btnModalSourceFilters: document.getElementById('btn-modal-source-filters'),
+  sourcePropertiesForm: document.getElementById('source-properties-form'),
+  propertiesStatusBanner: document.getElementById('properties-status-banner'),
+  btnPropertiesDefaults: document.getElementById('btn-properties-defaults'),
+  btnPropertiesApply: document.getElementById('btn-properties-apply'),
+  propLocalFileInput: document.getElementById('prop-local-file-input'),
+
+  // Dedicated Edit Media Modal (Known Image & Video Sources)
+  modalEditMedia: document.getElementById('modal-edit-media'),
+  btnBackEditMedia: document.getElementById('btn-back-edit-media'),
+  btnCloseEditMedia: document.getElementById('btn-close-edit-media'),
+  editMediaTitle: document.getElementById('edit-media-title'),
+  editMediaTypeBadge: document.getElementById('edit-media-type-badge'),
+  editMediaStatusBanner: document.getElementById('edit-media-status-banner'),
+  editMediaCurrentPath: document.getElementById('edit-media-current-path'),
+  inputEditMediaPath: document.getElementById('input-edit-media-path'),
+  btnMediaBrowseHost: document.getElementById('btn-media-browse-host'),
+  btnMediaBrowseLocal: document.getElementById('btn-media-browse-local'),
+  btnApplyEditMedia: document.getElementById('btn-apply-edit-media'),
+
+  // OBS Host Filesystem Browser Modal
+  modalHostFileBrowser: document.getElementById('modal-host-file-browser'),
+  btnBackHostBrowser: document.getElementById('btn-back-host-browser'),
+  btnCloseHostBrowser: document.getElementById('btn-close-host-browser'),
+  btnHostNavUp: document.getElementById('btn-host-nav-up'),
+  hostBrowserBreadcrumb: document.getElementById('host-browser-breadcrumb'),
+  hostBrowserEntries: document.getElementById('host-browser-entries'),
+  hostBrowserFooter: document.getElementById('host-browser-footer'),
+  btnSelectCurrentFolder: document.getElementById('btn-select-current-folder'),
 
   // Context Menu
   contextMenuPopover: document.getElementById('context-menu-popover'),
@@ -711,6 +715,8 @@ function setupEventListeners() {
     el.modalCreateScene,
     el.modalConfirmDelete,
     el.modalCreateSource,
+    el.modalHostFileBrowser,
+    el.modalEditMedia,
   ].forEach((overlay) => {
     if (!overlay) return;
     overlay.addEventListener('click', (e) => {
@@ -909,141 +915,155 @@ function setupEventListeners() {
     });
   }
 
-  el.btnApplyPath.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const newPath = el.inputNewMediaPath.value.trim();
-    if (newPath && state.selectedMediaSource) {
-      await updateMediaFilePath(state.selectedMediaSource, newPath);
-      closeMediaModal();
-    }
+  // Source Edit / Properties Modal Handlers
+  if (el.btnPropertiesApply) {
+    el.btnPropertiesApply.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await applyPropertiesChanges();
+    });
+  }
+
+  if (el.btnPropertiesDefaults) {
+    el.btnPropertiesDefaults.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await resetPropertiesDefaults();
+    });
+  }
+
+  // Dedicated Edit Media Modal Handlers
+  if (el.btnBackEditMedia) {
+    el.btnBackEditMedia.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeEditMediaModal();
+    });
+  }
+
+  if (el.btnCloseEditMedia) {
+    el.btnCloseEditMedia.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeEditMediaModal();
+    });
+  }
+
+  if (el.btnMediaBrowseHost) {
+    el.btnMediaBrowseHost.addEventListener('click', (e) => {
+      e.preventDefault();
+      openHostFileBrowser({
+        propKey: 'media_file',
+        currentPath: el.inputEditMediaPath.value,
+        pathType: 'file',
+        onSelect: (selectedPath) => {
+          el.inputEditMediaPath.value = selectedPath;
+        },
+      });
+    });
+  }
+
+  if (el.btnMediaBrowseLocal) {
+    el.btnMediaBrowseLocal.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isVideo =
+        activeEditMediaKind === 'ffmpeg_source' ||
+        activeEditMediaKind === 'vlc_source' ||
+        activeEditMediaKind.includes('video');
+      openLocalFileBrowser({
+        propKey: 'media_file',
+        accept: isVideo ? 'video/*,audio/*' : 'image/*',
+        onUploaded: (uploadedPath) => {
+          el.inputEditMediaPath.value = uploadedPath;
+          showEditMediaBanner(`✓ Uploaded file selected. Click "Apply Media" to save.`, false);
+        },
+      });
+    });
+  }
+
+  if (el.btnApplyEditMedia) {
+    el.btnApplyEditMedia.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await applyEditMedia();
+    });
+  }
+
+  // Local File Input Change Handler (uploads to host and updates field)
+  if (el.propLocalFileInput) {
+    el.propLocalFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const isEditMediaOpen = el.modalEditMedia && el.modalEditMedia.classList.contains('open');
+      const showBanner = isEditMediaOpen ? showEditMediaBanner : showPropertiesBanner;
+
+      showBanner(`Uploading "${file.name}" to OBS host...`, false);
+      const formData = new FormData();
+      formData.append('media', file);
+
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Upload failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        showBanner(`✓ Uploaded "${file.name}" to host!`, false);
+
+        if (activeLocalUploadCallback) {
+          activeLocalUploadCallback(data.path);
+          activeLocalUploadCallback = null;
+        }
+      } catch (err) {
+        console.error('[Upload Error]', err);
+        showBanner(`Upload failed: ${err.message}`, true);
+      }
+    });
+  }
+
+  // OBS Host File Browser Modal Handlers
+  if (el.btnBackHostBrowser) {
+    el.btnBackHostBrowser.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeHostFileBrowser();
+    });
+  }
+
+  if (el.btnCloseHostBrowser) {
+    el.btnCloseHostBrowser.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeHostFileBrowser();
+    });
+  }
+
+  if (el.btnHostNavUp) {
+    el.btnHostNavUp.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (currentHostParentDir) {
+        loadHostDirectory(currentHostParentDir);
+      }
+    });
+  }
+
+  // Quick Locations buttons
+  const quickLocButtons = document.querySelectorAll('.btn-quick-loc');
+  quickLocButtons.forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const targetDir = btn.getAttribute('data-dir');
+      if (targetDir) {
+        loadHostDirectory(targetDir);
+      }
+    });
   });
 
-  // Browser Source Apply & Refresh Handlers
-  if (el.btnApplyBrowserUrl) {
-    el.btnApplyBrowserUrl.addEventListener('click', async (e) => {
+  if (el.btnSelectCurrentFolder) {
+    el.btnSelectCurrentFolder.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!state.selectedMediaSource) return;
-      const url = el.inputBrowserUrl.value.trim();
-      const width = parseInt(el.inputBrowserWidth?.value, 10) || 1920;
-      const height = parseInt(el.inputBrowserHeight?.value, 10) || 1080;
-      try {
-        await state.obs.setInputSettings(state.selectedMediaSource, { url, width, height });
-        thumbnailCache.delete(state.selectedMediaSource);
-        loadSourcesForScene(state.selectedCategoryScene);
-        closeMediaModal();
-      } catch (err) {
-        console.error(err);
+      if (activeHostBrowserTarget && activeHostBrowserTarget.onSelect && currentHostDir) {
+        activeHostBrowserTarget.onSelect(currentHostDir);
       }
-    });
-  }
-
-  if (el.btnRefreshBrowser) {
-    el.btnRefreshBrowser.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (!state.selectedMediaSource) return;
-      try {
-        await state.obs.request('PressInputPropertiesButton', {
-          inputName: state.selectedMediaSource,
-          propertyName: 'refreshnocache',
-        });
-        el.btnRefreshBrowser.textContent = '✓ Reloaded';
-        setTimeout(() => {
-          if (el.btnRefreshBrowser) el.btnRefreshBrowser.textContent = '↻ Reload Browser Page';
-        }, 1200);
-      } catch (err) {
-        console.warn(err);
-      }
-    });
-  }
-
-  // Text Source Apply Handler
-  if (el.btnApplyText) {
-    el.btnApplyText.addEventListener('click', async (e) => {
-      e.preventDefault();
-      if (!state.selectedMediaSource) return;
-      const text = el.inputTextContent.value;
-      try {
-        await state.obs.setInputSettings(state.selectedMediaSource, { text });
-        thumbnailCache.delete(state.selectedMediaSource);
-        loadSourcesForScene(state.selectedCategoryScene);
-        closeMediaModal();
-      } catch (err) {
-        console.error(err);
-      }
-    });
-  }
-
-  // Quick Action Buttons in Source Edit Modal
-  if (el.btnModalRenameSource) {
-    el.btnModalRenameSource.addEventListener('click', (e) => {
-      e.preventDefault();
-      const srcName = state.selectedMediaSource;
-      const sceneName = state.selectedMediaScene || state.selectedCategoryScene;
-      closeMediaModal();
-      if (srcName) {
-        openRenameModal({ type: 'source', name: srcName, sceneName });
-      }
-    });
-  }
-
-  if (el.btnModalSourceFilters) {
-    el.btnModalSourceFilters.addEventListener('click', (e) => {
-      e.preventDefault();
-      const srcName = state.selectedMediaSource;
-      const sceneName = state.selectedMediaScene || state.selectedCategoryScene;
-      closeMediaModal();
-      if (srcName) {
-        openFiltersModal({ type: 'source', name: srcName, sceneName });
-      }
-    });
-  }
-
-  // Direct File Upload & Tab Switchers
-  if (el.mediaUploadDropzone && el.mediaFileInput) {
-    el.mediaUploadDropzone.addEventListener('click', () => {
-      el.mediaFileInput.click();
-    });
-
-    el.mediaFileInput.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      if (file && state.selectedMediaSource) {
-        await handleMediaUpload(file, state.selectedMediaSource);
-      }
-    });
-
-    el.mediaUploadDropzone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      el.mediaUploadDropzone.classList.add('dragover');
-    });
-
-    el.mediaUploadDropzone.addEventListener('dragleave', (e) => {
-      e.preventDefault();
-      el.mediaUploadDropzone.classList.remove('dragover');
-    });
-
-    el.mediaUploadDropzone.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      el.mediaUploadDropzone.classList.remove('dragover');
-      const file = e.dataTransfer?.files?.[0];
-      if (file && state.selectedMediaSource) {
-        await handleMediaUpload(file, state.selectedMediaSource);
-      }
-    });
-  }
-
-  if (el.tabBtnUploaded && el.tabBtnPresets) {
-    el.tabBtnUploaded.addEventListener('click', () => {
-      el.tabBtnUploaded.classList.add('active');
-      el.tabBtnPresets.classList.remove('active');
-      el.mediaUploadedContainer.style.display = 'flex';
-      el.mediaPresetContainer.style.display = 'none';
-    });
-
-    el.tabBtnPresets.addEventListener('click', () => {
-      el.tabBtnPresets.classList.add('active');
-      el.tabBtnUploaded.classList.remove('active');
-      el.mediaPresetContainer.style.display = 'flex';
-      el.mediaUploadedContainer.style.display = 'none';
+      closeHostFileBrowser();
     });
   }
 }
@@ -1198,21 +1218,6 @@ function openSceneContextMenu(x, y, sceneName) {
     });
   }
 
-  // Edit Scene: selects this scene so its sources are displayed in the sources editor view
-  items.push({
-    label: 'Edit Scene',
-    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
-    onClick: () => {
-      state.selectedCategoryScene = sceneName;
-      renderCategoryGrid();
-      loadSourcesForScene(sceneName);
-      const sourcesEl = document.querySelector('.sources-list-section');
-      if (sourcesEl) {
-        sourcesEl.scrollIntoView({ behavior: 'smooth' });
-      }
-    },
-  });
-
   // Filters option is ALWAYS shown for normal and advanced users to toggle existing filters
   items.push({
     label: 'Filters',
@@ -1244,43 +1249,77 @@ function openSceneContextMenu(x, y, sceneName) {
   });
 }
 
+/**
+ * Check if a source item is a known image or video source type
+ */
+function isMediaSource(item) {
+  if (!item) return false;
+  const category = getSourceTypeCategory(item);
+  const kind = (item?.inputKind || '').toLowerCase();
+  return (
+    category === 'image' ||
+    category === 'video' ||
+    kind === 'image_source' ||
+    kind === 'ffmpeg_source' ||
+    kind === 'vlc_source' ||
+    kind === 'slideshow' ||
+    kind.includes('image') ||
+    kind.includes('video') ||
+    kind.includes('media')
+  );
+}
+
 function openSourceContextMenu(x, y, sceneName, item) {
-  // Universal options for every source: Rename Source, Edit Source, Filters
-  const menuItems = [
-    {
-      label: 'Rename Source',
-      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
-      onClick: () => openRenameModal({ type: 'source', name: item.sourceName, sceneName }),
+  const isMedia = isMediaSource(item);
+  const menuItems = [];
+
+  // Edit media(s): Available for ALL users on known image and video sources
+  if (isMedia) {
+    menuItems.push({
+      label: 'Edit media(s)',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+      onClick: () => openEditMediaModal(item.sourceName, sceneName, item),
+    });
+  }
+
+  // Rename Source: Available for ALL users
+  menuItems.push({
+    label: 'Rename Source',
+    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
+    onClick: () => openRenameModal({ type: 'source', name: item.sourceName, sceneName }),
+  });
+
+  // Open Filters: Available for ALL users
+  menuItems.push({
+    label: 'Open Filters',
+    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><circle cx="8" cy="15" r="4"/><circle cx="16" cy="15" r="4"/></svg>`,
+    onClick: () => openFiltersModal({ type: 'source', name: item.sourceName, sceneName }),
+  });
+
+  // Toggle Visibility: available for all users
+  menuItems.push({
+    label: item.sceneItemEnabled ? 'Hide Source' : 'Show Source',
+    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+    onClick: async () => {
+      try {
+        const next = !item.sceneItemEnabled;
+        await state.obs.setSceneItemEnabled(sceneName, item.sceneItemId, next);
+        item.sceneItemEnabled = next;
+        renderSourcesList(sceneName, state.sceneItems);
+      } catch (err) {
+        console.error(err);
+      }
     },
-    {
+  });
+
+  // Advanced only: Edit Source, Add Source to Scene, Remove from Scene
+  if (state.advancedOptionsEnabled) {
+    menuItems.push({ divider: true });
+    menuItems.push({
       label: 'Edit Source',
       icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
       onClick: () => openMediaModal(item.sourceName, sceneName, item),
-    },
-    {
-      label: 'Filters',
-      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><circle cx="8" cy="15" r="4"/><circle cx="16" cy="15" r="4"/></svg>`,
-      onClick: () => openFiltersModal({ type: 'source', name: item.sourceName, sceneName }),
-    },
-    {
-      label: item.sceneItemEnabled ? 'Hide Source' : 'Show Source',
-      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
-      onClick: async () => {
-        try {
-          const next = !item.sceneItemEnabled;
-          await state.obs.setSceneItemEnabled(sceneName, item.sceneItemId, next);
-          item.sceneItemEnabled = next;
-          renderSourcesList(sceneName, state.sceneItems);
-        } catch (err) {
-          console.error(err);
-        }
-      },
-    },
-  ];
-
-  // Advanced only: Add Source & Remove from Scene
-  if (state.advancedOptionsEnabled) {
-    menuItems.push({ divider: true });
+    });
     menuItems.push({
       label: 'Add Source to Scene',
       icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
@@ -1508,6 +1547,9 @@ function applyAdvancedOptionsVisibility() {
     el.sourcesHeaderBar.style.display = state.advancedOptionsEnabled ? 'flex' : 'none';
   }
   renderTopSceneButtons();
+  if (state.sceneItems && state.sceneItems.length > 0) {
+    renderSourcesList(state.selectedCategoryScene, state.sceneItems);
+  }
   if (activeFiltersTarget) {
     loadFiltersForTarget(activeFiltersTarget);
   }
@@ -1907,6 +1949,7 @@ function renderSourcesList(sceneName, items) {
 
     const category = getSourceTypeCategory(item);
     const categoryLabel = category.toUpperCase();
+    const isMedia = isMediaSource(item);
 
     row.innerHTML = `
       <div class="source-left-col">
@@ -1923,7 +1966,7 @@ function renderSourcesList(sceneName, items) {
         </div>
       </div>
       <div class="source-right-actions">
-        <!-- Eye Icon Button -->
+        <!-- Eye Icon Button (Toggle Visibility) -->
         <button type="button" class="btn-blade-eye ${item.sceneItemEnabled ? 'visible' : 'hidden'}" title="Toggle Visibility">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
             ${
@@ -1931,15 +1974,6 @@ function renderSourcesList(sceneName, items) {
                 ? `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor"/>`
                 : `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`
             }
-          </svg>
-        </button>
-
-        <!-- Three Interlocking Circles (Venn / Filters / Media Settings) -->
-        <button type="button" class="btn-blade-filters" title="Source Settings / Change File">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="8" r="5"/>
-            <circle cx="8" cy="15" r="5"/>
-            <circle cx="16" cy="15" r="5"/>
           </svg>
         </button>
       </div>
@@ -1954,6 +1988,7 @@ function renderSourcesList(sceneName, items) {
     const btnEye = row.querySelector('.btn-blade-eye');
     btnEye.addEventListener('click', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       try {
         const next = !item.sceneItemEnabled;
         await state.obs.setSceneItemEnabled(sceneName, item.sceneItemId, next);
@@ -1964,17 +1999,9 @@ function renderSourcesList(sceneName, items) {
       }
     });
 
-    // Right-click and long-press on source row to open source context menu (rename, filters, media settings, visibility, remove)
+    // Right-click and long-press on source row to open source context menu (edit media, rename, filters, visibility, etc.)
     attachLongPressAndContextMenu(row, (x, y) => {
       openSourceContextMenu(x, y, sceneName, item);
-    });
-
-    // Interlocking circles / filters button -> opens Filters Modal for this source
-    const btnFilters = row.querySelector('.btn-blade-filters');
-    btnFilters.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openFiltersModal({ type: 'source', name: item.sourceName, sceneName });
     });
 
     el.sourcesListContainer.appendChild(row);
@@ -2081,253 +2108,453 @@ async function fetchPreviewSnapshot() {
   }
 }
 
-// Universal Source Edit Modal Logic
+// Dynamic Source Properties & Host File Browser State
+let activePropertiesDraftSettings = {};
+let activePropertiesDefaults = {};
+let activePropertiesInputKind = '';
+let activeHostBrowserTarget = null;
+let activeLocalUploadCallback = null;
+let currentHostDir = '';
+let currentHostParentDir = null;
+
+// Dedicated Edit Media State (available for all users)
+let activeEditMediaSource = null;
+let activeEditMediaScene = null;
+let activeEditMediaKind = '';
+
+function showEditMediaBanner(message, isError = false) {
+  if (!el.editMediaStatusBanner) return;
+  el.editMediaStatusBanner.textContent = message;
+  el.editMediaStatusBanner.className = `properties-status-banner ${isError ? 'error' : ''}`;
+  el.editMediaStatusBanner.style.display = 'block';
+  if (!isError) {
+    setTimeout(() => {
+      if (el.editMediaStatusBanner && el.editMediaStatusBanner.textContent === message) {
+        el.editMediaStatusBanner.style.display = 'none';
+      }
+    }, 4000);
+  }
+}
+
+async function openEditMediaModal(sourceName, sceneName, item) {
+  activeEditMediaSource = sourceName;
+  activeEditMediaScene = sceneName || state.selectedCategoryScene;
+
+  el.editMediaTitle.textContent = `Edit Media: ${sourceName}`;
+  el.editMediaCurrentPath.textContent = 'Loading path...';
+  el.inputEditMediaPath.value = '';
+
+  if (el.editMediaStatusBanner) {
+    el.editMediaStatusBanner.style.display = 'none';
+  }
+
+  el.modalEditMedia.classList.add('open');
+
+  try {
+    const res = await state.obs.getInputSettings(sourceName);
+    const kind = res.inputKind || (item ? item.inputKind : '');
+    activeEditMediaKind = kind;
+
+    const category = getSourceTypeCategory({ sourceName, inputKind: kind });
+    const isVideo = category === 'video' || kind === 'ffmpeg_source' || kind === 'vlc_source';
+
+    if (el.editMediaTypeBadge) {
+      el.editMediaTypeBadge.textContent = isVideo ? 'VIDEO' : 'IMAGE';
+    }
+
+    const currentPath =
+      res.inputSettings?.file ||
+      res.inputSettings?.local_file ||
+      res.inputSettings?.path ||
+      '';
+
+    el.editMediaCurrentPath.textContent = currentPath || '(No media file path configured)';
+    el.inputEditMediaPath.value = currentPath;
+  } catch (err) {
+    console.error('Failed to get input settings for media edit:', err);
+    el.editMediaCurrentPath.textContent = 'Failed to load media settings: ' + err.message;
+  }
+}
+
+function closeEditMediaModal() {
+  el.modalEditMedia.classList.remove('open');
+  activeEditMediaSource = null;
+  activeEditMediaScene = null;
+}
+
+async function applyEditMedia() {
+  if (!activeEditMediaSource) return;
+
+  const newPath = el.inputEditMediaPath.value.trim();
+  if (!newPath) {
+    showEditMediaBanner('Please specify or select a media file path.', true);
+    return;
+  }
+
+  const category = getSourceTypeCategory({ sourceName: activeEditMediaSource, inputKind: activeEditMediaKind });
+  const isVideo = category === 'video' || activeEditMediaKind === 'ffmpeg_source' || activeEditMediaKind === 'vlc_source';
+
+  const newSettings = {};
+  if (isVideo) {
+    newSettings.local_file = newPath;
+    newSettings.is_local_file = true;
+  } else {
+    newSettings.file = newPath;
+  }
+
+  try {
+    if (el.btnApplyEditMedia) {
+      el.btnApplyEditMedia.textContent = 'Applying...';
+    }
+
+    await state.obs.setInputSettings(activeEditMediaSource, newSettings);
+
+    el.editMediaCurrentPath.textContent = newPath;
+    thumbnailCache.delete(activeEditMediaSource);
+    loadSourcesForScene(state.selectedCategoryScene);
+
+    if (state.isPreviewExpanded) {
+      setTimeout(fetchPreviewSnapshot, 300);
+    }
+
+    showEditMediaBanner('✓ Media updated successfully in OBS Studio!', false);
+
+    if (el.btnApplyEditMedia) {
+      el.btnApplyEditMedia.textContent = '✓ Applied';
+      setTimeout(() => {
+        if (el.btnApplyEditMedia) {
+          el.btnApplyEditMedia.textContent = 'Apply Media';
+        }
+      }, 1500);
+    }
+  } catch (err) {
+    console.error('Failed to set media settings:', err);
+    showEditMediaBanner(`Failed to save media: ${err.message}`, true);
+    if (el.btnApplyEditMedia) {
+      el.btnApplyEditMedia.textContent = 'Apply Media';
+    }
+  }
+}
+
+function showPropertiesBanner(message, isError = false) {
+  if (!el.propertiesStatusBanner) return;
+  el.propertiesStatusBanner.textContent = message;
+  el.propertiesStatusBanner.className = `properties-status-banner ${isError ? 'error' : ''}`;
+  el.propertiesStatusBanner.style.display = 'block';
+  if (!isError) {
+    setTimeout(() => {
+      if (el.propertiesStatusBanner && el.propertiesStatusBanner.textContent === message) {
+        el.propertiesStatusBanner.style.display = 'none';
+      }
+    }, 4000);
+  }
+}
+
+// Universal Source Edit Modal Logic (Dynamic OBS Properties View)
 async function openMediaModal(sourceName, sceneName, item) {
   state.selectedMediaSource = sourceName;
   state.selectedMediaScene = sceneName || state.selectedCategoryScene;
-  el.mediaSourceTitle.textContent = `Edit: ${sourceName}`;
+  el.mediaSourceTitle.textContent = `Properties for '${sourceName}'`;
 
-  const category = item ? getSourceTypeCategory(item) : 'generic';
-  if (el.sourceTypePill) {
-    el.sourceTypePill.textContent = `${category.toUpperCase()} SOURCE`;
+  if (el.propertiesStatusBanner) {
+    el.propertiesStatusBanner.style.display = 'none';
   }
 
-  // Hide all sections first
-  if (el.sourceSectionMedia) el.sourceSectionMedia.style.display = 'none';
-  if (el.sourceSectionBrowser) el.sourceSectionBrowser.style.display = 'none';
-  if (el.sourceSectionText) el.sourceSectionText.style.display = 'none';
-  if (el.sourceSectionGeneric) el.sourceSectionGeneric.style.display = 'none';
-
-  if (el.uploadStatus) {
-    el.uploadStatus.style.display = 'none';
-    el.uploadStatus.textContent = '';
-  }
-
-  if (category === 'image' || category === 'video') {
-    if (el.sourceSectionMedia) el.sourceSectionMedia.style.display = 'flex';
-    el.mediaCurrentPathText.textContent = 'Loading path...';
-    el.inputNewMediaPath.value = '';
-    renderPresetsList(sourceName);
-    loadUploadedMedia(sourceName);
-  } else if (category === 'browser') {
-    if (el.sourceSectionBrowser) el.sourceSectionBrowser.style.display = 'flex';
-  } else if (category === 'text') {
-    if (el.sourceSectionText) el.sourceSectionText.style.display = 'flex';
-  } else {
-    if (el.sourceSectionGeneric) el.sourceSectionGeneric.style.display = 'flex';
-    if (el.genericSourceInfo) {
-      el.genericSourceInfo.textContent = `${sourceName} (${category.toUpperCase()}) - Active in OBS`;
-    }
-  }
+  el.sourcePropertiesForm.innerHTML = `
+    <div style="text-align: center; color: var(--obs-text-gray); padding: 32px 0; font-size: 13px;">
+      Loading properties from OBS...
+    </div>
+  `;
 
   el.modalMediaFile.classList.add('open');
 
   try {
     const res = await state.obs.getInputSettings(sourceName);
-    const settings = res.inputSettings || {};
+    const kind = res.inputKind || (item ? item.inputKind : 'image_source');
+    activePropertiesInputKind = kind;
 
-    if (category === 'image' || category === 'video') {
-      const path = settings.file || settings.local_file || 'No local file configured';
-      el.mediaCurrentPathText.textContent = path;
-      el.inputNewMediaPath.value = path;
-    } else if (category === 'browser') {
-      if (el.inputBrowserUrl) el.inputBrowserUrl.value = settings.url || 'https://obsblade.app';
-      if (el.inputBrowserWidth) el.inputBrowserWidth.value = settings.width || 1920;
-      if (el.inputBrowserHeight) el.inputBrowserHeight.value = settings.height || 1080;
-    } else if (category === 'text') {
-      if (el.inputTextContent) el.inputTextContent.value = settings.text || '';
+    const kindLabel = kind.replace(/_source(_v\d+)?$/, '').replace(/_input$/, '').replace(/_/g, ' ');
+    if (el.sourceTypePill) {
+      el.sourceTypePill.textContent = kindLabel.toUpperCase();
     }
+
+    let defRes = { defaultInputSettings: {} };
+    try {
+      defRes = await state.obs.getInputDefaultSettings(kind);
+    } catch (_) {}
+
+    activePropertiesDefaults = defRes.defaultInputSettings || {};
+    activePropertiesDraftSettings = { ...activePropertiesDefaults, ...(res.inputSettings || {}) };
+
+    await buildPropertiesView({
+      container: el.sourcePropertiesForm,
+      sourceName,
+      inputKind: kind,
+      currentSettings: res.inputSettings || {},
+      defaultSettings: activePropertiesDefaults,
+      obsClient: state.obs,
+      onBrowseHost: (args) => openHostFileBrowser(args),
+      onBrowseLocal: (args) => openLocalFileBrowser(args),
+      onSettingChange: (_key, _val, draft) => {
+        activePropertiesDraftSettings = draft;
+      },
+      onTriggerButton: async (actionOrKey) => {
+        if (actionOrKey === 'refresh_browser') {
+          try {
+            await state.obs.request('PressInputPropertiesButton', {
+              inputName: sourceName,
+              propertyName: 'refreshnocache',
+            });
+            showPropertiesBanner('✓ Browser cache reloaded in OBS', false);
+          } catch (err) {
+            showPropertiesBanner(`Error refreshing browser: ${err.message}`, true);
+          }
+        } else {
+          try {
+            await state.obs.pressInputPropertiesButton(sourceName, actionOrKey);
+            showPropertiesBanner(`✓ Action "${actionOrKey}" triggered in OBS`, false);
+          } catch (err) {
+            showPropertiesBanner(`Action error: ${err.message}`, true);
+          }
+        }
+      },
+    });
   } catch (err) {
-    console.warn(err);
+    el.sourcePropertiesForm.innerHTML = `
+      <div style="padding: 24px; text-align: center; color: var(--obs-red); font-size: 13px;">
+        Failed to load properties: ${escapeHtml(err.message)}
+      </div>
+    `;
   }
 }
 
 function closeMediaModal() {
   el.modalMediaFile.classList.remove('open');
-  if (el.mediaFileInput) {
-    el.mediaFileInput.value = '';
+  if (el.propLocalFileInput) {
+    el.propLocalFileInput.value = '';
   }
 }
 
-async function handleMediaUpload(file, sourceName) {
-  if (!file) return;
-
-  if (el.uploadStatus) {
-    el.uploadStatus.style.display = 'block';
-    el.uploadStatus.textContent = `Uploading ${file.name}...`;
-    el.uploadStatus.style.color = '#60a5fa';
-  }
-
-  const formData = new FormData();
-  formData.append('media', file);
+async function applyPropertiesChanges() {
+  if (!state.selectedMediaSource) return;
 
   try {
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Upload failed (${response.status})`);
+    if (el.btnPropertiesApply) {
+      el.btnPropertiesApply.textContent = 'Applying...';
     }
 
-    const data = await response.json();
-    console.log('[Upload] Success:', data);
+    await state.obs.setInputSettings(state.selectedMediaSource, activePropertiesDraftSettings);
 
-    if (el.uploadStatus) {
-      el.uploadStatus.textContent = `✓ Uploaded! Applying to "${sourceName}"...`;
-      el.uploadStatus.style.color = '#4ade80';
-    }
-
-    // Immediately update OBS source file path with absolute host path
-    await updateMediaFilePath(sourceName, data.path);
-    el.mediaCurrentPathText.textContent = data.path;
-    el.inputNewMediaPath.value = data.path;
-
-    // Refresh media library list
-    await loadUploadedMedia(sourceName);
-
-    setTimeout(() => {
-      closeMediaModal();
-    }, 1000);
-  } catch (err) {
-    console.error('[Upload Error]', err);
-    if (el.uploadStatus) {
-      el.uploadStatus.textContent = `Upload failed: ${err.message}`;
-      el.uploadStatus.style.color = '#f87171';
-    }
-  }
-}
-
-async function loadUploadedMedia(sourceName) {
-  if (!el.mediaUploadedContainer) return;
-  el.mediaUploadedContainer.innerHTML = '<div style="font-size: 12px; color: #6b7280;">Loading uploaded files...</div>';
-
-  try {
-    const res = await fetch('/api/media');
-    if (!res.ok) throw new Error('Failed to load media list');
-    const data = await res.json();
-    const files = data.files || [];
-
-    el.mediaUploadedContainer.innerHTML = '';
-
-    if (files.length === 0) {
-      el.mediaUploadedContainer.innerHTML =
-        '<div style="font-size: 12px; color: #6b7280; padding: 12px; text-align: center;">No files uploaded yet. Drag or choose a file above to upload directly!</div>';
-      return;
-    }
-
-    files.forEach((file) => {
-      const card = document.createElement('div');
-      card.className = 'uploaded-media-card';
-
-      const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(file.filename);
-      const isVideo = /\.(mp4|webm|mov|mkv)$/i.test(file.filename);
-      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
-
-      card.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
-          ${
-            isImage
-              ? `<img src="${file.url}" class="uploaded-media-thumb" alt="${escapeHtml(file.filename)}" />`
-              : `<div class="uploaded-media-thumb" style="display: flex; align-items: center; justify-content: center; font-size: 10px; color: #93c5fd; font-weight: 700;">${isVideo ? 'VIDEO' : 'FILE'}</div>`
-          }
-          <div style="overflow: hidden; flex: 1;">
-            <div style="font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              ${escapeHtml(file.filename.replace(/^\d+-\d+_/, ''))}
-            </div>
-            <div style="font-size: 11px; color: #94a3b8; font-family: monospace;">${sizeMb} MB</div>
-          </div>
-        </div>
-        <div style="display: flex; gap: 6px;">
-          <button type="button" class="btn-select-media" style="background: var(--obs-blue); color: #fff; border: none; border-radius: 4px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;">
-            Select
-          </button>
-          <button type="button" class="btn-delete-media" style="background: #201318; color: #f87171; border: 1px solid #3f1a24; border-radius: 4px; padding: 6px 8px; font-size: 11px; cursor: pointer;" title="Delete file">
-            ✕
-          </button>
-        </div>
-      `;
-
-      // Select button
-      card.querySelector('.btn-select-media').addEventListener('click', async (e) => {
-        e.preventDefault();
-        await updateMediaFilePath(sourceName, file.path);
-        closeMediaModal();
-      });
-
-      // Delete button
-      card.querySelector('.btn-delete-media').addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (confirm(`Delete ${file.filename}?`)) {
-          await fetch(`/api/media/${file.filename}`, { method: 'DELETE' });
-          loadUploadedMedia(sourceName);
-        }
-      });
-
-      el.mediaUploadedContainer.appendChild(card);
-    });
-  } catch (err) {
-    el.mediaUploadedContainer.innerHTML = `<div style="font-size: 12px; color: #f87171;">Could not load media: ${err.message}</div>`;
-  }
-}
-
-function renderPresetsList(sourceName) {
-  el.mediaPresetContainer.innerHTML = '';
-  const presets = getMediaPresets();
-
-  presets.forEach((p) => {
-    const item = document.createElement('div');
-    item.style.cssText =
-      'background: #090c14; padding: 10px 12px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: 1px solid #1a2233;';
-    item.innerHTML = `
-      <div>
-        <div style="font-size: 13px; font-weight: 600; color: #fff;">${escapeHtml(p.name)}</div>
-        <div style="font-size: 11px; color: #6b7280; font-family: monospace;">${escapeHtml(p.path)}</div>
-      </div>
-      <button type="button" style="background: var(--obs-blue); color: #fff; border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: 600;">Select</button>
-    `;
-
-    item.addEventListener('click', async (e) => {
-      e.preventDefault();
-      await updateMediaFilePath(sourceName, p.path);
-      closeMediaModal();
-    });
-
-    el.mediaPresetContainer.appendChild(item);
-  });
-}
-
-async function updateMediaFilePath(sourceName, path) {
-  try {
-    const res = await state.obs.getInputSettings(sourceName);
-    const kind = res.inputKind;
-    const settings = {};
-    if (kind === 'image_source') {
-      settings.file = path;
-    } else {
-      settings.local_file = path;
-    }
-
-    await state.obs.setInputSettings(sourceName, settings);
-
-    // Invalidate thumbnail cache and refresh sources list so new thumbnail appears immediately
-    thumbnailCache.delete(sourceName);
+    thumbnailCache.delete(state.selectedMediaSource);
     loadSourcesForScene(state.selectedCategoryScene);
-
-    saveMediaPreset({
-      id: String(Date.now()),
-      name: path.split(/[\\/]/).pop() || path,
-      path: path,
-    });
 
     if (state.isPreviewExpanded) {
       setTimeout(fetchPreviewSnapshot, 300);
     }
+
+    showPropertiesBanner('✓ Settings successfully saved to OBS Studio!', false);
+
+    if (el.btnPropertiesApply) {
+      el.btnPropertiesApply.textContent = '✓ Saved';
+      setTimeout(() => {
+        if (el.btnPropertiesApply) el.btnPropertiesApply.textContent = 'Apply Changes';
+      }, 1500);
+    }
   } catch (err) {
-    console.error('[Media Update Error]', err);
+    console.error('[Apply Properties Error]', err);
+    if (el.btnPropertiesApply) {
+      el.btnPropertiesApply.textContent = 'Apply Changes';
+    }
+    showPropertiesBanner(`Failed to save settings: ${err.message}`, true);
   }
+}
+
+async function resetPropertiesDefaults() {
+  if (!state.selectedMediaSource || !activePropertiesDefaults) return;
+  activePropertiesDraftSettings = { ...activePropertiesDefaults };
+
+  await buildPropertiesView({
+    container: el.sourcePropertiesForm,
+    sourceName: state.selectedMediaSource,
+    inputKind: activePropertiesInputKind,
+    currentSettings: activePropertiesDraftSettings,
+    defaultSettings: activePropertiesDefaults,
+    obsClient: state.obs,
+    onBrowseHost: (args) => openHostFileBrowser(args),
+    onBrowseLocal: (args) => openLocalFileBrowser(args),
+    onSettingChange: (_k, _v, draft) => {
+      activePropertiesDraftSettings = draft;
+    },
+    onTriggerButton: async (key) => {
+      try {
+        await state.obs.pressInputPropertiesButton(state.selectedMediaSource, key);
+        showPropertiesBanner(`✓ Action "${key}" triggered in OBS`, false);
+      } catch (err) {
+        showPropertiesBanner(`Action error: ${err.message}`, true);
+      }
+    },
+  });
+
+  showPropertiesBanner('Reset to default values. Click "Apply Changes" to save to OBS.', false);
+}
+
+// Local Device File Picker / Upload Helper
+function openLocalFileBrowser({ propKey, accept, onUploaded }) {
+  activeLocalUploadCallback = onUploaded;
+  if (el.propLocalFileInput) {
+    el.propLocalFileInput.accept = accept || '*/*';
+    el.propLocalFileInput.value = '';
+    el.propLocalFileInput.click();
+  }
+}
+
+// OBS Host Filesystem Browser Modal Logic
+async function openHostFileBrowser({ propKey, currentPath, pathType, accept, onSelect }) {
+  activeHostBrowserTarget = { propKey, currentPath, pathType, accept, onSelect };
+
+  if (el.hostBrowserFooter) {
+    el.hostBrowserFooter.style.display = pathType === 'folder' ? 'block' : 'none';
+  }
+
+  let startDir = '';
+  if (currentPath && typeof currentPath === 'string') {
+    const isFile = /\.[a-zA-Z0-9]+$/.test(currentPath);
+    const parts = currentPath.split(/[\\/]/);
+    if (isFile && parts.length > 1) {
+      parts.pop();
+      startDir = parts.join('/');
+    } else {
+      startDir = currentPath;
+    }
+  }
+
+  el.modalHostFileBrowser.classList.add('open');
+  await loadHostDirectory(startDir || '__UPLOADS__');
+}
+
+function closeHostFileBrowser() {
+  el.modalHostFileBrowser.classList.remove('open');
+  activeHostBrowserTarget = null;
+}
+
+async function loadHostDirectory(dir) {
+  el.hostBrowserEntries.innerHTML = `
+    <div style="text-align: center; color: var(--obs-text-gray); padding: 28px 0; font-size: 13px;">
+      Loading host directory...
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`/api/fs/browse?dir=${encodeURIComponent(dir || '')}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    currentHostDir = data.currentDir;
+    currentHostParentDir = data.parentDir;
+
+    el.hostBrowserBreadcrumb.textContent = data.currentDir;
+
+    if (data.parentDir) {
+      el.btnHostNavUp.style.display = 'flex';
+    } else {
+      el.btnHostNavUp.style.display = 'none';
+    }
+
+    renderHostEntries(data.entries || []);
+  } catch (err) {
+    el.hostBrowserEntries.innerHTML = `
+      <div style="text-align: center; color: var(--obs-red); padding: 24px 12px; font-size: 13px;">
+        Failed to browse host folder: ${escapeHtml(err.message)}
+      </div>
+    `;
+  }
+}
+
+function renderHostEntries(entries) {
+  el.hostBrowserEntries.innerHTML = '';
+
+  if (entries.length === 0) {
+    el.hostBrowserEntries.innerHTML = `
+      <div style="text-align: center; color: var(--obs-text-gray); padding: 32px 0; font-size: 13px;">
+        Folder is empty.
+      </div>
+    `;
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'host-entry-item';
+
+    const icon = entry.isDirectory ? '📁' : getFileIcon(entry.ext);
+    const sizeStr = entry.isDirectory ? '' : formatFileSize(entry.size);
+
+    row.innerHTML = `
+      <div class="host-entry-left">
+        <span class="host-entry-icon">${icon}</span>
+        <span class="host-entry-name">${escapeHtml(entry.name)}</span>
+        ${sizeStr ? `<span class="host-entry-meta">${sizeStr}</span>` : ''}
+      </div>
+      <div>
+        <button type="button" class="btn-host-select-file">
+          ${entry.isDirectory ? 'Open' : 'Select'}
+        </button>
+      </div>
+    `;
+
+    row.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (entry.isDirectory) {
+        loadHostDirectory(entry.path);
+      } else {
+        if (activeHostBrowserTarget && activeHostBrowserTarget.onSelect) {
+          activeHostBrowserTarget.onSelect(entry.path);
+        }
+        closeHostFileBrowser();
+      }
+    });
+
+    el.hostBrowserEntries.appendChild(row);
+  });
+}
+
+function getFileIcon(ext) {
+  switch (ext) {
+    case '.png':
+    case '.jpg':
+    case '.jpeg':
+    case '.gif':
+    case '.webp':
+    case '.svg':
+      return '🖼️';
+    case '.mp4':
+    case '.mov':
+    case '.mkv':
+    case '.webm':
+    case '.avi':
+      return '🎬';
+    case '.mp3':
+    case '.wav':
+    case '.aac':
+    case '.flac':
+    case '.ogg':
+      return '🎵';
+    case '.html':
+    case '.htm':
+      return '🌐';
+    case '.txt':
+    case '.log':
+      return '📄';
+    default:
+      return '📄';
+  }
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Three-Dots Anchored Dropdown Menu

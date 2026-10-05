@@ -247,121 +247,139 @@
       </div>
     </div>
 
-    <!-- Edit Source / Source Settings Modal -->
+    <!-- Edit Source / Dynamic Source Properties Modal (Native OBS Style) -->
     <div id="modal-media-file" class="blade-dialog-overlay">
-      <div class="blade-dialog-content">
+      <div class="blade-dialog-content modal-properties-content">
         <div class="dialog-header-blade">
           <button id="btn-back-media-modal" type="button" class="dialog-back-btn" title="Go Back">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
             <span>Back</span>
           </button>
           <div style="display: flex; flex-direction: column; align-items: center; max-width: 60%; overflow: hidden;">
-            <span id="media-source-title" class="dialog-title-blade" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">Edit Source</span>
-            <span id="source-type-pill" style="font-size: 10px; font-weight: 700; color: #93c5fd; background: #1e293b; padding: 2px 8px; border-radius: 999px; margin-top: 2px; text-transform: uppercase;">SOURCE</span>
+            <span id="media-source-title" class="dialog-title-blade" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">Properties for Source</span>
+            <span id="source-type-pill" class="source-type-badge">SOURCE</span>
           </div>
           <button id="btn-close-media-modal" type="button" class="dialog-done-btn">Done</button>
         </div>
 
-        <!-- 1. Media Section (Images, Videos, Clips) -->
-        <div id="source-section-media" style="display: flex; flex-direction: column; gap: 12px;">
-          <div>
-            <label style="font-size: 12px; color: var(--obs-text-gray);">Current PC File Path</label>
-            <div id="media-current-path-text" style="font-size: 12px; color: var(--obs-blue); background: #080c14; padding: 10px; border-radius: 6px; word-break: break-all; font-family: monospace; margin-top: 4px;">Loading...</div>
-          </div>
+        <!-- Hidden input for local file browser/upload helper -->
+        <input type="file" id="prop-local-file-input" style="display: none;" />
 
-          <!-- Direct Upload to Server Section -->
-          <div>
-            <label style="font-size: 12px; color: var(--obs-text-gray);">Direct File Upload (From Phone / PC)</label>
-            <input type="file" id="media-file-input" accept="image/*,video/*,audio/*" style="display: none;" />
-            <div id="media-upload-dropzone" class="upload-dropzone" style="margin-top: 4px;">
-              <svg class="upload-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <div class="upload-dropzone-title">Click or Drop Media to Upload Directly</div>
-              <div class="upload-dropzone-sub">Images, videos, or slides auto-save to host and apply to this OBS source</div>
-            </div>
-            <div id="upload-status" class="upload-status-text" style="display: none;"></div>
-          </div>
+        <!-- Notification / Status Banner -->
+        <div id="properties-status-banner" class="properties-status-banner" style="display: none;"></div>
 
-          <!-- Manual Path Input Section -->
-          <div>
-            <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-new-media-path">Manual Host File Path</label>
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <input id="input-new-media-path" class="input-blade" style="flex: 1;" placeholder="C:\Streams\Assets\verse.png" />
-              <button id="btn-apply-path" type="button" class="btn-blue-primary" style="padding: 10px 14px;">Apply</button>
-            </div>
-          </div>
-
-          <!-- Media Library & Presets Section -->
-          <div>
-            <div class="media-tab-bar">
-              <button id="tab-btn-uploaded" type="button" class="media-tab-btn active">Uploaded Media</button>
-              <button id="tab-btn-presets" type="button" class="media-tab-btn">Presets</button>
-            </div>
-
-            <!-- Uploaded Media List Container -->
-            <div id="media-uploaded-container" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-              <!-- Populated via GET /api/media -->
-            </div>
-
-            <!-- Quick Presets Container -->
-            <div id="media-preset-container" style="display: none; flex-direction: column; gap: 6px; margin-top: 8px;">
-              <!-- Populated from presets.js -->
-            </div>
+        <!-- Dynamic Properties Form matching OBS Studio properties-view.cpp -->
+        <div id="source-properties-form" class="source-properties-container">
+          <div style="text-align: center; color: var(--obs-text-gray); padding: 24px 0; font-size: 13px;">
+            Loading properties from OBS...
           </div>
         </div>
 
-        <!-- 2. Browser Source Section -->
-        <div id="source-section-browser" style="display: none; flex-direction: column; gap: 12px;">
-          <div>
-            <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-browser-url">Web Page URL</label>
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <input id="input-browser-url" class="input-blade" style="flex: 1;" placeholder="https://..." />
-              <button id="btn-apply-browser-url" type="button" class="btn-blue-primary" style="padding: 10px 14px;">Apply</button>
-            </div>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <div style="flex: 1;">
-              <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-browser-width">Width (px)</label>
-              <input id="input-browser-width" type="number" class="input-blade" style="width: 100%; margin-top: 4px;" value="1920" />
-            </div>
-            <div style="flex: 1;">
-              <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-browser-height">Height (px)</label>
-              <input id="input-browser-height" type="number" class="input-blade" style="width: 100%; margin-top: 4px;" value="1080" />
-            </div>
-          </div>
-          <button id="btn-refresh-browser" type="button" class="btn-blue-outline" style="padding: 10px; font-weight: 600;">
-            ↻ Reload Browser Page
+        <!-- Bottom Action Bar: Reset Defaults + Apply Changes -->
+        <div class="properties-action-bar">
+          <button id="btn-properties-defaults" type="button" class="btn-blue-outline" style="padding: 10px 14px; font-size: 13px;">
+            Defaults
+          </button>
+          <button id="btn-properties-apply" type="button" class="btn-blue-primary" style="flex: 1; padding: 10px 16px; font-size: 13px;">
+            Apply Changes
           </button>
         </div>
+      </div>
+    </div>
 
-        <!-- 3. Text / Title Source Section -->
-        <div id="source-section-text" style="display: none; flex-direction: column; gap: 12px;">
-          <div>
-            <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-text-content">Text Content</label>
-            <textarea id="input-text-content" class="input-blade" rows="4" style="width: 100%; margin-top: 4px; resize: vertical; font-size: 13px;" placeholder="Enter text string..."></textarea>
-          </div>
-          <button id="btn-apply-text" type="button" class="btn-blue-primary" style="padding: 10px;">Apply Text Changes</button>
-        </div>
-
-        <!-- 4. Generic Device / Capture Source Section -->
-        <div id="source-section-generic" style="display: none; flex-direction: column; gap: 12px;">
-          <div style="background: #080c14; padding: 14px; border-radius: 8px; border: 1px solid #1a2233;">
-            <div style="font-size: 12px; color: var(--obs-text-gray); margin-bottom: 4px;">Hardware Capture Device</div>
-            <div id="generic-source-info" style="font-size: 14px; font-weight: 600; color: #fff;">Configured & Active in OBS Studio</div>
-            <div style="font-size: 11px; color: var(--obs-text-gray); margin-top: 4px;">Manage audio filters, crop, or color grading via the Filters button below.</div>
-          </div>
-        </div>
-
-        <!-- Quick actions footer in Edit Source modal -->
-        <div style="display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #1a2233;">
-          <button id="btn-modal-rename-source" type="button" class="btn-gray-secondary" style="flex: 1; padding: 8px 12px; font-size: 12px;">
-            Rename Source
+    <!-- Dedicated Edit Media(s) Modal (Available for all users on image & video sources) -->
+    <div id="modal-edit-media" class="blade-dialog-overlay">
+      <div class="blade-dialog-content" style="max-width: 540px;">
+        <div class="dialog-header-blade">
+          <button id="btn-back-edit-media" type="button" class="dialog-back-btn" title="Go Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Back</span>
           </button>
-          <button id="btn-modal-source-filters" type="button" class="btn-blue-outline" style="flex: 1; padding: 8px 12px; font-size: 12px;">
-            Open Filters
+          <div style="display: flex; flex-direction: column; align-items: center; max-width: 60%; overflow: hidden;">
+            <span id="edit-media-title" class="dialog-title-blade" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">Edit Media</span>
+            <span id="edit-media-type-badge" class="source-type-badge">MEDIA</span>
+          </div>
+          <button id="btn-close-edit-media" type="button" class="dialog-done-btn">Done</button>
+        </div>
+
+        <div id="edit-media-status-banner" class="properties-status-banner" style="display: none;"></div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <!-- Current Media Path Card -->
+          <div>
+            <label style="font-size: 12px; font-weight: 600; color: var(--obs-text-gray);">Current Host File Path</label>
+            <div id="edit-media-current-path" style="font-size: 12px; color: var(--obs-blue); background: #080c14; padding: 10px 12px; border-radius: 8px; border: 1px solid #1a2233; word-break: break-all; font-family: monospace; margin-top: 4px;">
+              Loading path...
+            </div>
+          </div>
+
+          <!-- Select / Change Media Path -->
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label style="font-size: 12px; font-weight: 600; color: #e2e8f0;" for="input-edit-media-path">Change Media File</label>
+            <input id="input-edit-media-path" class="input-blade" style="font-family: monospace; font-size: 12px; padding: 10px 12px;" placeholder="C:/OBS/Assets/media.mp4" />
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="btn-media-browse-host" type="button" class="btn-prop-browse btn-browse-host" style="flex: 1; justify-content: center; padding: 8px 12px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <span>Browse OBS Host</span>
+              </button>
+              <button id="btn-media-browse-local" type="button" class="btn-prop-browse btn-browse-local" style="flex: 1; justify-content: center; padding: 8px 12px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Browse Local / Upload</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Apply Button -->
+          <button id="btn-apply-edit-media" type="button" class="btn-blue-primary" style="padding: 12px; font-size: 14px; margin-top: 4px;">
+            Apply Media
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- OBS Host System File Browser Modal -->
+    <div id="modal-host-file-browser" class="blade-dialog-overlay">
+      <div class="blade-dialog-content host-browser-content">
+        <div class="dialog-header-blade">
+          <button id="btn-back-host-browser" type="button" class="dialog-back-btn" title="Go Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Back</span>
+          </button>
+          <div style="display: flex; flex-direction: column; align-items: center; max-width: 60%; overflow: hidden;">
+            <span class="dialog-title-blade">Browse OBS Host</span>
+            <span style="font-size: 10px; color: var(--obs-text-gray);">OBS System Filesystem</span>
+          </div>
+          <button id="btn-close-host-browser" type="button" class="dialog-done-btn">Cancel</button>
+        </div>
+
+        <!-- Host Explorer Path Navigation -->
+        <div class="host-browser-nav-bar">
+          <button id="btn-host-nav-up" type="button" class="btn-host-nav-tool" title="Go to Parent Directory">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+          <div id="host-browser-breadcrumb" class="host-browser-breadcrumb">
+            /
+          </div>
+        </div>
+
+        <!-- Quick location chips -->
+        <div class="host-quick-locations">
+          <button type="button" class="btn-quick-loc" data-dir="__UPLOADS__">📂 Uploads</button>
+          <button type="button" class="btn-quick-loc" data-dir="__PROJECT__">📁 Workspace</button>
+          <button type="button" class="btn-quick-loc" data-dir="/">💻 Root</button>
+        </div>
+
+        <!-- Entries List (Folders & Files) -->
+        <div id="host-browser-entries" class="host-browser-entries-list">
+          <div style="text-align: center; color: var(--obs-text-gray); padding: 24px 0; font-size: 13px;">
+            Loading host directory...
+          </div>
+        </div>
+
+        <!-- Directory Selection Footer -->
+        <div id="host-browser-footer" class="host-browser-footer" style="display: none;">
+          <button id="btn-select-current-folder" type="button" class="btn-blue-primary" style="width: 100%;">
+            Select Current Folder
           </button>
         </div>
       </div>

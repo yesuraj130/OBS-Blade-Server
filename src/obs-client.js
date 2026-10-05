@@ -393,6 +393,18 @@ export class ObsClient {
   }
 
   // --- Source / Input Management ---
+  getInputDefaultSettings(inputKind) {
+    return this.request('GetInputDefaultSettings', { inputKind });
+  }
+
+  getInputPropertiesListPropertyItems(inputName, propertyName) {
+    return this.request('GetInputPropertiesListPropertyItems', { inputName, propertyName });
+  }
+
+  pressInputPropertiesButton(inputName, propertyName) {
+    return this.request('PressInputPropertiesButton', { inputName, propertyName });
+  }
+
   setInputName(inputName, newInputName) {
     return this.request('SetInputName', { inputName, newInputName });
   }
