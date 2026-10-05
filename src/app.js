@@ -122,6 +122,26 @@ const el = {
   btnMediaBrowseLocal: document.getElementById('btn-media-browse-local'),
   btnApplyEditMedia: document.getElementById('btn-apply-edit-media'),
 
+  // Dedicated Full Preview Modal
+  modalFullPreview: document.getElementById('modal-full-preview'),
+  btnBackFullPreview: document.getElementById('btn-back-full-preview'),
+  btnCloseFullPreview: document.getElementById('btn-close-full-preview'),
+  fullPreviewTitle: document.getElementById('full-preview-title'),
+  fullPreviewTypeBadge: document.getElementById('full-preview-type-badge'),
+  fullPreviewImg: document.getElementById('full-preview-img'),
+  fullPreviewLoading: document.getElementById('full-preview-loading'),
+  fullPreviewFallback: document.getElementById('full-preview-fallback'),
+  fullPreviewFallbackIcon: document.getElementById('full-preview-fallback-icon'),
+  fullPreviewFallbackTitle: document.getElementById('full-preview-fallback-title'),
+  fullPreviewFallbackDesc: document.getElementById('full-preview-fallback-desc'),
+  fullPreviewStatusText: document.getElementById('full-preview-status-text'),
+  fullPreviewTimestamp: document.getElementById('full-preview-timestamp'),
+  fullPreviewSceneHint: document.getElementById('full-preview-scene-hint'),
+  fullPreviewResHint: document.getElementById('full-preview-res-hint'),
+  btnFullPreviewToggleVis: document.getElementById('btn-full-preview-toggle-vis'),
+  textFullPreviewVis: document.getElementById('text-full-preview-vis'),
+  btnFullPreviewRefresh: document.getElementById('btn-full-preview-refresh'),
+
   // OBS Host Filesystem Browser Modal
   modalHostFileBrowser: document.getElementById('modal-host-file-browser'),
   btnBackHostBrowser: document.getElementById('btn-back-host-browser'),
@@ -565,6 +585,46 @@ function setupEventListeners() {
     fetchPreviewSnapshot();
   });
 
+  // Clicking on scene live preview image opens full preview
+  if (el.previewLiveImg) {
+    el.previewLiveImg.style.cursor = 'pointer';
+    el.previewLiveImg.title = 'Click to open full preview';
+    el.previewLiveImg.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const currentTarget = getCurrentTargetScene();
+      if (currentTarget) {
+        openSourceFullPreview({ sourceName: currentTarget, inputKind: 'scene' }, currentTarget);
+      }
+    });
+  }
+
+  // Full Preview Modal Handlers
+  if (el.btnBackFullPreview) {
+    el.btnBackFullPreview.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeFullPreviewModal();
+    });
+  }
+  if (el.btnCloseFullPreview) {
+    el.btnCloseFullPreview.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeFullPreviewModal();
+    });
+  }
+  if (el.btnFullPreviewRefresh) {
+    el.btnFullPreviewRefresh.addEventListener('click', (e) => {
+      e.preventDefault();
+      refreshFullPreview();
+    });
+  }
+  if (el.btnFullPreviewToggleVis) {
+    el.btnFullPreviewToggleVis.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleFullPreviewVisibility();
+    });
+  }
+
   // Settings Modal Handlers
   if (el.btnBackSettings) {
     el.btnBackSettings.addEventListener('click', (e) => {
@@ -717,6 +777,7 @@ function setupEventListeners() {
     el.modalCreateSource,
     el.modalHostFileBrowser,
     el.modalEditMedia,
+    el.modalFullPreview,
   ].forEach((overlay) => {
     if (!overlay) return;
     overlay.addEventListener('click', (e) => {
@@ -724,6 +785,15 @@ function setupEventListeners() {
         overlay.classList.remove('open');
       }
     });
+  });
+
+  // Escape key to dismiss modals
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (el.modalFullPreview && el.modalFullPreview.classList.contains('open')) {
+        closeFullPreviewModal();
+      }
+    }
   });
 
   // Context Menu outside click dismissal
@@ -1946,6 +2016,7 @@ function renderSourcesList(sceneName, items) {
   items.forEach((item) => {
     const row = document.createElement('div');
     row.className = 'source-item-row-blade';
+    row.setAttribute('data-source-name', item.sourceName);
 
     const category = getSourceTypeCategory(item);
     const categoryLabel = category.toUpperCase();
@@ -1953,13 +2024,13 @@ function renderSourcesList(sceneName, items) {
 
     row.innerHTML = `
       <div class="source-left-col">
-        <!-- Thumbnail / Type Icon Box -->
-        <div class="source-thumb-box" title="${escapeHtml(item.sourceName)} (${categoryLabel})">
+        <!-- Thumbnail / Type Icon Box (Single tap/click opens full preview) -->
+        <button type="button" class="source-thumb-box" title="Tap to preview ${escapeHtml(item.sourceName)} (${categoryLabel})" aria-label="Open full preview of ${escapeHtml(item.sourceName)}">
           <div class="source-type-icon-fallback type-${category}">
             ${getTypeIconSvg(category)}
           </div>
           <img class="source-thumb-img" alt="" style="display: none;" />
-        </div>
+        </button>
         <div class="source-name-col">
           <span class="source-name-blade">${escapeHtml(item.sourceName)}</span>
           <span class="source-type-subtext">${categoryLabel}</span>
@@ -1983,6 +2054,23 @@ function renderSourcesList(sceneName, items) {
     const thumbImg = row.querySelector('.source-thumb-img');
     const fallbackBox = row.querySelector('.source-type-icon-fallback');
     loadSourceThumbnail(item.sourceName, category, thumbImg, fallbackBox);
+
+    // Single tap / click on thumbnail opens full preview of source (latest frame)
+    const thumbBox = row.querySelector('.source-thumb-box');
+    thumbBox.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openSourceFullPreview(item, sceneName);
+    });
+
+    thumbBox.addEventListener(
+      'touchstart',
+      (e) => {
+        // Prevent row touchstart from triggering row's long-press context menu
+        e.stopPropagation();
+      },
+      { passive: true }
+    );
 
     // Eye button toggle
     const btnEye = row.querySelector('.btn-blade-eye');
@@ -2106,6 +2194,169 @@ async function fetchPreviewSnapshot() {
   } catch (err) {
     console.warn(err);
   }
+}
+
+// Full Preview Modal State & Controls
+let activePreviewTarget = null; // { item, sceneName }
+
+async function openSourceFullPreview(item, sceneName) {
+  if (!item || !item.sourceName) return;
+  activePreviewTarget = { item, sceneName };
+
+  const category = getSourceTypeCategory(item);
+  const categoryLabel = category.toUpperCase();
+
+  if (el.fullPreviewTitle) {
+    el.fullPreviewTitle.textContent = item.sourceName;
+    el.fullPreviewTitle.title = item.sourceName;
+  }
+  if (el.fullPreviewTypeBadge) {
+    el.fullPreviewTypeBadge.textContent = categoryLabel;
+  }
+  if (el.fullPreviewSceneHint) {
+    const sceneDisplay =
+      sceneName === '__CURRENT__'
+        ? getCurrentTargetScene() || 'Current'
+        : sceneName || 'Current';
+    el.fullPreviewSceneHint.textContent = `Scene: ${sceneDisplay}`;
+  }
+  if (el.fullPreviewResHint) {
+    el.fullPreviewResHint.textContent = item.inputKind || 'Source Preview';
+  }
+
+  updateFullPreviewVisButton(item.sceneItemEnabled !== false);
+
+  // Audio-only source handling
+  if (category === 'audio') {
+    if (el.fullPreviewImg) el.fullPreviewImg.style.display = 'none';
+    if (el.fullPreviewLoading) el.fullPreviewLoading.style.display = 'none';
+    if (el.fullPreviewFallback) {
+      el.fullPreviewFallback.style.display = 'flex';
+      el.fullPreviewFallbackIcon.innerHTML = getTypeIconSvg('audio');
+      el.fullPreviewFallbackTitle.textContent = 'Audio Device';
+      el.fullPreviewFallbackDesc.textContent =
+        'Audio sources do not render video frames. Monitor and mix volume levels via OBS audio controls.';
+    }
+    if (el.fullPreviewStatusText) el.fullPreviewStatusText.textContent = 'AUDIO DEVICE';
+    if (el.fullPreviewTimestamp) el.fullPreviewTimestamp.textContent = new Date().toLocaleTimeString();
+    if (el.modalFullPreview) el.modalFullPreview.classList.add('open');
+    return;
+  }
+
+  // Visual source handling
+  if (el.fullPreviewFallback) el.fullPreviewFallback.style.display = 'none';
+  if (el.fullPreviewStatusText) el.fullPreviewStatusText.textContent = 'LATEST FRAME';
+
+  // Check if we have a recent thumbnail to immediately display
+  const cached = thumbnailCache.get(item.sourceName);
+  if (cached && cached.dataUrl) {
+    el.fullPreviewImg.src = cached.dataUrl;
+    el.fullPreviewImg.style.display = 'block';
+  } else {
+    el.fullPreviewImg.style.display = 'none';
+  }
+
+  if (el.fullPreviewLoading) el.fullPreviewLoading.style.display = 'flex';
+  if (el.modalFullPreview) el.modalFullPreview.classList.add('open');
+
+  await fetchFullPreviewFrame(item.sourceName);
+}
+
+function updateFullPreviewVisButton(enabled) {
+  if (!el.btnFullPreviewToggleVis || !el.textFullPreviewVis) return;
+  if (enabled) {
+    el.textFullPreviewVis.textContent = 'Visible in Scene';
+    el.btnFullPreviewToggleVis.classList.remove('btn-red-outline');
+    el.btnFullPreviewToggleVis.classList.add('btn-blue-outline');
+  } else {
+    el.textFullPreviewVis.textContent = 'Hidden in Scene';
+    el.btnFullPreviewToggleVis.classList.remove('btn-blue-outline');
+    el.btnFullPreviewToggleVis.classList.add('btn-red-outline');
+  }
+}
+
+async function fetchFullPreviewFrame(sourceName) {
+  try {
+    if (el.fullPreviewLoading) el.fullPreviewLoading.style.display = 'flex';
+    // Request high-resolution frame (1280px width)
+    const res = await state.obs.getSourceScreenshot(sourceName, 'jpg', 1280);
+    if (res && res.imageData) {
+      if (el.fullPreviewImg) {
+        el.fullPreviewImg.src = res.imageData;
+        el.fullPreviewImg.style.display = 'block';
+      }
+      if (el.fullPreviewFallback) {
+        el.fullPreviewFallback.style.display = 'none';
+      }
+      if (el.fullPreviewTimestamp) {
+        el.fullPreviewTimestamp.textContent = new Date().toLocaleTimeString();
+      }
+      // Update cache
+      thumbnailCache.set(sourceName, { dataUrl: res.imageData, timestamp: Date.now() });
+
+      // Update thumbnail img in source list if present
+      const listThumbs = document.querySelectorAll(
+        `[data-source-name="${CSS.escape(sourceName)}"] .source-thumb-img`
+      );
+      listThumbs.forEach((img) => {
+        img.src = res.imageData;
+        img.style.display = 'block';
+        const fallback = img.parentElement?.querySelector('.source-type-icon-fallback');
+        if (fallback) fallback.style.display = 'none';
+      });
+    } else {
+      throw new Error('No image data returned from OBS');
+    }
+  } catch (err) {
+    console.warn('[Full Preview Screenshot Failed]', err);
+    if (el.fullPreviewImg && !el.fullPreviewImg.getAttribute('src')) {
+      el.fullPreviewImg.style.display = 'none';
+      if (el.fullPreviewFallback) {
+        el.fullPreviewFallback.style.display = 'flex';
+        el.fullPreviewFallbackIcon.innerHTML = getTypeIconSvg('generic');
+        el.fullPreviewFallbackTitle.textContent = 'Frame Unavailable';
+        el.fullPreviewFallbackDesc.textContent =
+          err.message || 'Unable to capture latest frame. Source may be inactive or hidden.';
+      }
+    }
+  } finally {
+    if (el.fullPreviewLoading) {
+      el.fullPreviewLoading.style.display = 'none';
+    }
+  }
+}
+
+async function refreshFullPreview() {
+  if (!activePreviewTarget || !activePreviewTarget.item) return;
+  await fetchFullPreviewFrame(activePreviewTarget.item.sourceName);
+}
+
+async function toggleFullPreviewVisibility() {
+  if (!activePreviewTarget || !activePreviewTarget.item) return;
+  const { item, sceneName } = activePreviewTarget;
+  const targetScene =
+    sceneName === '__CURRENT__' ? getCurrentTargetScene() : sceneName;
+  if (!targetScene || item.sceneItemId == null) return;
+
+  try {
+    const next = !item.sceneItemEnabled;
+    await state.obs.setSceneItemEnabled(targetScene, item.sceneItemId, next);
+    item.sceneItemEnabled = next;
+    updateFullPreviewVisButton(next);
+    renderSourcesList(state.selectedCategoryScene, state.sceneItems);
+    setTimeout(() => {
+      fetchFullPreviewFrame(item.sourceName);
+    }, 200);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function closeFullPreviewModal() {
+  if (el.modalFullPreview) {
+    el.modalFullPreview.classList.remove('open');
+  }
+  activePreviewTarget = null;
 }
 
 // Dynamic Source Properties & Host File Browser State

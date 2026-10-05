@@ -337,6 +337,73 @@
       </div>
     </div>
 
+    <!-- Full Preview Modal (Latest Frame of Source or Scene) -->
+    <div id="modal-full-preview" class="blade-dialog-overlay">
+      <div class="blade-dialog-content modal-full-preview-content">
+        <div class="dialog-header-blade">
+          <button id="btn-back-full-preview" type="button" class="dialog-back-btn" title="Go Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Back</span>
+          </button>
+          <div style="display: flex; flex-direction: column; align-items: center; max-width: 65%; overflow: hidden;">
+            <span id="full-preview-title" class="dialog-title-blade" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">Source Preview</span>
+            <span id="full-preview-type-badge" class="source-type-badge">PREVIEW</span>
+          </div>
+          <button id="btn-close-full-preview" type="button" class="dialog-done-btn">Done</button>
+        </div>
+
+        <!-- Full Preview Viewport Container -->
+        <div class="full-preview-viewport-container">
+          <!-- Live / Latest Frame badge in top-left overlay -->
+          <div class="full-preview-live-badge">
+            <span class="live-dot-pulse"></span>
+            <span id="full-preview-status-text">LATEST FRAME</span>
+          </div>
+
+          <!-- Timestamp badge top-right overlay -->
+          <div id="full-preview-timestamp" class="full-preview-timestamp-badge">
+            --:--:--
+          </div>
+
+          <!-- Full Preview Image -->
+          <img id="full-preview-img" class="full-preview-img" alt="Latest Frame" style="display: none;" />
+
+          <!-- Loading state with spinner -->
+          <div id="full-preview-loading" class="full-preview-spinner-overlay" style="display: none;">
+            <div class="preview-spinner"></div>
+            <span style="font-size: 13px; color: #94a3b8; margin-top: 10px;">Capturing latest frame...</span>
+          </div>
+
+          <!-- Fallback state (for audio, error, or inactive source) -->
+          <div id="full-preview-fallback" class="full-preview-fallback-box" style="display: none;">
+            <div id="full-preview-fallback-icon" class="full-preview-fallback-icon"></div>
+            <div id="full-preview-fallback-title" style="font-size: 15px; font-weight: 600; color: #ffffff; margin-top: 10px;">No Visual Output</div>
+            <div id="full-preview-fallback-desc" style="font-size: 12px; color: var(--obs-text-gray); text-align: center; max-width: 320px; margin-top: 4px;">
+              Audio sources do not render video frames.
+            </div>
+          </div>
+        </div>
+
+        <!-- Meta / Info & Action Bar -->
+        <div class="full-preview-controls-bar">
+          <div class="full-preview-meta-info">
+            <span id="full-preview-scene-hint" class="preview-meta-pill">Scene: --</span>
+            <span id="full-preview-res-hint" class="preview-meta-pill">OBS Studio</span>
+          </div>
+          <div class="full-preview-actions-group">
+            <button id="btn-full-preview-toggle-vis" type="button" class="btn-blue-outline preview-action-btn" title="Toggle visibility in scene">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <span id="text-full-preview-vis">Visible</span>
+            </button>
+            <button id="btn-full-preview-refresh" type="button" class="btn-blue-primary preview-action-btn" title="Refresh Latest Frame">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span>Refresh Frame</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- OBS Host System File Browser Modal -->
     <div id="modal-host-file-browser" class="blade-dialog-overlay">
       <div class="blade-dialog-content host-browser-content">
