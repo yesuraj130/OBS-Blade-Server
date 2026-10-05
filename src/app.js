@@ -90,6 +90,12 @@ const el = {
   inputNewMediaPath: document.getElementById('input-new-media-path'),
   btnApplyPath: document.getElementById('btn-apply-path'),
   mediaPresetContainer: document.getElementById('media-preset-container'),
+  mediaUploadedContainer: document.getElementById('media-uploaded-container'),
+  mediaFileInput: document.getElementById('media-file-input'),
+  mediaUploadDropzone: document.getElementById('media-upload-dropzone'),
+  uploadStatus: document.getElementById('upload-status'),
+  tabBtnUploaded: document.getElementById('tab-btn-uploaded'),
+  tabBtnPresets: document.getElementById('tab-btn-presets'),
 };
 
 export function init() {
@@ -392,6 +398,55 @@ function setupEventListeners() {
       closeMediaModal();
     }
   });
+
+  // Direct File Upload & Tab Switchers
+  if (el.mediaUploadDropzone && el.mediaFileInput) {
+    el.mediaUploadDropzone.addEventListener('click', () => {
+      el.mediaFileInput.click();
+    });
+
+    el.mediaFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (file && state.selectedMediaSource) {
+        await handleMediaUpload(file, state.selectedMediaSource);
+      }
+    });
+
+    el.mediaUploadDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      el.mediaUploadDropzone.classList.add('dragover');
+    });
+
+    el.mediaUploadDropzone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      el.mediaUploadDropzone.classList.remove('dragover');
+    });
+
+    el.mediaUploadDropzone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      el.mediaUploadDropzone.classList.remove('dragover');
+      const file = e.dataTransfer?.files?.[0];
+      if (file && state.selectedMediaSource) {
+        await handleMediaUpload(file, state.selectedMediaSource);
+      }
+    });
+  }
+
+  if (el.tabBtnUploaded && el.tabBtnPresets) {
+    el.tabBtnUploaded.addEventListener('click', () => {
+      el.tabBtnUploaded.classList.add('active');
+      el.tabBtnPresets.classList.remove('active');
+      el.mediaUploadedContainer.style.display = 'flex';
+      el.mediaPresetContainer.style.display = 'none';
+    });
+
+    el.tabBtnPresets.addEventListener('click', () => {
+      el.tabBtnPresets.classList.add('active');
+      el.tabBtnUploaded.classList.remove('active');
+      el.mediaPresetContainer.style.display = 'flex';
+      el.mediaUploadedContainer.style.display = 'none';
+    });
+  }
 }
 
 function syncStudioModeCheckbox() {
@@ -655,7 +710,15 @@ async function openMediaModal(sourceName) {
   el.mediaCurrentPathText.textContent = 'Loading path...';
   el.inputNewMediaPath.value = '';
 
+  if (el.uploadStatus) {
+    el.uploadStatus.style.display = 'none';
+    el.uploadStatus.textContent = '';
+  }
+
+  // Load presets & uploaded media
   renderPresetsList(sourceName);
+  loadUploadedMedia(sourceName);
+
   el.modalMediaFile.classList.add('open');
 
   try {
@@ -671,6 +734,133 @@ async function openMediaModal(sourceName) {
 
 function closeMediaModal() {
   el.modalMediaFile.classList.remove('open');
+  if (el.mediaFileInput) {
+    el.mediaFileInput.value = '';
+  }
+}
+
+async function handleMediaUpload(file, sourceName) {
+  if (!file) return;
+
+  if (el.uploadStatus) {
+    el.uploadStatus.style.display = 'block';
+    el.uploadStatus.textContent = `Uploading ${file.name}...`;
+    el.uploadStatus.style.color = '#60a5fa';
+  }
+
+  const formData = new FormData();
+  formData.append('media', file);
+
+  try {
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed (${response.status})`);
+    }
+
+    const data = await response.json();
+    console.log('[Upload] Success:', data);
+
+    if (el.uploadStatus) {
+      el.uploadStatus.textContent = `✓ Uploaded! Applying to "${sourceName}"...`;
+      el.uploadStatus.style.color = '#4ade80';
+    }
+
+    // Immediately update OBS source file path with absolute host path
+    await updateMediaFilePath(sourceName, data.path);
+    el.mediaCurrentPathText.textContent = data.path;
+    el.inputNewMediaPath.value = data.path;
+
+    // Refresh media library list
+    await loadUploadedMedia(sourceName);
+
+    setTimeout(() => {
+      closeMediaModal();
+    }, 1000);
+  } catch (err) {
+    console.error('[Upload Error]', err);
+    if (el.uploadStatus) {
+      el.uploadStatus.textContent = `Upload failed: ${err.message}`;
+      el.uploadStatus.style.color = '#f87171';
+    }
+  }
+}
+
+async function loadUploadedMedia(sourceName) {
+  if (!el.mediaUploadedContainer) return;
+  el.mediaUploadedContainer.innerHTML = '<div style="font-size: 12px; color: #6b7280;">Loading uploaded files...</div>';
+
+  try {
+    const res = await fetch('/api/media');
+    if (!res.ok) throw new Error('Failed to load media list');
+    const data = await res.json();
+    const files = data.files || [];
+
+    el.mediaUploadedContainer.innerHTML = '';
+
+    if (files.length === 0) {
+      el.mediaUploadedContainer.innerHTML =
+        '<div style="font-size: 12px; color: #6b7280; padding: 12px; text-align: center;">No files uploaded yet. Drag or choose a file above to upload directly!</div>';
+      return;
+    }
+
+    files.forEach((file) => {
+      const card = document.createElement('div');
+      card.className = 'uploaded-media-card';
+
+      const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(file.filename);
+      const isVideo = /\.(mp4|webm|mov|mkv)$/i.test(file.filename);
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+
+      card.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; overflow: hidden; flex: 1;">
+          ${
+            isImage
+              ? `<img src="${file.url}" class="uploaded-media-thumb" alt="${escapeHtml(file.filename)}" />`
+              : `<div class="uploaded-media-thumb" style="display: flex; align-items: center; justify-content: center; font-size: 10px; color: #93c5fd; font-weight: 700;">${isVideo ? 'VIDEO' : 'FILE'}</div>`
+          }
+          <div style="overflow: hidden; flex: 1;">
+            <div style="font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              ${escapeHtml(file.filename.replace(/^\d+-\d+_/, ''))}
+            </div>
+            <div style="font-size: 11px; color: #94a3b8; font-family: monospace;">${sizeMb} MB</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button type="button" class="btn-select-media" style="background: var(--obs-blue); color: #fff; border: none; border-radius: 4px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;">
+            Select
+          </button>
+          <button type="button" class="btn-delete-media" style="background: #201318; color: #f87171; border: 1px solid #3f1a24; border-radius: 4px; padding: 6px 8px; font-size: 11px; cursor: pointer;" title="Delete file">
+            ✕
+          </button>
+        </div>
+      `;
+
+      // Select button
+      card.querySelector('.btn-select-media').addEventListener('click', async (e) => {
+        e.preventDefault();
+        await updateMediaFilePath(sourceName, file.path);
+        closeMediaModal();
+      });
+
+      // Delete button
+      card.querySelector('.btn-delete-media').addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (confirm(`Delete ${file.filename}?`)) {
+          await fetch(`/api/media/${file.filename}`, { method: 'DELETE' });
+          loadUploadedMedia(sourceName);
+        }
+      });
+
+      el.mediaUploadedContainer.appendChild(card);
+    });
+  } catch (err) {
+    el.mediaUploadedContainer.innerHTML = `<div style="font-size: 12px; color: #f87171;">Could not load media: ${err.message}</div>`;
+  }
 }
 
 function renderPresetsList(sourceName) {

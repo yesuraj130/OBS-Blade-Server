@@ -1,6 +1,0 @@
-{
-  "name": "OBS Blade Web Controller",
-  "description": "Mobile-first dark theme OBS Studio remote controller based on OBS WebSocket v5.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
