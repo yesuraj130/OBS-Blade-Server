@@ -14,7 +14,7 @@ const state = {
   studioMode: true,
   currentProgramScene: 'Verse Bottom',
   currentPreviewScene: 'Testimony',
-  selectedCategoryScene: 'Projector Back',
+  selectedCategoryScene: '__CURRENT__',
   scenes: [],
   sceneItems: [],
   isPreviewExpanded: false,
@@ -23,6 +23,8 @@ const state = {
   isRecording: false,
   hiddenSceneButtons: new Set(),
   hiddenSceneTabs: new Set(),
+  wakeLockEnabled: false,
+  clientStudioModeControls: true,
 };
 
 // DOM Elements
@@ -32,8 +34,9 @@ const el = {
   navTopTitle: document.getElementById('nav-top-title'),
   btnTopMenu: document.getElementById('btn-top-menu'),
 
-  // Top Scene Buttons Grid
+  // Top Scene Buttons Grid & Studio Controls
   scenesGridTop: document.getElementById('scenes-grid-top'),
+  studioModeRowContainer: document.getElementById('studio-mode-row-container'),
   studioModeToggle: document.getElementById('studio-mode-toggle'),
   checkboxStudio: document.getElementById('checkbox-studio'),
   btnTriggerTransition: document.getElementById('btn-trigger-transition'),
@@ -65,17 +68,22 @@ const el = {
 
   // Edit Scene Buttons Modal
   modalEditScenes: document.getElementById('modal-edit-scenes'),
+  btnBackEditScenes: document.getElementById('btn-back-edit-scenes'),
   btnCloseEditScenes: document.getElementById('btn-close-edit-scenes'),
   editScenesCheckboxList: document.getElementById('edit-scenes-checkbox-list'),
 
   // Edit Scene Tabs Modal
   modalEditTabs: document.getElementById('modal-edit-tabs'),
+  btnBackEditTabs: document.getElementById('btn-back-edit-tabs'),
   btnCloseEditTabs: document.getElementById('btn-close-edit-tabs'),
   editTabsCheckboxList: document.getElementById('edit-tabs-checkbox-list'),
 
   // Settings Modal
   modalSettings: document.getElementById('modal-settings'),
+  btnBackSettings: document.getElementById('btn-back-settings'),
   btnCloseSettings: document.getElementById('btn-close-settings'),
+  toggleWakeLock: document.getElementById('toggle-wake-lock'),
+  toggleClientStudio: document.getElementById('toggle-client-studio'),
   formSettingsConn: document.getElementById('form-settings-conn'),
   setIp: document.getElementById('set-ip'),
   setPort: document.getElementById('set-port'),
@@ -84,6 +92,7 @@ const el = {
 
   // Media Modal
   modalMediaFile: document.getElementById('modal-media-file'),
+  btnBackMediaModal: document.getElementById('btn-back-media-modal'),
   btnCloseMediaModal: document.getElementById('btn-close-media-modal'),
   mediaSourceTitle: document.getElementById('media-source-title'),
   mediaCurrentPathText: document.getElementById('media-current-path-text'),
@@ -98,12 +107,21 @@ const el = {
   tabBtnPresets: document.getElementById('tab-btn-presets'),
 };
 
+// Wake lock sentinel instance
+let wakeLockSentinel = null;
+
 export function init() {
   loadSavedCredentials();
+  loadSavedPreferences();
   loadHiddenScenePreferences();
   loadHiddenTabPreferences();
+  applyClientStudioModeControls();
   setupEventListeners();
   setupObsEvents();
+
+  if (state.wakeLockEnabled) {
+    requestWakeLock();
+  }
 
   if (state.url) {
     state.obs.connect(state.url, state.password);
@@ -111,6 +129,62 @@ export function init() {
     connectToLocalSimulator();
   }
 }
+
+function loadSavedPreferences() {
+  try {
+    const rawWakeLock = localStorage.getItem('obs_blade_wakelock');
+    state.wakeLockEnabled = rawWakeLock === 'true';
+
+    const rawStudioControls = localStorage.getItem('obs_blade_client_studio_mode_controls');
+    state.clientStudioModeControls = rawStudioControls === null ? true : rawStudioControls === 'true';
+  } catch (e) {}
+}
+
+function applyClientStudioModeControls() {
+  if (el.studioModeRowContainer) {
+    el.studioModeRowContainer.style.display = state.clientStudioModeControls ? 'flex' : 'none';
+  }
+  if (el.toggleClientStudio) {
+    el.toggleClientStudio.checked = state.clientStudioModeControls;
+  }
+  renderTopSceneButtons();
+}
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    console.info('[WakeLock] Screen Wake Lock API is not supported in this browser.');
+    return;
+  }
+  try {
+    if (wakeLockSentinel) {
+      await wakeLockSentinel.release();
+    }
+    wakeLockSentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel.addEventListener('release', () => {
+      wakeLockSentinel = null;
+    });
+    console.log('[WakeLock] Screen Wake Lock active');
+  } catch (err) {
+    console.warn('[WakeLock] Could not acquire lock:', err);
+  }
+}
+
+async function releaseWakeLock() {
+  if (wakeLockSentinel) {
+    try {
+      await wakeLockSentinel.release();
+    } catch (_) {}
+    wakeLockSentinel = null;
+    console.log('[WakeLock] Screen Wake Lock released');
+  }
+}
+
+// Re-acquire wake lock if tab becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state.wakeLockEnabled) {
+    requestWakeLock();
+  }
+});
 
 function loadSavedCredentials() {
   try {
@@ -203,7 +277,9 @@ function setupObsEvents() {
     state.scenes = data.scenes;
     state.currentProgramScene = data.currentProgramScene;
     state.currentPreviewScene = data.currentPreviewScene || data.currentProgramScene;
-    state.selectedCategoryScene = state.currentProgramScene;
+    if (!state.selectedCategoryScene) {
+      state.selectedCategoryScene = '__CURRENT__';
+    }
 
     syncStudioModeCheckbox();
     renderTopSceneButtons();
@@ -215,11 +291,18 @@ function setupObsEvents() {
     state.currentProgramScene = sceneName;
     renderTopSceneButtons();
     renderCategoryGrid();
+    if (state.selectedCategoryScene === '__CURRENT__') {
+      loadSourcesForScene('__CURRENT__');
+    }
   });
 
   state.obs.on('previewSceneChanged', (sceneName) => {
     state.currentPreviewScene = sceneName;
     renderTopSceneButtons();
+    renderCategoryGrid();
+    if (state.selectedCategoryScene === '__CURRENT__') {
+      loadSourcesForScene('__CURRENT__');
+    }
   });
 
   state.obs.on('studioModeChanged', (enabled) => {
@@ -302,12 +385,24 @@ function setupEventListeners() {
   });
 
   // Edit Scene Buttons Modal
+  if (el.btnBackEditScenes) {
+    el.btnBackEditScenes.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeEditScenesModal();
+    });
+  }
   el.btnCloseEditScenes.addEventListener('click', (e) => {
     e.preventDefault();
     closeEditScenesModal();
   });
 
   // Edit Scene Tabs Modal
+  if (el.btnBackEditTabs) {
+    el.btnBackEditTabs.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeEditTabsModal();
+    });
+  }
   el.btnCloseEditTabs.addEventListener('click', (e) => {
     e.preventDefault();
     closeEditTabsModal();
@@ -335,6 +430,9 @@ function setupEventListeners() {
       if (state.isPreviewExpanded) {
         setTimeout(fetchPreviewSnapshot, 300);
       }
+      if (state.selectedCategoryScene === '__CURRENT__') {
+        setTimeout(() => loadSourcesForScene('__CURRENT__'), 150);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -360,10 +458,45 @@ function setupEventListeners() {
   });
 
   // Settings Modal Handlers
+  if (el.btnBackSettings) {
+    el.btnBackSettings.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeSettingsModal();
+    });
+  }
   el.btnCloseSettings.addEventListener('click', (e) => {
     e.preventDefault();
     closeSettingsModal();
   });
+
+  if (el.toggleWakeLock) {
+    el.toggleWakeLock.addEventListener('change', async (e) => {
+      state.wakeLockEnabled = e.target.checked;
+      try {
+        localStorage.setItem('obs_blade_wakelock', String(state.wakeLockEnabled));
+      } catch (_) {}
+
+      if (state.wakeLockEnabled) {
+        await requestWakeLock();
+      } else {
+        await releaseWakeLock();
+      }
+    });
+  }
+
+  if (el.toggleClientStudio) {
+    el.toggleClientStudio.addEventListener('change', (e) => {
+      state.clientStudioModeControls = e.target.checked;
+      try {
+        localStorage.setItem(
+          'obs_blade_client_studio_mode_controls',
+          String(state.clientStudioModeControls)
+        );
+      } catch (_) {}
+
+      applyClientStudioModeControls();
+    });
+  }
   el.formSettingsConn.addEventListener('submit', (e) => {
     e.preventDefault();
     const host = el.setIp.value.trim() || '127.0.0.1';
@@ -386,9 +519,25 @@ function setupEventListeners() {
   });
 
   // Media Modal Handlers
+  if (el.btnBackMediaModal) {
+    el.btnBackMediaModal.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeMediaModal();
+    });
+  }
   el.btnCloseMediaModal.addEventListener('click', (e) => {
     e.preventDefault();
     closeMediaModal();
+  });
+
+  // Backdrop click to dismiss centered dialogs
+  [el.modalEditScenes, el.modalEditTabs, el.modalSettings, el.modalMediaFile].forEach((overlay) => {
+    if (!overlay) return;
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.classList.remove('open');
+      }
+    });
   });
   el.btnApplyPath.addEventListener('click', async (e) => {
     e.preventDefault();
@@ -464,7 +613,11 @@ function renderTopSceneButtons() {
 
   visibleScenes.forEach((scene) => {
     const isProgram = scene.sceneName === state.currentProgramScene;
-    const isPreview = state.studioMode && scene.sceneName === state.currentPreviewScene && !isProgram;
+    const isPreview =
+      state.clientStudioModeControls &&
+      state.studioMode &&
+      scene.sceneName === state.currentPreviewScene &&
+      !isProgram;
 
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -474,17 +627,21 @@ function renderTopSceneButtons() {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       try {
-        if (state.studioMode) {
+        if (state.clientStudioModeControls && state.studioMode) {
           await state.obs.setCurrentPreviewScene(scene.sceneName);
           state.currentPreviewScene = scene.sceneName;
         } else {
+          // Direct Program output switch (no preview monitoring on client)
           await state.obs.setCurrentProgramScene(scene.sceneName);
           state.currentProgramScene = scene.sceneName;
         }
-        state.selectedCategoryScene = scene.sceneName;
+        // Do not force-track current scene in individual scene tabs
         renderTopSceneButtons();
         renderCategoryGrid();
-        loadSourcesForScene(scene.sceneName);
+
+        if (state.selectedCategoryScene === '__CURRENT__') {
+          loadSourcesForScene('__CURRENT__');
+        }
       } catch (err) {
         console.error(err);
       }
@@ -494,10 +651,18 @@ function renderTopSceneButtons() {
   });
 }
 
-// 4. Render Category / Scene Text Grid (with visibility filter)
+function getCurrentTargetScene() {
+  if (state.clientStudioModeControls && state.studioMode) {
+    return state.currentPreviewScene || state.currentProgramScene;
+  }
+  return state.currentProgramScene;
+}
+
+// 4. Render Category / Scene Text Tabs (with dynamic "Current" tab as the last tab and organic flow)
 function renderCategoryGrid() {
   el.categoryTextGrid.innerHTML = '';
 
+  // 1. Individual Pinned Scene Tabs (do not change when active scene changes)
   const visibleTabs = state.scenes.filter(
     (s) => !state.hiddenSceneTabs.has(s.sceneName)
   );
@@ -505,7 +670,7 @@ function renderCategoryGrid() {
   visibleTabs.forEach((scene) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    const isSelected = scene.sceneName === state.selectedCategoryScene;
+    const isSelected = state.selectedCategoryScene === scene.sceneName;
     btn.className = `category-text-btn ${isSelected ? 'selected' : ''}`;
     btn.textContent = scene.sceneName;
 
@@ -518,16 +683,251 @@ function renderCategoryGrid() {
 
     el.categoryTextGrid.appendChild(btn);
   });
+
+  // 2. Dynamic "Current" Scene Tab as Last Tab (shows active Program / Preview output sources)
+  const currentTarget = getCurrentTargetScene();
+  const isCurrentActive = state.selectedCategoryScene === '__CURRENT__';
+
+  const btnCurrent = document.createElement('button');
+  btnCurrent.type = 'button';
+  btnCurrent.className = `category-text-btn ${isCurrentActive ? 'selected' : ''}`;
+  btnCurrent.innerHTML = currentTarget
+    ? `Current <span class="tab-scene-hint">(${escapeHtml(currentTarget)})</span>`
+    : `Current`;
+  btnCurrent.title = `Current Program/Preview Output: ${currentTarget || 'None'}`;
+
+  btnCurrent.addEventListener('click', (e) => {
+    e.preventDefault();
+    state.selectedCategoryScene = '__CURRENT__';
+    renderCategoryGrid();
+    loadSourcesForScene('__CURRENT__');
+  });
+
+  el.categoryTextGrid.appendChild(btnCurrent);
 }
 
 // 5. Load and Render Sources in Pure Black List
-async function loadSourcesForScene(sceneName) {
-  if (!sceneName) return;
+// In-memory cache for source thumbnails: sourceName -> { dataUrl, isError, timestamp }
+const thumbnailCache = new Map();
+
+/**
+ * Determine high-level source category for type-specific fallback icons
+ */
+function getSourceTypeCategory(item) {
+  const kind = (item?.inputKind || '').toLowerCase();
+  const name = (item?.sourceName || '').toLowerCase();
+
+  if (
+    kind.includes('image') ||
+    /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(name) ||
+    name.includes('slide') ||
+    name.includes('banner') ||
+    name.includes('logo') ||
+    name.includes('graphic')
+  ) {
+    return 'image';
+  }
+
+  if (
+    kind.includes('ffmpeg') ||
+    kind.includes('vlc') ||
+    kind.includes('media') ||
+    /\.(mp4|mkv|mov|webm|avi|flv)$/i.test(name) ||
+    name.includes('video') ||
+    name.includes('countdown') ||
+    name.includes('clip')
+  ) {
+    return 'video';
+  }
+
+  if (
+    kind.includes('dshow') ||
+    kind.includes('v4l2') ||
+    kind.includes('av_capture') ||
+    name.includes('cam') ||
+    name.includes('camera') ||
+    name.includes('webcam')
+  ) {
+    return 'camera';
+  }
+
+  if (
+    kind.includes('audio') ||
+    kind.includes('wasapi') ||
+    kind.includes('pulse') ||
+    kind.includes('alsa') ||
+    kind.includes('coreaudio') ||
+    name.includes('mic') ||
+    name.includes('audio') ||
+    name.includes('bgm') ||
+    name.includes('sound') ||
+    name.includes('music')
+  ) {
+    return 'audio';
+  }
+
+  if (
+    kind.includes('browser') ||
+    name.includes('browser') ||
+    name.includes('web') ||
+    name.includes('url')
+  ) {
+    return 'browser';
+  }
+
+  if (
+    kind.includes('text') ||
+    name.includes('text') ||
+    name.includes('lyrics') ||
+    name.includes('title') ||
+    name.includes('lowerthird') ||
+    name.includes('credits')
+  ) {
+    return 'text';
+  }
+
+  if (
+    kind.includes('monitor') ||
+    kind.includes('window') ||
+    kind.includes('game') ||
+    name.includes('screen') ||
+    name.includes('display') ||
+    name.includes('desktop')
+  ) {
+    return 'screen';
+  }
+
+  return 'generic';
+}
+
+/**
+ * Clean SVG outline icons for each source category
+ */
+function getTypeIconSvg(category) {
+  switch (category) {
+    case 'image':
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>`;
+
+    case 'video':
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="23 7 16 12 23 17 23 7"/>
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+      </svg>`;
+
+    case 'camera':
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>`;
+
+    case 'audio':
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="23"/>
+        <line x1="8" y1="23" x2="16" y2="23"/>
+      </svg>`;
+
+    case 'browser':
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>`;
+
+    case 'text':
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 7 4 4 20 4 20 7"/>
+        <line x1="9" y1="20" x2="15" y2="20"/>
+        <line x1="12" y1="4" x2="12" y2="20"/>
+      </svg>`;
+
+    case 'screen':
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+        <line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>`;
+
+    case 'generic':
+    default:
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+        <polyline points="2 17 12 22 22 17"/>
+        <polyline points="2 12 12 17 22 12"/>
+      </svg>`;
+  }
+}
+
+/**
+ * Load source thumbnail dynamically via OBS WebSocket GetSourceScreenshot
+ * Falls back to generic category icon if unavailable or error
+ */
+async function loadSourceThumbnail(sourceName, category, imgEl, fallbackEl) {
+  // Audio sources don't produce visual frames; immediately show fallback icon
+  if (category === 'audio') {
+    imgEl.style.display = 'none';
+    fallbackEl.style.display = 'flex';
+    return;
+  }
+
+  const now = Date.now();
+  const cached = thumbnailCache.get(sourceName);
+  if (cached && now - cached.timestamp < 30000) {
+    if (cached.dataUrl) {
+      imgEl.src = cached.dataUrl;
+      imgEl.style.display = 'block';
+      fallbackEl.style.display = 'none';
+      return;
+    } else if (cached.isError) {
+      imgEl.style.display = 'none';
+      fallbackEl.style.display = 'flex';
+      return;
+    }
+  }
 
   try {
-    const res = await state.obs.getSceneItemList(sceneName);
+    const res = await state.obs.getSourceScreenshot(sourceName, 'jpg', 96);
+    if (res && res.imageData) {
+      thumbnailCache.set(sourceName, { dataUrl: res.imageData, timestamp: now });
+      imgEl.src = res.imageData;
+      imgEl.onload = () => {
+        imgEl.style.display = 'block';
+        fallbackEl.style.display = 'none';
+      };
+      imgEl.onerror = () => {
+        imgEl.style.display = 'none';
+        fallbackEl.style.display = 'flex';
+      };
+    } else {
+      thumbnailCache.set(sourceName, { isError: true, timestamp: now });
+      imgEl.style.display = 'none';
+      fallbackEl.style.display = 'flex';
+    }
+  } catch (err) {
+    // If OBS reports error (source offline, audio-only, or inactive), gracefully fall back
+    thumbnailCache.set(sourceName, { isError: true, timestamp: now });
+    imgEl.style.display = 'none';
+    fallbackEl.style.display = 'flex';
+  }
+}
+
+async function loadSourcesForScene(sceneName) {
+  const target =
+    sceneName === '__CURRENT__' || !sceneName
+      ? getCurrentTargetScene()
+      : sceneName;
+
+  if (!target) return;
+
+  try {
+    const res = await state.obs.getSceneItemList(target);
     state.sceneItems = res.sceneItems || [];
-    renderSourcesList(sceneName, state.sceneItems);
+    renderSourcesList(target, state.sceneItems);
   } catch (err) {
     console.warn(err);
   }
@@ -549,14 +949,22 @@ function renderSourcesList(sceneName, items) {
     const row = document.createElement('div');
     row.className = 'source-item-row-blade';
 
+    const category = getSourceTypeCategory(item);
+    const categoryLabel = category.toUpperCase();
+
     row.innerHTML = `
       <div class="source-left-col">
-        <svg class="source-icon-outline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <polyline points="21 15 16 10 5 21"/>
-        </svg>
-        <span class="source-name-blade">${escapeHtml(item.sourceName)}</span>
+        <!-- Thumbnail / Type Icon Box -->
+        <div class="source-thumb-box" title="${escapeHtml(item.sourceName)} (${categoryLabel})">
+          <div class="source-type-icon-fallback type-${category}">
+            ${getTypeIconSvg(category)}
+          </div>
+          <img class="source-thumb-img" alt="" style="display: none;" />
+        </div>
+        <div class="source-name-col">
+          <span class="source-name-blade">${escapeHtml(item.sourceName)}</span>
+          <span class="source-type-subtext">${categoryLabel}</span>
+        </div>
       </div>
       <div class="source-right-actions">
         <!-- Eye Icon Button -->
@@ -580,6 +988,11 @@ function renderSourcesList(sceneName, items) {
         </button>
       </div>
     `;
+
+    // Load actual thumbnail or display fallback icon
+    const thumbImg = row.querySelector('.source-thumb-img');
+    const fallbackBox = row.querySelector('.source-type-icon-fallback');
+    loadSourceThumbnail(item.sourceName, category, thumbImg, fallbackBox);
 
     // Eye button toggle
     const btnEye = row.querySelector('.btn-blade-eye');
@@ -688,7 +1101,10 @@ function closeEditTabsModal() {
 
 // Preview Snapshot
 async function fetchPreviewSnapshot() {
-  const target = state.studioMode ? state.currentPreviewScene : state.currentProgramScene;
+  const target =
+    state.clientStudioModeControls && state.studioMode
+      ? state.currentPreviewScene
+      : state.currentProgramScene;
   if (!target) return;
 
   try {
@@ -902,6 +1318,10 @@ async function updateMediaFilePath(sourceName, path) {
 
     await state.obs.setInputSettings(sourceName, settings);
 
+    // Invalidate thumbnail cache and refresh sources list so new thumbnail appears immediately
+    thumbnailCache.delete(sourceName);
+    loadSourcesForScene(state.selectedCategoryScene);
+
     saveMediaPreset({
       id: String(Date.now()),
       name: path.split(/[\\/]/).pop() || path,
@@ -927,6 +1347,12 @@ function closeDropdownMenu() {
 
 // Settings Modal
 function openSettingsModal() {
+  if (el.toggleWakeLock) {
+    el.toggleWakeLock.checked = state.wakeLockEnabled;
+  }
+  if (el.toggleClientStudio) {
+    el.toggleClientStudio.checked = state.clientStudioModeControls;
+  }
   el.modalSettings.classList.add('open');
 }
 

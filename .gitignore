@@ -18,7 +18,6 @@ pnpm-debug.log*
 # AI Studio & Cloud Workspace Environment Files
 metadata.json
 bun.lock
-.obs-websocket-simulator/
 .idx/
 .ai/
 firebase-applet-config.json
