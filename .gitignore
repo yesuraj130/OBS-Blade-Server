@@ -12,10 +12,8 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Environment & Secrets
-.env
-.env.*
-.env.local
-!.env.example
+.env*
+.env.example
 
 # AI Studio & Cloud Workspace Environment Files
 metadata.json

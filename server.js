@@ -151,24 +151,15 @@ async function startServer() {
     }
   });
 
-  // --- Frontend Serving (Vite dev middleware or Static Production) ---
-  if (!isProduction) {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: process.env.DISABLE_HMR !== 'true',
-      },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
-  }
+  // --- Frontend Serving (Pure Express Static Serving - Zero Bundlers) ---
+  const staticRoot = isProduction && fs.existsSync(path.resolve(__dirname, 'dist'))
+    ? path.resolve(__dirname, 'dist')
+    : __dirname;
+
+  app.use(express.static(staticRoot));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.resolve(staticRoot, 'index.html'));
+  });
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[Server] OBS Blade Backend running on http://0.0.0.0:${PORT}`);
