@@ -25,6 +25,7 @@ const state = {
   hiddenSceneTabs: new Set(),
   wakeLockEnabled: false,
   clientStudioModeControls: true,
+  advancedOptionsEnabled: false,
 };
 
 // DOM Elements
@@ -60,11 +61,22 @@ const el = {
   dropdownMenuCard: document.getElementById('dropdown-menu-card'),
   btnMenuEditButtons: document.getElementById('btn-menu-edit-buttons'),
   btnMenuEditTabs: document.getElementById('btn-menu-edit-tabs'),
+  btnMenuConnection: document.getElementById('btn-menu-connection'),
   btnMenuSettings: document.getElementById('btn-menu-settings'),
   btnMenuToggleStream: document.getElementById('btn-menu-toggle-stream'),
   textMenuStream: document.getElementById('text-menu-stream'),
   btnMenuToggleRecord: document.getElementById('btn-menu-toggle-record'),
   textMenuRecord: document.getElementById('text-menu-record'),
+
+  // Dedicated OBS WebSocket Connection Modal
+  modalConnection: document.getElementById('modal-connection'),
+  btnBackConnection: document.getElementById('btn-back-connection'),
+  btnCloseConnection: document.getElementById('btn-close-connection'),
+  formSettingsConn: document.getElementById('form-settings-conn'),
+  setIp: document.getElementById('set-ip'),
+  setPort: document.getElementById('set-port'),
+  setPass: document.getElementById('set-pass'),
+  btnUseSim: document.getElementById('btn-use-sim'),
 
   // Edit Scene Buttons Modal
   modalEditScenes: document.getElementById('modal-edit-scenes'),
@@ -84,17 +96,17 @@ const el = {
   btnCloseSettings: document.getElementById('btn-close-settings'),
   toggleWakeLock: document.getElementById('toggle-wake-lock'),
   toggleClientStudio: document.getElementById('toggle-client-studio'),
-  formSettingsConn: document.getElementById('form-settings-conn'),
-  setIp: document.getElementById('set-ip'),
-  setPort: document.getElementById('set-port'),
-  setPass: document.getElementById('set-pass'),
-  btnUseSim: document.getElementById('btn-use-sim'),
 
-  // Media Modal
+  // Edit Source / Source Settings Modal
   modalMediaFile: document.getElementById('modal-media-file'),
   btnBackMediaModal: document.getElementById('btn-back-media-modal'),
   btnCloseMediaModal: document.getElementById('btn-close-media-modal'),
   mediaSourceTitle: document.getElementById('media-source-title'),
+  sourceTypePill: document.getElementById('source-type-pill'),
+  sourceSectionMedia: document.getElementById('source-section-media'),
+  sourceSectionBrowser: document.getElementById('source-section-browser'),
+  sourceSectionText: document.getElementById('source-section-text'),
+  sourceSectionGeneric: document.getElementById('source-section-generic'),
   mediaCurrentPathText: document.getElementById('media-current-path-text'),
   inputNewMediaPath: document.getElementById('input-new-media-path'),
   btnApplyPath: document.getElementById('btn-apply-path'),
@@ -105,6 +117,68 @@ const el = {
   uploadStatus: document.getElementById('upload-status'),
   tabBtnUploaded: document.getElementById('tab-btn-uploaded'),
   tabBtnPresets: document.getElementById('tab-btn-presets'),
+  inputBrowserUrl: document.getElementById('input-browser-url'),
+  inputBrowserWidth: document.getElementById('input-browser-width'),
+  inputBrowserHeight: document.getElementById('input-browser-height'),
+  btnApplyBrowserUrl: document.getElementById('btn-apply-browser-url'),
+  btnRefreshBrowser: document.getElementById('btn-refresh-browser'),
+  inputTextContent: document.getElementById('input-text-content'),
+  btnApplyText: document.getElementById('btn-apply-text'),
+  genericSourceInfo: document.getElementById('generic-source-info'),
+  btnModalRenameSource: document.getElementById('btn-modal-rename-source'),
+  btnModalSourceFilters: document.getElementById('btn-modal-source-filters'),
+
+  // Context Menu
+  contextMenuPopover: document.getElementById('context-menu-popover'),
+  contextMenuHeader: document.getElementById('context-menu-header'),
+  contextMenuItems: document.getElementById('context-menu-items'),
+
+  // Filters Modal
+  modalFilters: document.getElementById('modal-filters'),
+  btnBackFiltersModal: document.getElementById('btn-back-filters-modal'),
+  btnCloseFiltersModal: document.getElementById('btn-close-filters-modal'),
+  filtersModalTitle: document.getElementById('filters-modal-title'),
+  filtersTargetSubtitle: document.getElementById('filters-target-subtitle'),
+  filtersTargetName: document.getElementById('filters-target-name'),
+  filtersListContainer: document.getElementById('filters-list-container'),
+  btnToggleAddFilter: document.getElementById('btn-toggle-add-filter'),
+  formAddFilter: document.getElementById('form-add-filter'),
+  selectFilterKind: document.getElementById('select-filter-kind'),
+  inputFilterName: document.getElementById('input-filter-name'),
+  btnCancelAddFilter: document.getElementById('btn-cancel-add-filter'),
+
+  // Rename Modal
+  modalRenameItem: document.getElementById('modal-rename-item'),
+  renameModalTitle: document.getElementById('rename-modal-title'),
+  renameItemLabel: document.getElementById('rename-item-label'),
+  inputRenameItem: document.getElementById('input-rename-item'),
+  btnCancelRename: document.getElementById('btn-cancel-rename'),
+  formRenameItem: document.getElementById('form-rename-item'),
+
+  // Create Scene Modal
+  modalCreateScene: document.getElementById('modal-create-scene'),
+  inputCreateSceneName: document.getElementById('input-create-scene-name'),
+  btnCancelCreateScene: document.getElementById('btn-cancel-create-scene'),
+  formCreateScene: document.getElementById('form-create-scene'),
+
+  // Confirm Delete Modal
+  modalConfirmDelete: document.getElementById('modal-confirm-delete'),
+  confirmDeleteTitle: document.getElementById('confirm-delete-title'),
+  confirmDeleteDesc: document.getElementById('confirm-delete-desc'),
+  btnCancelConfirmDelete: document.getElementById('btn-cancel-confirm-delete'),
+  btnExecuteConfirmDelete: document.getElementById('btn-execute-confirm-delete'),
+
+  // Advanced Options Controls
+  toggleAdvancedOptions: document.getElementById('toggle-advanced-options'),
+  sourcesHeaderBar: document.getElementById('sources-header-bar'),
+  btnAddSource: document.getElementById('btn-add-source'),
+
+  // Create Source Modal
+  modalCreateSource: document.getElementById('modal-create-source'),
+  selectSourceKind: document.getElementById('select-source-kind'),
+  inputCreateSourceName: document.getElementById('input-create-source-name'),
+  btnCancelCreateSource: document.getElementById('btn-cancel-create-source'),
+  formCreateSource: document.getElementById('form-create-source'),
 };
 
 // Wake lock sentinel instance
@@ -116,6 +190,7 @@ export function init() {
   loadHiddenScenePreferences();
   loadHiddenTabPreferences();
   applyClientStudioModeControls();
+  applyAdvancedOptionsVisibility();
   setupEventListeners();
   setupObsEvents();
 
@@ -137,6 +212,9 @@ function loadSavedPreferences() {
 
     const rawStudioControls = localStorage.getItem('obs_blade_client_studio_mode_controls');
     state.clientStudioModeControls = rawStudioControls === null ? true : rawStudioControls === 'true';
+
+    const rawAdvanced = localStorage.getItem('obs_blade_advanced_options');
+    state.advancedOptionsEnabled = rawAdvanced === 'true'; // Default disabled
   } catch (e) {}
 }
 
@@ -324,14 +402,33 @@ function setupObsEvents() {
     state.isRecording = outputActive;
     el.textMenuRecord.textContent = outputActive ? 'Stop Recording' : 'Start Recording';
   });
+
+  state.obs.on('scenesUpdated', (scenes) => {
+    state.scenes = scenes;
+    renderTopSceneButtons();
+    renderCategoryGrid();
+    if (state.selectedCategoryScene === '__CURRENT__') {
+      loadSourcesForScene('__CURRENT__');
+    }
+  });
+
+  state.obs.on('filterChanged', (data) => {
+    if (activeFiltersTarget && activeFiltersTarget.name === data.sourceName) {
+      loadFiltersForTarget(activeFiltersTarget);
+    }
+  });
+
+  state.obs.on('inputNameChanged', () => {
+    loadSourcesForScene(state.selectedCategoryScene);
+  });
 }
 
 function setupEventListeners() {
-  // Top Close Button: Disconnect & Open Connection Settings
+  // Top Close Button: Disconnect & Open Connection modal
   el.btnTopClose.addEventListener('click', (e) => {
     e.preventDefault();
     state.obs.disconnect();
-    openSettingsModal();
+    openConnectionModal();
   });
 
   // Top Menu Dots Button: Toggle Anchored Dropdown Popup
@@ -350,6 +447,13 @@ function setupEventListeners() {
   });
 
   // Three-dots dropdown menu action handlers
+  if (el.btnMenuConnection) {
+    el.btnMenuConnection.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeDropdownMenu();
+      openConnectionModal();
+    });
+  }
   el.btnMenuSettings.addEventListener('click', (e) => {
     e.preventDefault();
     closeDropdownMenu();
@@ -497,26 +601,58 @@ function setupEventListeners() {
       applyClientStudioModeControls();
     });
   }
-  el.formSettingsConn.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const host = el.setIp.value.trim() || '127.0.0.1';
-    const port = el.setPort.value.trim() || '4455';
-    const pass = el.setPass.value;
 
-    saveCredentials(host, port, pass);
-    const protocol = location.protocol === 'https:' && host === location.hostname ? 'wss://' : 'ws://';
-    state.url = `${protocol}${host}:${port}`;
-    state.password = pass;
+  if (el.toggleAdvancedOptions) {
+    el.toggleAdvancedOptions.addEventListener('change', (e) => {
+      state.advancedOptionsEnabled = e.target.checked;
+      try {
+        localStorage.setItem(
+          'obs_blade_advanced_options',
+          String(state.advancedOptionsEnabled)
+        );
+      } catch (_) {}
 
-    state.obs.connect(state.url, state.password);
-    closeSettingsModal();
-  });
+      applyAdvancedOptionsVisibility();
+    });
+  }
+  // OBS Connection Modal Handlers
+  if (el.btnBackConnection) {
+    el.btnBackConnection.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeConnectionModal();
+    });
+  }
+  if (el.btnCloseConnection) {
+    el.btnCloseConnection.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeConnectionModal();
+    });
+  }
 
-  el.btnUseSim.addEventListener('click', (e) => {
-    e.preventDefault();
-    connectToLocalSimulator();
-    closeSettingsModal();
-  });
+  if (el.formSettingsConn) {
+    el.formSettingsConn.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const host = el.setIp.value.trim() || '127.0.0.1';
+      const port = el.setPort.value.trim() || '4455';
+      const pass = el.setPass.value;
+
+      saveCredentials(host, port, pass);
+      const protocol = location.protocol === 'https:' && host === location.hostname ? 'wss://' : 'ws://';
+      state.url = `${protocol}${host}:${port}`;
+      state.password = pass;
+
+      state.obs.connect(state.url, state.password);
+      closeConnectionModal();
+    });
+  }
+
+  if (el.btnUseSim) {
+    el.btnUseSim.addEventListener('click', (e) => {
+      e.preventDefault();
+      connectToLocalSimulator();
+      closeConnectionModal();
+    });
+  }
 
   // Media Modal Handlers
   if (el.btnBackMediaModal) {
@@ -530,8 +666,52 @@ function setupEventListeners() {
     closeMediaModal();
   });
 
+  // Add Source Action & Modal Handlers
+  if (el.btnAddSource) {
+    el.btnAddSource.addEventListener('click', (e) => {
+      e.preventDefault();
+      openCreateSourceModal();
+    });
+  }
+
+  if (el.btnCancelCreateSource) {
+    el.btnCancelCreateSource.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeCreateSourceModal();
+    });
+  }
+
+  if (el.formCreateSource) {
+    el.formCreateSource.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const targetScene = getCurrentTargetScene();
+      const name = el.inputCreateSourceName.value.trim();
+      const kind = el.selectSourceKind.value;
+      if (!name || !targetScene) return;
+
+      try {
+        await state.obs.createInput(targetScene, name, kind);
+        closeCreateSourceModal();
+        loadSourcesForScene(state.selectedCategoryScene);
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+
   // Backdrop click to dismiss centered dialogs
-  [el.modalEditScenes, el.modalEditTabs, el.modalSettings, el.modalMediaFile].forEach((overlay) => {
+  [
+    el.modalEditScenes,
+    el.modalEditTabs,
+    el.modalSettings,
+    el.modalConnection,
+    el.modalMediaFile,
+    el.modalFilters,
+    el.modalRenameItem,
+    el.modalCreateScene,
+    el.modalConfirmDelete,
+    el.modalCreateSource,
+  ].forEach((overlay) => {
     if (!overlay) return;
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
@@ -539,6 +719,196 @@ function setupEventListeners() {
       }
     });
   });
+
+  // Context Menu outside click dismissal
+  document.addEventListener('click', (e) => {
+    if (el.contextMenuPopover && !el.contextMenuPopover.contains(e.target)) {
+      closeContextMenu();
+    }
+  });
+
+  window.addEventListener('resize', closeContextMenu);
+  window.addEventListener('scroll', closeContextMenu, true);
+
+  // Filters Modal Handlers
+  if (el.btnBackFiltersModal) {
+    el.btnBackFiltersModal.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeFiltersModal();
+    });
+  }
+  if (el.btnCloseFiltersModal) {
+    el.btnCloseFiltersModal.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeFiltersModal();
+    });
+  }
+
+  if (el.btnToggleAddFilter) {
+    el.btnToggleAddFilter.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isHidden = el.formAddFilter.style.display === 'none';
+      el.formAddFilter.style.display = isHidden ? 'block' : 'none';
+      el.btnToggleAddFilter.style.display = isHidden ? 'none' : 'flex';
+      if (isHidden) {
+        el.inputFilterName.focus();
+      }
+    });
+  }
+
+  if (el.btnCancelAddFilter) {
+    el.btnCancelAddFilter.addEventListener('click', (e) => {
+      e.preventDefault();
+      el.formAddFilter.style.display = 'none';
+      el.btnToggleAddFilter.style.display = 'flex';
+    });
+  }
+
+  if (el.selectFilterKind) {
+    el.selectFilterKind.addEventListener('change', () => {
+      const kind = el.selectFilterKind.value;
+      const label = FILTER_KIND_LABELS[kind] || 'Filter';
+      el.inputFilterName.value = label;
+    });
+  }
+
+  if (el.formAddFilter) {
+    el.formAddFilter.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!activeFiltersTarget) return;
+      const name = el.inputFilterName.value.trim();
+      const kind = el.selectFilterKind.value;
+      if (!name) return;
+
+      try {
+        await state.obs.createSourceFilter(activeFiltersTarget.name, name, kind);
+        el.formAddFilter.style.display = 'none';
+        el.btnToggleAddFilter.style.display = 'flex';
+        loadFiltersForTarget(activeFiltersTarget);
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+
+  // Rename Modal Handlers
+  if (el.btnCancelRename) {
+    el.btnCancelRename.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeRenameModal();
+    });
+  }
+
+  if (el.formRenameItem) {
+    el.formRenameItem.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!activeRenameTarget) return;
+      const newName = el.inputRenameItem.value.trim();
+      if (!newName || newName === activeRenameTarget.name) {
+        closeRenameModal();
+        return;
+      }
+
+      try {
+        if (activeRenameTarget.type === 'scene') {
+          await state.obs.setSceneName(activeRenameTarget.name, newName);
+          if (state.currentProgramScene === activeRenameTarget.name) {
+            state.currentProgramScene = newName;
+          }
+          if (state.currentPreviewScene === activeRenameTarget.name) {
+            state.currentPreviewScene = newName;
+          }
+          if (state.selectedCategoryScene === activeRenameTarget.name) {
+            state.selectedCategoryScene = newName;
+          }
+          renderTopSceneButtons();
+          renderCategoryGrid();
+        } else if (activeRenameTarget.type === 'filter') {
+          await state.obs.setSourceFilterName(
+            activeRenameTarget.sourceName,
+            activeRenameTarget.name,
+            newName
+          );
+          if (activeFiltersTarget) {
+            loadFiltersForTarget(activeFiltersTarget);
+          }
+        } else {
+          await state.obs.setInputName(activeRenameTarget.name, newName);
+          thumbnailCache.delete(activeRenameTarget.name);
+          loadSourcesForScene(activeRenameTarget.sceneName || state.selectedCategoryScene);
+        }
+        closeRenameModal();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+
+  // Create Scene Modal Handlers
+  if (el.btnCancelCreateScene) {
+    el.btnCancelCreateScene.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeCreateSceneModal();
+    });
+  }
+
+  if (el.formCreateScene) {
+    el.formCreateScene.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const sceneName = el.inputCreateSceneName.value.trim();
+      if (!sceneName) return;
+
+      try {
+        await state.obs.createScene(sceneName);
+        closeCreateSceneModal();
+        const res = await state.obs.getSceneList();
+        state.scenes = res.scenes || [];
+        renderTopSceneButtons();
+        renderCategoryGrid();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+
+  // Confirm Delete Modal Handlers
+  if (el.btnCancelConfirmDelete) {
+    el.btnCancelConfirmDelete.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeDeleteModal();
+    });
+  }
+
+  if (el.btnExecuteConfirmDelete) {
+    el.btnExecuteConfirmDelete.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!activeDeleteTarget) return;
+
+      try {
+        if (activeDeleteTarget.type === 'scene') {
+          await state.obs.removeScene(activeDeleteTarget.name);
+          const res = await state.obs.getSceneList();
+          state.scenes = res.scenes || [];
+          if (state.selectedCategoryScene === activeDeleteTarget.name) {
+            state.selectedCategoryScene = '__CURRENT__';
+          }
+          renderTopSceneButtons();
+          renderCategoryGrid();
+          loadSourcesForScene(state.selectedCategoryScene);
+        } else {
+          await state.obs.removeSceneItem(
+            activeDeleteTarget.sceneName,
+            activeDeleteTarget.itemId
+          );
+          loadSourcesForScene(activeDeleteTarget.sceneName || state.selectedCategoryScene);
+        }
+        closeDeleteModal();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+
   el.btnApplyPath.addEventListener('click', async (e) => {
     e.preventDefault();
     const newPath = el.inputNewMediaPath.value.trim();
@@ -547,6 +917,86 @@ function setupEventListeners() {
       closeMediaModal();
     }
   });
+
+  // Browser Source Apply & Refresh Handlers
+  if (el.btnApplyBrowserUrl) {
+    el.btnApplyBrowserUrl.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!state.selectedMediaSource) return;
+      const url = el.inputBrowserUrl.value.trim();
+      const width = parseInt(el.inputBrowserWidth?.value, 10) || 1920;
+      const height = parseInt(el.inputBrowserHeight?.value, 10) || 1080;
+      try {
+        await state.obs.setInputSettings(state.selectedMediaSource, { url, width, height });
+        thumbnailCache.delete(state.selectedMediaSource);
+        loadSourcesForScene(state.selectedCategoryScene);
+        closeMediaModal();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+
+  if (el.btnRefreshBrowser) {
+    el.btnRefreshBrowser.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!state.selectedMediaSource) return;
+      try {
+        await state.obs.request('PressInputPropertiesButton', {
+          inputName: state.selectedMediaSource,
+          propertyName: 'refreshnocache',
+        });
+        el.btnRefreshBrowser.textContent = '✓ Reloaded';
+        setTimeout(() => {
+          if (el.btnRefreshBrowser) el.btnRefreshBrowser.textContent = '↻ Reload Browser Page';
+        }, 1200);
+      } catch (err) {
+        console.warn(err);
+      }
+    });
+  }
+
+  // Text Source Apply Handler
+  if (el.btnApplyText) {
+    el.btnApplyText.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!state.selectedMediaSource) return;
+      const text = el.inputTextContent.value;
+      try {
+        await state.obs.setInputSettings(state.selectedMediaSource, { text });
+        thumbnailCache.delete(state.selectedMediaSource);
+        loadSourcesForScene(state.selectedCategoryScene);
+        closeMediaModal();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+
+  // Quick Action Buttons in Source Edit Modal
+  if (el.btnModalRenameSource) {
+    el.btnModalRenameSource.addEventListener('click', (e) => {
+      e.preventDefault();
+      const srcName = state.selectedMediaSource;
+      const sceneName = state.selectedMediaScene || state.selectedCategoryScene;
+      closeMediaModal();
+      if (srcName) {
+        openRenameModal({ type: 'source', name: srcName, sceneName });
+      }
+    });
+  }
+
+  if (el.btnModalSourceFilters) {
+    el.btnModalSourceFilters.addEventListener('click', (e) => {
+      e.preventDefault();
+      const srcName = state.selectedMediaSource;
+      const sceneName = state.selectedMediaScene || state.selectedCategoryScene;
+      closeMediaModal();
+      if (srcName) {
+        openFiltersModal({ type: 'source', name: srcName, sceneName });
+      }
+    });
+  }
 
   // Direct File Upload & Tab Switchers
   if (el.mediaUploadDropzone && el.mediaFileInput) {
@@ -598,6 +1048,488 @@ function setupEventListeners() {
   }
 }
 
+// Filter labels map
+const FILTER_KIND_LABELS = {
+  chroma_key_filter_v2: 'Chroma Key',
+  color_correction_filter_v2: 'Color Correction',
+  noise_suppress_filter_v2: 'Noise Suppression',
+  compressor_filter: 'Compressor',
+  gain_filter: 'Gain',
+  noise_gate_filter: 'Noise Gate',
+  crop_filter: 'Crop / Pad',
+  sharpness_filter_v2: 'Sharpen',
+  scroll_filter: 'Scroll',
+};
+
+// Target tracker variables
+let activeFiltersTarget = null;
+let activeRenameTarget = null;
+let activeDeleteTarget = null;
+
+/**
+ * Universal touch long-press & desktop right-click handler
+ */
+function attachLongPressAndContextMenu(element, onTrigger) {
+  let timer = null;
+  let startX = 0;
+  let startY = 0;
+  let didLongPress = false;
+
+  element.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onTrigger(e.clientX, e.clientY);
+  });
+
+  element.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length > 1) return;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      didLongPress = false;
+
+      timer = setTimeout(() => {
+        didLongPress = true;
+        if (navigator.vibrate) {
+          try {
+            navigator.vibrate(40);
+          } catch (_) {}
+        }
+        onTrigger(startX, startY);
+      }, 480);
+    },
+    { passive: true }
+  );
+
+  element.addEventListener(
+    'touchmove',
+    (e) => {
+      if (!timer) return;
+      const touch = e.touches[0];
+      if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > 10) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+    { passive: true }
+  );
+
+  element.addEventListener('touchend', (e) => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (didLongPress) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+
+  element.addEventListener('touchcancel', () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  });
+}
+
+function showContextMenu({ x, y, title, items }) {
+  el.contextMenuHeader.textContent = title;
+  el.contextMenuItems.innerHTML = '';
+
+  items.forEach((item) => {
+    if (item.divider) {
+      const div = document.createElement('div');
+      div.className = 'context-menu-divider';
+      el.contextMenuItems.appendChild(div);
+      return;
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `context-menu-item ${item.danger ? 'danger' : ''}`;
+    btn.innerHTML = `${item.icon || ''}<span>${escapeHtml(item.label)}</span>`;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeContextMenu();
+      item.onClick();
+    });
+    el.contextMenuItems.appendChild(btn);
+  });
+
+  el.contextMenuPopover.style.left = '0px';
+  el.contextMenuPopover.style.top = '0px';
+  el.contextMenuPopover.classList.add('open');
+
+  const rect = el.contextMenuPopover.getBoundingClientRect();
+  const pad = 12;
+  let posX = x;
+  let posY = y;
+
+  if (posX + rect.width > window.innerWidth - pad) {
+    posX = Math.max(pad, window.innerWidth - rect.width - pad);
+  }
+  if (posY + rect.height > window.innerHeight - pad) {
+    posY = Math.max(pad, window.innerHeight - rect.height - pad);
+  }
+
+  el.contextMenuPopover.style.left = `${posX}px`;
+  el.contextMenuPopover.style.top = `${posY}px`;
+}
+
+function closeContextMenu() {
+  if (el.contextMenuPopover) {
+    el.contextMenuPopover.classList.remove('open');
+  }
+}
+
+function openSceneContextMenu(x, y, sceneName) {
+  const items = [];
+
+  // Rename scene is available when advanced options is enabled
+  if (state.advancedOptionsEnabled) {
+    items.push({
+      label: 'Rename Scene',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
+      onClick: () => openRenameModal({ type: 'scene', name: sceneName }),
+    });
+  }
+
+  // Edit Scene: selects this scene so its sources are displayed in the sources editor view
+  items.push({
+    label: 'Edit Scene',
+    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+    onClick: () => {
+      state.selectedCategoryScene = sceneName;
+      renderCategoryGrid();
+      loadSourcesForScene(sceneName);
+      const sourcesEl = document.querySelector('.sources-list-section');
+      if (sourcesEl) {
+        sourcesEl.scrollIntoView({ behavior: 'smooth' });
+      }
+    },
+  });
+
+  // Filters option is ALWAYS shown for normal and advanced users to toggle existing filters
+  items.push({
+    label: 'Filters',
+    icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><circle cx="8" cy="15" r="4"/><circle cx="16" cy="15" r="4"/></svg>`,
+    onClick: () => openFiltersModal({ type: 'scene', name: sceneName }),
+  });
+
+  // New Scene & Delete Scene are available for advanced users
+  if (state.advancedOptionsEnabled) {
+    items.push({
+      label: 'New Scene',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+      onClick: () => openCreateSceneModal(),
+    });
+    items.push({ divider: true });
+    items.push({
+      label: 'Delete Scene',
+      danger: true,
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+      onClick: () => openDeleteModal({ type: 'scene', name: sceneName }),
+    });
+  }
+
+  showContextMenu({
+    x,
+    y,
+    title: `Scene: ${sceneName}`,
+    items,
+  });
+}
+
+function openSourceContextMenu(x, y, sceneName, item) {
+  // Universal options for every source: Rename Source, Edit Source, Filters
+  const menuItems = [
+    {
+      label: 'Rename Source',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
+      onClick: () => openRenameModal({ type: 'source', name: item.sourceName, sceneName }),
+    },
+    {
+      label: 'Edit Source',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+      onClick: () => openMediaModal(item.sourceName, sceneName, item),
+    },
+    {
+      label: 'Filters',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><circle cx="8" cy="15" r="4"/><circle cx="16" cy="15" r="4"/></svg>`,
+      onClick: () => openFiltersModal({ type: 'source', name: item.sourceName, sceneName }),
+    },
+    {
+      label: item.sceneItemEnabled ? 'Hide Source' : 'Show Source',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+      onClick: async () => {
+        try {
+          const next = !item.sceneItemEnabled;
+          await state.obs.setSceneItemEnabled(sceneName, item.sceneItemId, next);
+          item.sceneItemEnabled = next;
+          renderSourcesList(sceneName, state.sceneItems);
+        } catch (err) {
+          console.error(err);
+        }
+      },
+    },
+  ];
+
+  // Advanced only: Add Source & Remove from Scene
+  if (state.advancedOptionsEnabled) {
+    menuItems.push({ divider: true });
+    menuItems.push({
+      label: 'Add Source to Scene',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+      onClick: () => openCreateSourceModal(),
+    });
+    menuItems.push({
+      label: 'Remove from Scene',
+      danger: true,
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+      onClick: () =>
+        openDeleteModal({
+          type: 'source',
+          name: item.sourceName,
+          sceneName,
+          itemId: item.sceneItemId,
+        }),
+    });
+  }
+
+  showContextMenu({
+    x,
+    y,
+    title: `Source: ${item.sourceName}`,
+    items: menuItems,
+  });
+}
+
+function openFiltersModal(target) {
+  activeFiltersTarget = target;
+  el.filtersModalTitle.textContent =
+    target.type === 'scene' ? 'Scene Filters' : 'Source Filters';
+  el.filtersTargetName.textContent = target.name;
+  el.formAddFilter.style.display = 'none';
+
+  // Add filter section is strictly available when advanced options is enabled
+  if (state.advancedOptionsEnabled) {
+    el.btnToggleAddFilter.style.display = 'flex';
+  } else {
+    el.btnToggleAddFilter.style.display = 'none';
+  }
+
+  const defaultLabel = FILTER_KIND_LABELS[el.selectFilterKind.value] || 'Chroma Key';
+  el.inputFilterName.value = defaultLabel;
+  el.modalFilters.classList.add('open');
+  loadFiltersForTarget(target);
+}
+
+function closeFiltersModal() {
+  el.modalFilters.classList.remove('open');
+  activeFiltersTarget = null;
+}
+
+async function loadFiltersForTarget(target) {
+  if (!target || !target.name) return;
+  el.filtersListContainer.innerHTML = `
+    <div style="padding: 16px; text-align: center; color: var(--obs-text-gray); font-size: 13px;">
+      Loading filters...
+    </div>
+  `;
+
+  try {
+    const res = await state.obs.getSourceFilterList(target.name);
+    const filters = res.filters || [];
+    renderFiltersList(target, filters);
+  } catch (err) {
+    el.filtersListContainer.innerHTML = `
+      <div style="padding: 16px; text-align: center; color: var(--obs-red); font-size: 13px;">
+        Failed to load filters: ${escapeHtml(err.message)}
+      </div>
+    `;
+  }
+}
+
+function renderFiltersList(target, filters) {
+  el.filtersListContainer.innerHTML = '';
+
+  if (!filters || filters.length === 0) {
+    el.filtersListContainer.innerHTML = `
+      <div style="padding: 24px 12px; text-align: center; color: var(--obs-text-gray); font-size: 13px; background: #080c14; border-radius: 8px; border: 1px dashed #1c2638;">
+        No filters active on this ${target.type}.
+        ${
+          state.advancedOptionsEnabled
+            ? '<br/><span style="font-size: 11px; opacity: 0.8; margin-top: 4px; display: inline-block;">Tap "+ Add New Filter" below to add video or audio filters.</span>'
+            : ''
+        }
+      </div>
+    `;
+    return;
+  }
+
+  filters.forEach((filter) => {
+    const card = document.createElement('div');
+    card.className = 'filter-card-blade';
+
+    const kindLabel =
+      FILTER_KIND_LABELS[filter.filterKind] ||
+      filter.filterKind.replace(/_filter(_v\d+)?$/, '').replace(/_/g, ' ');
+
+    let actionsHtml = `
+      <label class="switch-control" title="Toggle Filter">
+        <input type="checkbox" class="filter-toggle-checkbox" ${filter.filterEnabled ? 'checked' : ''} />
+        <span class="switch-slider"></span>
+      </label>
+    `;
+
+    // Only show Rename and Delete filter buttons if Advanced Options is enabled!
+    if (state.advancedOptionsEnabled) {
+      actionsHtml += `
+        <button type="button" class="btn-filter-rename" title="Rename Filter">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+        </button>
+        <button type="button" class="btn-filter-trash" title="Delete Filter">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+        </button>
+      `;
+    }
+
+    card.innerHTML = `
+      <div class="filter-info-left">
+        <span class="filter-title-text" title="${escapeHtml(filter.filterName)}">${escapeHtml(filter.filterName)}</span>
+        <span class="filter-kind-pill">${escapeHtml(kindLabel)}</span>
+      </div>
+      <div class="filter-actions-right">
+        ${actionsHtml}
+      </div>
+    `;
+
+    const checkbox = card.querySelector('.filter-toggle-checkbox');
+    checkbox.addEventListener('change', async (e) => {
+      const next = e.target.checked;
+      try {
+        await state.obs.setSourceFilterEnabled(target.name, filter.filterName, next);
+        filter.filterEnabled = next;
+      } catch (err) {
+        console.error(err);
+        e.target.checked = !next;
+      }
+    });
+
+    if (state.advancedOptionsEnabled) {
+      const btnRename = card.querySelector('.btn-filter-rename');
+      if (btnRename) {
+        btnRename.addEventListener('click', (e) => {
+          e.preventDefault();
+          openRenameModal({
+            type: 'filter',
+            name: filter.filterName,
+            sourceName: target.name,
+          });
+        });
+      }
+
+      const btnTrash = card.querySelector('.btn-filter-trash');
+      if (btnTrash) {
+        btnTrash.addEventListener('click', async (e) => {
+          e.preventDefault();
+          try {
+            await state.obs.removeSourceFilter(target.name, filter.filterName);
+            loadFiltersForTarget(target);
+          } catch (err) {
+            console.error(err);
+          }
+        });
+      }
+    }
+
+    el.filtersListContainer.appendChild(card);
+  });
+}
+
+function openRenameModal(target) {
+  activeRenameTarget = target;
+  if (target.type === 'scene') {
+    el.renameModalTitle.textContent = 'Rename Scene';
+  } else if (target.type === 'filter') {
+    el.renameModalTitle.textContent = 'Rename Filter';
+  } else {
+    el.renameModalTitle.textContent = 'Rename Source';
+  }
+  el.renameItemLabel.textContent = `New name for "${target.name}":`;
+  el.inputRenameItem.value = target.name;
+  el.modalRenameItem.classList.add('open');
+  setTimeout(() => {
+    el.inputRenameItem.focus();
+    el.inputRenameItem.select();
+  }, 100);
+}
+
+function closeRenameModal() {
+  el.modalRenameItem.classList.remove('open');
+  activeRenameTarget = null;
+}
+
+function openCreateSceneModal() {
+  el.inputCreateSceneName.value = '';
+  el.modalCreateScene.classList.add('open');
+  setTimeout(() => {
+    el.inputCreateSceneName.focus();
+  }, 100);
+}
+
+function closeCreateSceneModal() {
+  el.modalCreateScene.classList.remove('open');
+}
+
+function openCreateSourceModal() {
+  el.inputCreateSourceName.value = '';
+  el.modalCreateSource.classList.add('open');
+  setTimeout(() => {
+    el.inputCreateSourceName.focus();
+  }, 100);
+}
+
+function closeCreateSourceModal() {
+  el.modalCreateSource.classList.remove('open');
+}
+
+function applyAdvancedOptionsVisibility() {
+  if (el.sourcesHeaderBar) {
+    el.sourcesHeaderBar.style.display = state.advancedOptionsEnabled ? 'flex' : 'none';
+  }
+  renderTopSceneButtons();
+  if (activeFiltersTarget) {
+    loadFiltersForTarget(activeFiltersTarget);
+  }
+}
+
+function openDeleteModal(target) {
+  activeDeleteTarget = target;
+  el.confirmDeleteTitle.textContent =
+    target.type === 'scene' ? 'Delete Scene' : 'Remove Source';
+  if (target.type === 'scene') {
+    el.confirmDeleteDesc.textContent = `Are you sure you want to delete scene "${target.name}"? This removes the scene and its sources from OBS Studio.`;
+  } else {
+    el.confirmDeleteDesc.textContent = `Are you sure you want to remove "${target.name}" from scene "${target.sceneName}"?`;
+  }
+  el.modalConfirmDelete.classList.add('open');
+}
+
+function closeDeleteModal() {
+  el.modalConfirmDelete.classList.remove('open');
+  activeDeleteTarget = null;
+}
+
 function syncStudioModeCheckbox() {
   el.checkboxStudio.classList.toggle('checked', state.studioMode);
   el.btnTriggerTransition.classList.toggle('show', state.studioMode);
@@ -624,6 +1556,11 @@ function renderTopSceneButtons() {
     btn.className = `scene-block-btn ${isProgram ? 'active-program' : ''} ${isPreview ? 'active-preview' : ''}`;
     btn.textContent = scene.sceneName;
 
+    // Attach right-click and long-press context menu (rename, filters, delete, new)
+    attachLongPressAndContextMenu(btn, (x, y) => {
+      openSceneContextMenu(x, y, scene.sceneName);
+    });
+
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       try {
@@ -649,6 +1586,20 @@ function renderTopSceneButtons() {
 
     el.scenesGridTop.appendChild(btn);
   });
+
+  // Dedicated "+" Add Scene button at the end of the top grid (Advanced only)
+  if (state.advancedOptionsEnabled) {
+    const btnAdd = document.createElement('button');
+    btnAdd.type = 'button';
+    btnAdd.className = 'scene-block-btn btn-add-scene';
+    btnAdd.title = 'Add New Scene';
+    btnAdd.textContent = '+';
+    btnAdd.addEventListener('click', (e) => {
+      e.preventDefault();
+      openCreateSceneModal();
+    });
+    el.scenesGridTop.appendChild(btnAdd);
+  }
 }
 
 function getCurrentTargetScene() {
@@ -673,6 +1624,11 @@ function renderCategoryGrid() {
     const isSelected = state.selectedCategoryScene === scene.sceneName;
     btn.className = `category-text-btn ${isSelected ? 'selected' : ''}`;
     btn.textContent = scene.sceneName;
+
+    // Attach right-click and long-press context menu
+    attachLongPressAndContextMenu(btn, (x, y) => {
+      openSceneContextMenu(x, y, scene.sceneName);
+    });
 
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -1008,11 +1964,17 @@ function renderSourcesList(sceneName, items) {
       }
     });
 
-    // Interlocking circles / settings button
+    // Right-click and long-press on source row to open source context menu (rename, filters, media settings, visibility, remove)
+    attachLongPressAndContextMenu(row, (x, y) => {
+      openSourceContextMenu(x, y, sceneName, item);
+    });
+
+    // Interlocking circles / filters button -> opens Filters Modal for this source
     const btnFilters = row.querySelector('.btn-blade-filters');
     btnFilters.addEventListener('click', (e) => {
       e.preventDefault();
-      openMediaModal(item.sourceName);
+      e.stopPropagation();
+      openFiltersModal({ type: 'source', name: item.sourceName, sceneName });
     });
 
     el.sourcesListContainer.appendChild(row);
@@ -1119,32 +2081,64 @@ async function fetchPreviewSnapshot() {
   }
 }
 
-// Media Modal Logic
-async function openMediaModal(sourceName) {
+// Universal Source Edit Modal Logic
+async function openMediaModal(sourceName, sceneName, item) {
   state.selectedMediaSource = sourceName;
-  el.mediaSourceTitle.textContent = `Settings: "${sourceName}"`;
-  el.mediaCurrentPathText.textContent = 'Loading path...';
-  el.inputNewMediaPath.value = '';
+  state.selectedMediaScene = sceneName || state.selectedCategoryScene;
+  el.mediaSourceTitle.textContent = `Edit: ${sourceName}`;
+
+  const category = item ? getSourceTypeCategory(item) : 'generic';
+  if (el.sourceTypePill) {
+    el.sourceTypePill.textContent = `${category.toUpperCase()} SOURCE`;
+  }
+
+  // Hide all sections first
+  if (el.sourceSectionMedia) el.sourceSectionMedia.style.display = 'none';
+  if (el.sourceSectionBrowser) el.sourceSectionBrowser.style.display = 'none';
+  if (el.sourceSectionText) el.sourceSectionText.style.display = 'none';
+  if (el.sourceSectionGeneric) el.sourceSectionGeneric.style.display = 'none';
 
   if (el.uploadStatus) {
     el.uploadStatus.style.display = 'none';
     el.uploadStatus.textContent = '';
   }
 
-  // Load presets & uploaded media
-  renderPresetsList(sourceName);
-  loadUploadedMedia(sourceName);
+  if (category === 'image' || category === 'video') {
+    if (el.sourceSectionMedia) el.sourceSectionMedia.style.display = 'flex';
+    el.mediaCurrentPathText.textContent = 'Loading path...';
+    el.inputNewMediaPath.value = '';
+    renderPresetsList(sourceName);
+    loadUploadedMedia(sourceName);
+  } else if (category === 'browser') {
+    if (el.sourceSectionBrowser) el.sourceSectionBrowser.style.display = 'flex';
+  } else if (category === 'text') {
+    if (el.sourceSectionText) el.sourceSectionText.style.display = 'flex';
+  } else {
+    if (el.sourceSectionGeneric) el.sourceSectionGeneric.style.display = 'flex';
+    if (el.genericSourceInfo) {
+      el.genericSourceInfo.textContent = `${sourceName} (${category.toUpperCase()}) - Active in OBS`;
+    }
+  }
 
   el.modalMediaFile.classList.add('open');
 
   try {
     const res = await state.obs.getInputSettings(sourceName);
     const settings = res.inputSettings || {};
-    const path = settings.file || settings.local_file || 'No local file configured';
-    el.mediaCurrentPathText.textContent = path;
-    el.inputNewMediaPath.value = path;
+
+    if (category === 'image' || category === 'video') {
+      const path = settings.file || settings.local_file || 'No local file configured';
+      el.mediaCurrentPathText.textContent = path;
+      el.inputNewMediaPath.value = path;
+    } else if (category === 'browser') {
+      if (el.inputBrowserUrl) el.inputBrowserUrl.value = settings.url || 'https://obsblade.app';
+      if (el.inputBrowserWidth) el.inputBrowserWidth.value = settings.width || 1920;
+      if (el.inputBrowserHeight) el.inputBrowserHeight.value = settings.height || 1080;
+    } else if (category === 'text') {
+      if (el.inputTextContent) el.inputTextContent.value = settings.text || '';
+    }
   } catch (err) {
-    el.mediaCurrentPathText.textContent = 'Could not read source settings';
+    console.warn(err);
   }
 }
 
@@ -1332,7 +2326,7 @@ async function updateMediaFilePath(sourceName, path) {
       setTimeout(fetchPreviewSnapshot, 300);
     }
   } catch (err) {
-    alert(`Error: ${err.message}`);
+    console.error('[Media Update Error]', err);
   }
 }
 
@@ -1353,11 +2347,24 @@ function openSettingsModal() {
   if (el.toggleClientStudio) {
     el.toggleClientStudio.checked = state.clientStudioModeControls;
   }
+  if (el.toggleAdvancedOptions) {
+    el.toggleAdvancedOptions.checked = state.advancedOptionsEnabled;
+  }
   el.modalSettings.classList.add('open');
 }
 
 function closeSettingsModal() {
   el.modalSettings.classList.remove('open');
+}
+
+// Dedicated OBS Connection Modal
+function openConnectionModal() {
+  loadSavedCredentials();
+  el.modalConnection.classList.add('open');
+}
+
+function closeConnectionModal() {
+  el.modalConnection.classList.remove('open');
 }
 
 function escapeHtml(str) {

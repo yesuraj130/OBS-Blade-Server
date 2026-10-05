@@ -86,6 +86,165 @@ export class ObsWebSocketSimulator {
       ['QR Code Banner', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/tithe_qr.png' } }],
       ['Welcome Graphic', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/welcome_banner.jpg' } }],
       ['Church Logo', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/church_logo_white.png' } }],
+      ['Live Web Page', { inputKind: 'browser_source', inputSettings: { url: 'https://obsblade.app', width: 1920, height: 1080 } }],
+      ['Praise Lyrics', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'Amazing Grace, how sweet the sound\nThat saved a wretch like me' } }],
+      ['Scripture LowerThird', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'John 3:16 - For God so loved the world...' } }],
+      ['Credits Scroll', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'Pastor: John Doe\nMusic: Worship Team\nAudio/Video: Blade Web Crew' } }],
+    ]);
+
+    this.sourceFilters = new Map([
+      [
+        'Pastor Camera',
+        [
+          {
+            filterName: 'Chroma Key (Green Screen)',
+            filterKind: 'chroma_key_filter_v2',
+            filterEnabled: true,
+            filterIndex: 0,
+            filterSettings: { similarity: 400, smoothness: 80 },
+          },
+          {
+            filterName: 'Color Correction',
+            filterKind: 'color_correction_filter_v2',
+            filterEnabled: true,
+            filterIndex: 1,
+            filterSettings: { contrast: 1.1, saturation: 1.2 },
+          },
+        ],
+      ],
+      [
+        'Interview Camera',
+        [
+          {
+            filterName: 'Chroma Key',
+            filterKind: 'chroma_key_filter_v2',
+            filterEnabled: false,
+            filterIndex: 0,
+            filterSettings: { similarity: 350 },
+          },
+          {
+            filterName: 'Sharpening',
+            filterKind: 'sharpness_filter_v2',
+            filterEnabled: true,
+            filterIndex: 1,
+            filterSettings: { sharpness: 0.15 },
+          },
+        ],
+      ],
+      [
+        'Host Mic',
+        [
+          {
+            filterName: 'Noise Suppression (RNNoise)',
+            filterKind: 'noise_suppress_filter_v2',
+            filterEnabled: true,
+            filterIndex: 0,
+            filterSettings: { method: 'rnnoise' },
+          },
+          {
+            filterName: 'Compressor',
+            filterKind: 'compressor_filter',
+            filterEnabled: true,
+            filterIndex: 1,
+            filterSettings: { ratio: 4, threshold: -18 },
+          },
+          {
+            filterName: 'Gain (+2.5 dB)',
+            filterKind: 'gain_filter',
+            filterEnabled: false,
+            filterIndex: 2,
+            filterSettings: { db: 2.5 },
+          },
+        ],
+      ],
+      [
+        'Interview Mic',
+        [
+          {
+            filterName: 'Noise Gate',
+            filterKind: 'noise_gate_filter',
+            filterEnabled: true,
+            filterIndex: 0,
+            filterSettings: {},
+          },
+          {
+            filterName: 'Compressor',
+            filterKind: 'compressor_filter',
+            filterEnabled: true,
+            filterIndex: 1,
+            filterSettings: {},
+          },
+        ],
+      ],
+      [
+        'Graphic Overlay',
+        [
+          {
+            filterName: 'Crop / Pad (16:9)',
+            filterKind: 'crop_filter',
+            filterEnabled: true,
+            filterIndex: 0,
+            filterSettings: { top: 0, bottom: 20 },
+          },
+          {
+            filterName: 'Color Grade',
+            filterKind: 'color_correction_filter_v2',
+            filterEnabled: false,
+            filterIndex: 1,
+            filterSettings: {},
+          },
+        ],
+      ],
+      [
+        'Projector Back',
+        [
+          {
+            filterName: 'Projector Color LUT',
+            filterKind: 'color_correction_filter_v2',
+            filterEnabled: true,
+            filterIndex: 0,
+            filterSettings: { contrast: 1.05 },
+          },
+          {
+            filterName: 'Edge Soften',
+            filterKind: 'sharpness_filter_v2',
+            filterEnabled: false,
+            filterIndex: 1,
+            filterSettings: { sharpness: -0.1 },
+          },
+        ],
+      ],
+      [
+        'Verse Bottom',
+        [
+          {
+            filterName: 'Scene Color Tint',
+            filterKind: 'color_correction_filter_v2',
+            filterEnabled: true,
+            filterIndex: 0,
+            filterSettings: {},
+          },
+          {
+            filterName: 'Lower Third Blur',
+            filterKind: 'sharpness_filter_v2',
+            filterEnabled: false,
+            filterIndex: 1,
+            filterSettings: { sharpness: -0.2 },
+          },
+        ],
+      ],
+      [
+        'Testimony',
+        [
+          {
+            filterName: 'Warm Contrast Grade',
+            filterKind: 'color_correction_filter_v2',
+            filterEnabled: true,
+            filterIndex: 0,
+            filterSettings: { contrast: 1.15 },
+          },
+        ],
+      ],
     ]);
   }
 
@@ -298,6 +457,236 @@ export class ObsWebSocketSimulator {
         this.isRecording = !this.isRecording;
         this.broadcastEvent('RecordStateChanged', { outputActive: this.isRecording });
         return { data: { outputActive: this.isRecording } };
+
+      case 'CreateScene': {
+        const sceneName = (data.sceneName || '').trim();
+        if (!sceneName) return { error: 'Scene name is required' };
+        if (this.scenes.some((s) => s.sceneName === sceneName)) {
+          return { error: 'Scene already exists' };
+        }
+        const newScene = {
+          sceneName,
+          sceneIndex: this.scenes.length,
+          items: [],
+        };
+        this.scenes.push(newScene);
+        this.broadcastEvent('SceneCreated', { sceneName, isGroup: false });
+        this.broadcastEvent('SceneListChanged', {
+          scenes: this.scenes.map((s, idx) => ({ sceneName: s.sceneName, sceneIndex: idx })),
+        });
+        return { data: {} };
+      }
+
+      case 'SetSceneName': {
+        const scene = this.scenes.find((s) => s.sceneName === data.sceneName);
+        if (!scene) return { error: 'Scene not found' };
+        const oldName = data.sceneName;
+        const newName = (data.newSceneName || '').trim();
+        if (!newName) return { error: 'New scene name cannot be empty' };
+        if (oldName !== newName && this.scenes.some((s) => s.sceneName === newName)) {
+          return { error: 'Scene with this name already exists' };
+        }
+
+        scene.sceneName = newName;
+        if (this.currentProgramScene === oldName) this.currentProgramScene = newName;
+        if (this.currentPreviewScene === oldName) this.currentPreviewScene = newName;
+
+        if (this.sourceFilters.has(oldName)) {
+          this.sourceFilters.set(newName, this.sourceFilters.get(oldName));
+          this.sourceFilters.delete(oldName);
+        }
+
+        this.broadcastEvent('SceneNameChanged', { sceneName: newName, oldSceneName: oldName });
+        this.broadcastEvent('SceneListChanged', {
+          scenes: this.scenes.map((s, idx) => ({ sceneName: s.sceneName, sceneIndex: idx })),
+        });
+        return { data: {} };
+      }
+
+      case 'RemoveScene': {
+        const idx = this.scenes.findIndex((s) => s.sceneName === data.sceneName);
+        if (idx === -1) return { error: 'Scene not found' };
+        if (this.scenes.length <= 1) return { error: 'Cannot remove the last remaining scene' };
+
+        const [removed] = this.scenes.splice(idx, 1);
+        this.scenes.forEach((s, i) => {
+          s.sceneIndex = i;
+        });
+
+        if (this.currentProgramScene === removed.sceneName) {
+          this.currentProgramScene = this.scenes[0].sceneName;
+          this.broadcastEvent('CurrentProgramSceneChanged', { sceneName: this.currentProgramScene });
+        }
+        if (this.currentPreviewScene === removed.sceneName) {
+          this.currentPreviewScene = this.scenes[0].sceneName;
+          this.broadcastEvent('CurrentPreviewSceneChanged', { sceneName: this.currentPreviewScene });
+        }
+
+        this.sourceFilters.delete(removed.sceneName);
+
+        this.broadcastEvent('SceneRemoved', { sceneName: removed.sceneName, isGroup: false });
+        this.broadcastEvent('SceneListChanged', {
+          scenes: this.scenes.map((s, i) => ({ sceneName: s.sceneName, sceneIndex: i })),
+        });
+        return { data: {} };
+      }
+
+      case 'SetInputName': {
+        const oldName = data.inputName;
+        const newName = (data.newInputName || '').trim();
+        if (!newName) return { error: 'New source name cannot be empty' };
+
+        for (const sc of this.scenes) {
+          for (const item of sc.items) {
+            if (item.sourceName === oldName) {
+              item.sourceName = newName;
+            }
+          }
+        }
+        if (this.sourceSettings.has(oldName)) {
+          this.sourceSettings.set(newName, this.sourceSettings.get(oldName));
+          this.sourceSettings.delete(oldName);
+        }
+        if (this.sourceFilters.has(oldName)) {
+          this.sourceFilters.set(newName, this.sourceFilters.get(oldName));
+          this.sourceFilters.delete(oldName);
+        }
+        this.broadcastEvent('InputNameChanged', { inputName: newName, oldInputName: oldName });
+        return { data: {} };
+      }
+
+      case 'CreateInput': {
+        const scene = this.scenes.find((s) => s.sceneName === data.sceneName);
+        if (!scene) return { error: 'Scene not found' };
+        const inputName = (data.inputName || '').trim();
+        if (!inputName) return { error: 'Source name is required' };
+        const newItem = {
+          sceneItemId: Date.now() % 100000,
+          sourceName: inputName,
+          inputKind: data.inputKind || 'image_source',
+          sceneItemEnabled: true,
+        };
+        scene.items.push(newItem);
+        if (data.inputSettings) {
+          this.sourceSettings.set(inputName, {
+            inputKind: newItem.inputKind,
+            inputSettings: data.inputSettings,
+          });
+        }
+        this.broadcastEvent('SceneItemCreated', {
+          sceneName: data.sceneName,
+          sourceName: inputName,
+          sceneItemId: newItem.sceneItemId,
+          sceneItemIndex: scene.items.length - 1,
+        });
+        return { data: { sceneItemId: newItem.sceneItemId } };
+      }
+
+      case 'RemoveSceneItem': {
+        const scene = this.scenes.find((s) => s.sceneName === data.sceneName);
+        if (scene) {
+          const itemIdx = scene.items.findIndex((i) => i.sceneItemId === data.sceneItemId);
+          if (itemIdx !== -1) {
+            const [removed] = scene.items.splice(itemIdx, 1);
+            this.broadcastEvent('SceneItemRemoved', {
+              sceneName: data.sceneName,
+              sourceName: removed.sourceName,
+              sceneItemId: data.sceneItemId,
+            });
+          }
+        }
+        return { data: {} };
+      }
+
+      case 'GetSourceFilterList': {
+        const filters = this.sourceFilters.get(data.sourceName) || [];
+        return { data: { filters } };
+      }
+
+      case 'GetSourceFilter': {
+        const list = this.sourceFilters.get(data.sourceName) || [];
+        const filter = list.find((f) => f.filterName === data.filterName);
+        if (!filter) return { error: 'Filter not found' };
+        return { data: filter };
+      }
+
+      case 'SetSourceFilterEnabled': {
+        const list = this.sourceFilters.get(data.sourceName) || [];
+        const filter = list.find((f) => f.filterName === data.filterName);
+        if (filter) {
+          filter.filterEnabled = !!data.filterEnabled;
+          this.broadcastEvent('SourceFilterEnableStateChanged', {
+            sourceName: data.sourceName,
+            filterName: data.filterName,
+            filterEnabled: filter.filterEnabled,
+          });
+        }
+        return { data: {} };
+      }
+
+      case 'SetSourceFilterName': {
+        const list = this.sourceFilters.get(data.sourceName) || [];
+        const filter = list.find((f) => f.filterName === data.filterName);
+        if (!filter) return { error: 'Filter not found' };
+        const newName = (data.newFilterName || '').trim();
+        if (!newName) return { error: 'New filter name cannot be empty' };
+        if (list.some((f) => f.filterName === newName && f !== filter)) {
+          return { error: 'A filter with this name already exists' };
+        }
+        const oldName = filter.filterName;
+        filter.filterName = newName;
+        this.broadcastEvent('SourceFilterNameChanged', {
+          sourceName: data.sourceName,
+          filterName: newName,
+          oldFilterName: oldName,
+        });
+        return { data: {} };
+      }
+
+      case 'CreateSourceFilter': {
+        let list = this.sourceFilters.get(data.sourceName);
+        if (!list) {
+          list = [];
+          this.sourceFilters.set(data.sourceName, list);
+        }
+        const filterName = (data.filterName || '').trim();
+        if (!filterName) return { error: 'Filter name is required' };
+        if (list.some((f) => f.filterName === filterName)) {
+          return { error: 'Filter name already exists on this source' };
+        }
+        const newFilter = {
+          filterName,
+          filterKind: data.filterKind || 'color_correction_filter_v2',
+          filterIndex: list.length,
+          filterEnabled: true,
+          filterSettings: data.filterSettings || {},
+        };
+        list.push(newFilter);
+        this.broadcastEvent('SourceFilterCreated', {
+          sourceName: data.sourceName,
+          filterName: newFilter.filterName,
+          filterKind: newFilter.filterKind,
+          filterIndex: newFilter.filterIndex,
+          filterSettings: newFilter.filterSettings,
+        });
+        return { data: {} };
+      }
+
+      case 'RemoveSourceFilter': {
+        const list = this.sourceFilters.get(data.sourceName) || [];
+        const idx = list.findIndex((f) => f.filterName === data.filterName);
+        if (idx !== -1) {
+          const [removed] = list.splice(idx, 1);
+          list.forEach((f, i) => {
+            f.filterIndex = i;
+          });
+          this.broadcastEvent('SourceFilterRemoved', {
+            sourceName: data.sourceName,
+            filterName: removed.filterName,
+          });
+        }
+        return { data: {} };
+      }
 
       default:
         return { data: {} };

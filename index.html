@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>OBS Blade Dashboard</title>
-    <meta name="description" content="Mobile-first OBS Studio Web Remote with scene switching, source control, live thumbnails, and media management." />
-    <meta property="og:title" content="OBS Blade Dashboard" />
-    <meta property="og:description" content="Mobile-first OBS Studio Web Remote with scene switching, source control, live thumbnails, and media management." />
+    <title>OBS Blade Web</title>
+    <meta name="description" content="Mobile-first OBS Studio Web Remote with scene switching, source control, live thumbnails, filters, and media management." />
+    <meta property="og:title" content="OBS Blade Web" />
+    <meta property="og:description" content="Mobile-first OBS Studio Web Remote with scene switching, source control, live thumbnails, filters, and media management." />
     <meta name="theme-color" content="#090e17" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -32,6 +32,11 @@
         </button>
 
         <div class="dropdown-divider"></div>
+
+        <button id="btn-menu-connection" type="button" class="dropdown-menu-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+          OBS Connection
+        </button>
 
         <button id="btn-menu-settings" type="button" class="dropdown-menu-item">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -98,6 +103,13 @@
 
     <!-- 5. Pure Black Sources List -->
     <section class="sources-list-section">
+      <div id="sources-header-bar" class="sources-header-bar" style="display: none;">
+        <span class="sources-header-title">Scene Sources</span>
+        <button id="btn-add-source" type="button" class="btn-add-source-action" title="Add Source to Scene">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>Add Source</span>
+        </button>
+      </div>
       <div id="sources-list-container">
         <!-- Dynamically rendered source rows with eye & filter icons -->
       </div>
@@ -181,10 +193,38 @@
               <span class="switch-slider"></span>
             </label>
           </div>
+
+          <!-- Enable Advanced Options Toggle Row (Default Disabled) -->
+          <div class="settings-row">
+            <div class="settings-row-text">
+              <span class="settings-row-label">Enable Advanced Options</span>
+              <span class="settings-row-desc">Unlocks adding, deleting, and renaming scenes and filters, as well as managing scene sources.</span>
+            </div>
+            <label class="switch-control" for="toggle-advanced-options" title="Enable Advanced Options">
+              <input type="checkbox" id="toggle-advanced-options" />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dedicated OBS WebSocket Connection Modal -->
+    <div id="modal-connection" class="blade-dialog-overlay">
+      <div class="blade-dialog-content">
+        <div class="dialog-header-blade">
+          <button id="btn-back-connection" type="button" class="dialog-back-btn" title="Go Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Back</span>
+          </button>
+          <span class="dialog-title-blade">OBS Connection</span>
+          <button id="btn-close-connection" type="button" class="dialog-done-btn">Done</button>
         </div>
 
-        <!-- Section 2: OBS Connection -->
-        <div class="settings-section-title">OBS WebSocket Connection</div>
+        <div style="font-size: 12px; color: var(--obs-text-gray); margin-bottom: 8px;">
+          Configure WebSocket v5 connection to OBS Studio host:
+        </div>
+
         <form id="form-settings-conn" style="display: flex; flex-direction: column; gap: 12px;">
           <div>
             <label style="font-size: 12px; color: var(--obs-text-gray);" for="set-ip">OBS IP Address</label>
@@ -201,13 +241,13 @@
           <button type="submit" class="btn-blue-primary">Connect to OBS</button>
         </form>
 
-        <button id="btn-use-sim" type="button" style="background: #171f30; color: #93c5fd; border: 1px solid #253350; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer;">
+        <button id="btn-use-sim" type="button" style="background: #171f30; color: #93c5fd; border: 1px solid #253350; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 10px;">
           ⚡ Connect to Built-in Simulator
         </button>
       </div>
     </div>
 
-    <!-- Media File Switcher Modal -->
+    <!-- Edit Source / Source Settings Modal -->
     <div id="modal-media-file" class="blade-dialog-overlay">
       <div class="blade-dialog-content">
         <div class="dialog-header-blade">
@@ -215,57 +255,264 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
             <span>Back</span>
           </button>
-          <span id="media-source-title" class="dialog-title-blade">Source Settings</span>
+          <div style="display: flex; flex-direction: column; align-items: center; max-width: 60%; overflow: hidden;">
+            <span id="media-source-title" class="dialog-title-blade" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">Edit Source</span>
+            <span id="source-type-pill" style="font-size: 10px; font-weight: 700; color: #93c5fd; background: #1e293b; padding: 2px 8px; border-radius: 999px; margin-top: 2px; text-transform: uppercase;">SOURCE</span>
+          </div>
           <button id="btn-close-media-modal" type="button" class="dialog-done-btn">Done</button>
         </div>
 
-        <div>
-          <label style="font-size: 12px; color: var(--obs-text-gray);">Current PC File Path</label>
-          <div id="media-current-path-text" style="font-size: 12px; color: var(--obs-blue); background: #080c14; padding: 10px; border-radius: 6px; word-break: break-all; font-family: monospace; margin-top: 4px;">Loading...</div>
+        <!-- 1. Media Section (Images, Videos, Clips) -->
+        <div id="source-section-media" style="display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);">Current PC File Path</label>
+            <div id="media-current-path-text" style="font-size: 12px; color: var(--obs-blue); background: #080c14; padding: 10px; border-radius: 6px; word-break: break-all; font-family: monospace; margin-top: 4px;">Loading...</div>
+          </div>
+
+          <!-- Direct Upload to Server Section -->
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);">Direct File Upload (From Phone / PC)</label>
+            <input type="file" id="media-file-input" accept="image/*,video/*,audio/*" style="display: none;" />
+            <div id="media-upload-dropzone" class="upload-dropzone" style="margin-top: 4px;">
+              <svg class="upload-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <div class="upload-dropzone-title">Click or Drop Media to Upload Directly</div>
+              <div class="upload-dropzone-sub">Images, videos, or slides auto-save to host and apply to this OBS source</div>
+            </div>
+            <div id="upload-status" class="upload-status-text" style="display: none;"></div>
+          </div>
+
+          <!-- Manual Path Input Section -->
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-new-media-path">Manual Host File Path</label>
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <input id="input-new-media-path" class="input-blade" style="flex: 1;" placeholder="C:\Streams\Assets\verse.png" />
+              <button id="btn-apply-path" type="button" class="btn-blue-primary" style="padding: 10px 14px;">Apply</button>
+            </div>
+          </div>
+
+          <!-- Media Library & Presets Section -->
+          <div>
+            <div class="media-tab-bar">
+              <button id="tab-btn-uploaded" type="button" class="media-tab-btn active">Uploaded Media</button>
+              <button id="tab-btn-presets" type="button" class="media-tab-btn">Presets</button>
+            </div>
+
+            <!-- Uploaded Media List Container -->
+            <div id="media-uploaded-container" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+              <!-- Populated via GET /api/media -->
+            </div>
+
+            <!-- Quick Presets Container -->
+            <div id="media-preset-container" style="display: none; flex-direction: column; gap: 6px; margin-top: 8px;">
+              <!-- Populated from presets.js -->
+            </div>
+          </div>
         </div>
 
-        <!-- Direct Upload to Server Section -->
-        <div>
-          <label style="font-size: 12px; color: var(--obs-text-gray);">Direct File Upload (From Phone / PC)</label>
-          <input type="file" id="media-file-input" accept="image/*,video/*,audio/*" style="display: none;" />
-          <div id="media-upload-dropzone" class="upload-dropzone" style="margin-top: 4px;">
-            <svg class="upload-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            <div class="upload-dropzone-title">Click or Drop Media to Upload Directly</div>
-            <div class="upload-dropzone-sub">Images, videos, or slides auto-save to host and apply to this OBS source</div>
+        <!-- 2. Browser Source Section -->
+        <div id="source-section-browser" style="display: none; flex-direction: column; gap: 12px;">
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-browser-url">Web Page URL</label>
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <input id="input-browser-url" class="input-blade" style="flex: 1;" placeholder="https://..." />
+              <button id="btn-apply-browser-url" type="button" class="btn-blue-primary" style="padding: 10px 14px;">Apply</button>
+            </div>
           </div>
-          <div id="upload-status" class="upload-status-text" style="display: none;"></div>
+          <div style="display: flex; gap: 8px;">
+            <div style="flex: 1;">
+              <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-browser-width">Width (px)</label>
+              <input id="input-browser-width" type="number" class="input-blade" style="width: 100%; margin-top: 4px;" value="1920" />
+            </div>
+            <div style="flex: 1;">
+              <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-browser-height">Height (px)</label>
+              <input id="input-browser-height" type="number" class="input-blade" style="width: 100%; margin-top: 4px;" value="1080" />
+            </div>
+          </div>
+          <button id="btn-refresh-browser" type="button" class="btn-blue-outline" style="padding: 10px; font-weight: 600;">
+            ↻ Reload Browser Page
+          </button>
         </div>
 
-        <!-- Manual Path Input Section -->
-        <div>
-          <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-new-media-path">Manual Host File Path</label>
-          <div style="display: flex; gap: 8px; margin-top: 4px;">
-            <input id="input-new-media-path" class="input-blade" style="flex: 1;" placeholder="C:\Streams\Assets\verse.png" />
-            <button id="btn-apply-path" type="button" class="btn-blue-primary" style="padding: 10px 14px;">Apply</button>
+        <!-- 3. Text / Title Source Section -->
+        <div id="source-section-text" style="display: none; flex-direction: column; gap: 12px;">
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-text-content">Text Content</label>
+            <textarea id="input-text-content" class="input-blade" rows="4" style="width: 100%; margin-top: 4px; resize: vertical; font-size: 13px;" placeholder="Enter text string..."></textarea>
+          </div>
+          <button id="btn-apply-text" type="button" class="btn-blue-primary" style="padding: 10px;">Apply Text Changes</button>
+        </div>
+
+        <!-- 4. Generic Device / Capture Source Section -->
+        <div id="source-section-generic" style="display: none; flex-direction: column; gap: 12px;">
+          <div style="background: #080c14; padding: 14px; border-radius: 8px; border: 1px solid #1a2233;">
+            <div style="font-size: 12px; color: var(--obs-text-gray); margin-bottom: 4px;">Hardware Capture Device</div>
+            <div id="generic-source-info" style="font-size: 14px; font-weight: 600; color: #fff;">Configured & Active in OBS Studio</div>
+            <div style="font-size: 11px; color: var(--obs-text-gray); margin-top: 4px;">Manage audio filters, crop, or color grading via the Filters button below.</div>
           </div>
         </div>
 
-        <!-- Media Library & Presets Section -->
-        <div>
-          <div class="media-tab-bar">
-            <button id="tab-btn-uploaded" type="button" class="media-tab-btn active">Uploaded Media</button>
-            <button id="tab-btn-presets" type="button" class="media-tab-btn">Presets</button>
-          </div>
-
-          <!-- Uploaded Media List Container -->
-          <div id="media-uploaded-container" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-            <!-- Populated via GET /api/media -->
-          </div>
-
-          <!-- Quick Presets Container -->
-          <div id="media-preset-container" style="display: none; flex-direction: column; gap: 6px; margin-top: 8px;">
-            <!-- Populated from presets.js -->
-          </div>
+        <!-- Quick actions footer in Edit Source modal -->
+        <div style="display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #1a2233;">
+          <button id="btn-modal-rename-source" type="button" class="btn-gray-secondary" style="flex: 1; padding: 8px 12px; font-size: 12px;">
+            Rename Source
+          </button>
+          <button id="btn-modal-source-filters" type="button" class="btn-blue-outline" style="flex: 1; padding: 8px 12px; font-size: 12px;">
+            Open Filters
+          </button>
         </div>
+      </div>
+    </div>
+
+    <!-- 6. Floating Context Menu (Triggered by Long-Press or Right-Click on Scene / Source) -->
+    <div id="context-menu-popover" class="blade-context-menu">
+      <div id="context-menu-header" class="context-menu-header">Target Name</div>
+      <div id="context-menu-items" class="context-menu-items-group">
+        <!-- Dynamically populated based on target (Scene vs Source) -->
+      </div>
+    </div>
+
+    <!-- 7. Filters Modal (For Sources & Scenes) -->
+    <div id="modal-filters" class="blade-dialog-overlay">
+      <div class="blade-dialog-content">
+        <div class="dialog-header-blade">
+          <button id="btn-back-filters-modal" type="button" class="dialog-back-btn" title="Go Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Back</span>
+          </button>
+          <span id="filters-modal-title" class="dialog-title-blade">Filters</span>
+          <button id="btn-close-filters-modal" type="button" class="dialog-done-btn">Done</button>
+        </div>
+
+        <div id="filters-target-subtitle" style="font-size: 12px; color: var(--obs-text-gray); margin-bottom: 10px;">
+          Active filters on <strong id="filters-target-name" style="color: #60a5fa;"></strong>
+        </div>
+
+        <!-- Filter list container -->
+        <div id="filters-list-container" class="filters-list-group">
+          <!-- Dynamically populated filter cards with toggle switches & delete icons -->
+        </div>
+
+        <!-- Add Filter Action / Form Section -->
+        <div class="add-filter-section" style="margin-top: 14px;">
+          <button id="btn-toggle-add-filter" type="button" class="btn-blue-outline" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ Add New Filter</span>
+          </button>
+
+          <form id="form-add-filter" class="form-add-filter-card" style="display: none; margin-top: 10px;">
+            <div style="font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 8px;">Create New Filter</div>
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 12px; color: var(--obs-text-gray);" for="select-filter-kind">Filter Type</label>
+              <select id="select-filter-kind" class="input-blade" style="width: 100%; margin-top: 4px;">
+                <option value="chroma_key_filter_v2">Chroma Key (Green Screen)</option>
+                <option value="color_correction_filter_v2">Color Correction</option>
+                <option value="noise_suppress_filter_v2">Noise Suppression</option>
+                <option value="compressor_filter">Compressor</option>
+                <option value="gain_filter">Gain</option>
+                <option value="noise_gate_filter">Noise Gate</option>
+                <option value="crop_filter">Crop / Pad</option>
+                <option value="sharpness_filter_v2">Sharpen</option>
+                <option value="scroll_filter">Scroll Animation</option>
+              </select>
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-filter-name">Filter Name</label>
+              <input id="input-filter-name" class="input-blade" style="width: 100%; margin-top: 4px;" placeholder="e.g. Green Screen Key" />
+            </div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+              <button id="btn-cancel-add-filter" type="button" class="btn-gray-secondary">Cancel</button>
+              <button id="btn-submit-add-filter" type="submit" class="btn-blue-primary">Add Filter</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. Rename Modal (Scene or Source) -->
+    <div id="modal-rename-item" class="blade-dialog-overlay">
+      <div class="blade-dialog-content blade-dialog-compact">
+        <div class="dialog-header-blade">
+          <span id="rename-modal-title" class="dialog-title-blade">Rename Scene</span>
+        </div>
+        <form id="form-rename-item" style="margin-top: 10px; display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <label id="rename-item-label" style="font-size: 12px; color: var(--obs-text-gray);">New Name</label>
+            <input id="input-rename-item" class="input-blade" style="width: 100%; margin-top: 4px;" />
+          </div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button id="btn-cancel-rename" type="button" class="btn-gray-secondary">Cancel</button>
+            <button id="btn-submit-rename" type="submit" class="btn-blue-primary">Rename</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 9. Create Scene Modal -->
+    <div id="modal-create-scene" class="blade-dialog-overlay">
+      <div class="blade-dialog-content blade-dialog-compact">
+        <div class="dialog-header-blade">
+          <span class="dialog-title-blade">New Scene</span>
+        </div>
+        <form id="form-create-scene" style="margin-top: 10px; display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);">Scene Name</label>
+            <input id="input-create-scene-name" class="input-blade" style="width: 100%; margin-top: 4px;" placeholder="e.g. Side Angle" required />
+          </div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button id="btn-cancel-create-scene" type="button" class="btn-gray-secondary">Cancel</button>
+            <button id="btn-submit-create-scene" type="submit" class="btn-blue-primary">Create Scene</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 10. Confirm Delete Modal -->
+    <div id="modal-confirm-delete" class="blade-dialog-overlay">
+      <div class="blade-dialog-content blade-dialog-compact">
+        <div class="dialog-header-blade">
+          <span id="confirm-delete-title" class="dialog-title-blade">Delete Scene</span>
+        </div>
+        <div id="confirm-delete-desc" style="font-size: 13px; color: var(--obs-text-gray); margin: 10px 0 16px 0; line-height: 1.4;">
+          Are you sure you want to remove this item? This action cannot be undone.
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+          <button id="btn-cancel-confirm-delete" type="button" class="btn-gray-secondary">Cancel</button>
+          <button id="btn-execute-confirm-delete" type="button" class="btn-red-danger">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 11. Create Source Modal (Advanced Only) -->
+    <div id="modal-create-source" class="blade-dialog-overlay">
+      <div class="blade-dialog-content blade-dialog-compact">
+        <div class="dialog-header-blade">
+          <span class="dialog-title-blade">Add Source</span>
+        </div>
+        <form id="form-create-source" style="margin-top: 10px; display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="select-source-kind">Source Type</label>
+            <select id="select-source-kind" class="input-blade" style="width: 100%; margin-top: 4px;">
+              <option value="image_source">Image (Slide, Logo, Frame)</option>
+              <option value="browser_source">Browser Source (Web / Overlay)</option>
+              <option value="text_gdiplus_v2">Text / Title (GDI+)</option>
+              <option value="ffmpeg_source">Media Source (Video / Audio Clip)</option>
+              <option value="wasapi_input_capture">Audio Input Capture (Microphone)</option>
+              <option value="monitor_capture">Display / Screen Capture</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-create-source-name">Source Name</label>
+            <input id="input-create-source-name" class="input-blade" style="width: 100%; margin-top: 4px;" placeholder="e.g. Sponsor Logo" required />
+          </div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button id="btn-cancel-create-source" type="button" class="btn-gray-secondary">Cancel</button>
+            <button id="btn-submit-create-source" type="submit" class="btn-blue-primary">Add Source</button>
+          </div>
+        </form>
       </div>
     </div>
 

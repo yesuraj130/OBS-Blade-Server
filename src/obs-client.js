@@ -245,7 +245,12 @@ export class ObsClient {
     } else if (eventType === 'StudioModeStateChanged') {
       this.studioModeEnabled = !!eventData.studioModeEnabled;
       this.emit('studioModeChanged', this.studioModeEnabled);
-    } else if (eventType === 'SceneListChanged') {
+    } else if (
+      eventType === 'SceneListChanged' ||
+      eventType === 'SceneCreated' ||
+      eventType === 'SceneRemoved' ||
+      eventType === 'SceneNameChanged'
+    ) {
       this.getSceneList().then((res) => {
         this.scenes = res.scenes || [];
         this.emit('scenesUpdated', this.scenes);
@@ -259,6 +264,15 @@ export class ObsClient {
       this.emit('sceneItemsChanged', eventData);
     } else if (eventType === 'InputSettingsChanged') {
       this.emit('inputSettingsChanged', eventData);
+    } else if (eventType === 'InputNameChanged') {
+      this.emit('inputNameChanged', eventData);
+    } else if (
+      eventType === 'SourceFilterCreated' ||
+      eventType === 'SourceFilterRemoved' ||
+      eventType === 'SourceFilterEnableStateChanged' ||
+      eventType === 'SourceFilterListReindexed'
+    ) {
+      this.emit('filterChanged', eventData);
     } else if (eventType === 'StreamStateChanged') {
       this.emit('streamStateChanged', eventData);
     } else if (eventType === 'RecordStateChanged') {
@@ -363,5 +377,74 @@ export class ObsClient {
 
   getRecordStatus() {
     return this.request('GetRecordStatus');
+  }
+
+  // --- Scene Management ---
+  createScene(sceneName) {
+    return this.request('CreateScene', { sceneName });
+  }
+
+  setSceneName(sceneName, newSceneName) {
+    return this.request('SetSceneName', { sceneName, newSceneName });
+  }
+
+  removeScene(sceneName) {
+    return this.request('RemoveScene', { sceneName });
+  }
+
+  // --- Source / Input Management ---
+  setInputName(inputName, newInputName) {
+    return this.request('SetInputName', { inputName, newInputName });
+  }
+
+  createInput(sceneName, inputName, inputKind, inputSettings = {}) {
+    return this.request('CreateInput', {
+      sceneName,
+      inputName,
+      inputKind,
+      inputSettings,
+    });
+  }
+
+  removeSceneItem(sceneName, sceneItemId) {
+    return this.request('RemoveSceneItem', { sceneName, sceneItemId });
+  }
+
+  // --- Source / Scene Filter Management ---
+  getSourceFilterList(sourceName) {
+    return this.request('GetSourceFilterList', { sourceName });
+  }
+
+  getSourceFilter(sourceName, filterName) {
+    return this.request('GetSourceFilter', { sourceName, filterName });
+  }
+
+  setSourceFilterEnabled(sourceName, filterName, filterEnabled) {
+    return this.request('SetSourceFilterEnabled', {
+      sourceName,
+      filterName,
+      filterEnabled,
+    });
+  }
+
+  setSourceFilterName(sourceName, filterName, newFilterName) {
+    return this.request('SetSourceFilterName', {
+      sourceName,
+      filterName,
+      newFilterName,
+    });
+  }
+
+  createSourceFilter(sourceName, filterName, filterKind, filterSettings = {}) {
+    return this.request('CreateSourceFilter', {
+      sourceName,
+      filterName,
+      filterKind,
+      filterSettings,
+    });
+  }
+
+  removeSourceFilter(sourceName, filterName) {
+    return this.request('RemoveSourceFilter', { sourceName, filterName });
   }
 }

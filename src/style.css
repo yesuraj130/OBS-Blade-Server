@@ -910,3 +910,326 @@ body {
   flex-shrink: 0;
 }
 
+/* Floating Context Menu (Long-Press / Right-Click) */
+.blade-context-menu {
+  position: fixed;
+  background: rgba(18, 26, 41, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid #283754;
+  border-radius: 12px;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 6px;
+  min-width: 220px;
+  max-width: 280px;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.94);
+  transform-origin: top left;
+  transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.blade-context-menu.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.context-menu-header {
+  padding: 6px 10px 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #93c5fd;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-menu-items-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: #f1f5f9;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.context-menu-item svg {
+  flex-shrink: 0;
+  color: #94a3b8;
+  transition: color 0.12s ease;
+}
+
+.context-menu-item:hover,
+.context-menu-item:active {
+  background: #1e293b;
+  color: #60a5fa;
+}
+
+.context-menu-item:hover svg,
+.context-menu-item:active svg {
+  color: #60a5fa;
+}
+
+.context-menu-item.danger {
+  color: #f87171;
+}
+
+.context-menu-item.danger svg {
+  color: #f87171;
+}
+
+.context-menu-item.danger:hover,
+.context-menu-item.danger:active {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 4px 6px;
+}
+
+/* Compact Modal Variation for Rename & Prompts */
+.blade-dialog-compact {
+  max-width: 380px !important;
+}
+
+/* Add Scene Button in Top Grid */
+.scene-block-btn.btn-add-scene {
+  background: rgba(33, 150, 243, 0.06);
+  border: 1px dashed rgba(33, 150, 243, 0.35);
+  color: #60a5fa;
+  font-size: 20px;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scene-block-btn.btn-add-scene:hover,
+.scene-block-btn.btn-add-scene:active {
+  background: rgba(33, 150, 243, 0.15);
+  border-color: var(--obs-blue);
+  color: #fff;
+}
+
+/* Filters Modal Elements */
+.filters-list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 48vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.filter-card-blade {
+  background: #090e18;
+  border: 1px solid #1c2638;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: border-color 0.15s ease;
+}
+
+.filter-card-blade:hover {
+  border-color: #2b3b55;
+}
+
+.filter-info-left {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.filter-title-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-kind-pill {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #93c5fd;
+  background: rgba(33, 150, 243, 0.12);
+  padding: 2px 6px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.filter-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-filter-trash {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.btn-filter-trash:hover,
+.btn-filter-trash:active {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.btn-blue-outline {
+  background: rgba(33, 150, 243, 0.08);
+  border: 1px solid rgba(33, 150, 243, 0.4);
+  color: #60a5fa;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-blue-outline:hover,
+.btn-blue-outline:active {
+  background: rgba(33, 150, 243, 0.18);
+  border-color: var(--obs-blue);
+  color: #ffffff;
+}
+
+.btn-gray-secondary {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-gray-secondary:hover,
+.btn-gray-secondary:active {
+  background: #273549;
+  color: #fff;
+}
+
+.btn-red-danger {
+  background: #dc2626;
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-red-danger:hover,
+.btn-red-danger:active {
+  background: #b91c1c;
+}
+
+.form-add-filter-card {
+  background: #0d1422;
+  border: 1px solid #233149;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+/* Sources Header Bar (Visible when Advanced Options enabled) */
+.sources-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #080c14;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sources-header-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--obs-text-gray);
+}
+
+.btn-add-source-action {
+  background: rgba(33, 150, 243, 0.1);
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-add-source-action:hover,
+.btn-add-source-action:active {
+  background: rgba(33, 150, 243, 0.2);
+  color: #fff;
+  border-color: var(--obs-blue);
+}
+
+.btn-filter-rename {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.btn-filter-rename:hover,
+.btn-filter-rename:active {
+  background: rgba(33, 150, 243, 0.15);
+  color: #60a5fa;
+}
+
+
