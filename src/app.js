@@ -26,6 +26,8 @@ const state = {
   wakeLockEnabled: false,
   clientStudioModeControls: true,
   advancedOptionsEnabled: false,
+  copiedTransform: null,
+  activeEditTransform: null,
 };
 
 // DOM Elements
@@ -201,6 +203,44 @@ const el = {
   inputCreateSourceName: document.getElementById('input-create-source-name'),
   btnCancelCreateSource: document.getElementById('btn-cancel-create-source'),
   formCreateSource: document.getElementById('form-create-source'),
+
+  // Edit Transform Modal (OBS 32+)
+  modalEditTransform: document.getElementById('modal-edit-transform'),
+  btnBackEditTransform: document.getElementById('btn-back-edit-transform'),
+  btnDoneEditTransform: document.getElementById('btn-done-edit-transform'),
+  editTransformTitle: document.getElementById('edit-transform-title'),
+  transformSceneBadge: document.getElementById('transform-scene-badge'),
+  transformTypeBadge: document.getElementById('transform-type-badge'),
+  transformDimsBadge: document.getElementById('transform-dims-badge'),
+  btnCopyTransform: document.getElementById('btn-copy-transform'),
+  btnPasteTransform: document.getElementById('btn-paste-transform'),
+  textPasteTransform: document.getElementById('text-paste-transform'),
+  btnResetTransform: document.getElementById('btn-reset-transform'),
+  transformStatusBanner: document.getElementById('transform-status-banner'),
+  btnPresetFit: document.getElementById('btn-preset-fit'),
+  btnPresetStretch: document.getElementById('btn-preset-stretch'),
+  btnPresetCenter: document.getElementById('btn-preset-center'),
+  btnPresetFlipH: document.getElementById('btn-preset-flip-h'),
+  btnPresetFlipV: document.getElementById('btn-preset-flip-v'),
+  formEditTransform: document.getElementById('form-edit-transform'),
+  transformPosAlignment: document.getElementById('transform-pos-alignment'),
+  transformPosX: document.getElementById('transform-pos-x'),
+  transformPosY: document.getElementById('transform-pos-y'),
+  transformRotation: document.getElementById('transform-rotation'),
+  transformSizeW: document.getElementById('transform-size-w'),
+  transformSizeH: document.getElementById('transform-size-h'),
+  transformScaleX: document.getElementById('transform-scale-x'),
+  transformScaleY: document.getElementById('transform-scale-y'),
+  transformBoundsType: document.getElementById('transform-bounds-type'),
+  transformBoundsAlignment: document.getElementById('transform-bounds-alignment'),
+  transformBoundsW: document.getElementById('transform-bounds-w'),
+  transformBoundsH: document.getElementById('transform-bounds-h'),
+  transformCropTop: document.getElementById('transform-crop-top'),
+  transformCropBottom: document.getElementById('transform-crop-bottom'),
+  transformCropLeft: document.getElementById('transform-crop-left'),
+  transformCropRight: document.getElementById('transform-crop-right'),
+  btnRevertTransform: document.getElementById('btn-revert-transform'),
+  btnApplyTransform: document.getElementById('btn-apply-transform'),
 };
 
 // Wake lock sentinel instance
@@ -237,6 +277,13 @@ function loadSavedPreferences() {
 
     const rawAdvanced = localStorage.getItem('obs_blade_advanced_options');
     state.advancedOptionsEnabled = rawAdvanced === 'true'; // Default disabled
+
+    const rawCopiedTransform = localStorage.getItem('obs_blade_copied_transform');
+    if (rawCopiedTransform) {
+      try {
+        state.copiedTransform = JSON.parse(rawCopiedTransform);
+      } catch (_) {}
+    }
   } catch (e) {}
 }
 
@@ -1128,6 +1175,147 @@ function setupEventListeners() {
       closeHostFileBrowser();
     });
   }
+
+  // Edit Transform Modal Handlers (OBS 32+)
+  if (el.btnBackEditTransform) {
+    el.btnBackEditTransform.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeEditTransformModal();
+    });
+  }
+
+  if (el.btnDoneEditTransform) {
+    el.btnDoneEditTransform.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await applyTransformAction();
+      closeEditTransformModal();
+    });
+  }
+
+  if (el.btnCopyTransform) {
+    el.btnCopyTransform.addEventListener('click', (e) => {
+      e.preventDefault();
+      readTransformInputsToDraft();
+      copyTransformData(
+        state.activeEditTransform?.draftTransform,
+        state.activeEditTransform?.item?.sourceName
+      );
+    });
+  }
+
+  if (el.btnPasteTransform) {
+    el.btnPasteTransform.addEventListener('click', (e) => {
+      e.preventDefault();
+      pasteTransformAction();
+    });
+  }
+
+  if (el.btnResetTransform) {
+    el.btnResetTransform.addEventListener('click', (e) => {
+      e.preventDefault();
+      resetTransformAction();
+    });
+  }
+
+  if (el.btnPresetFit) {
+    el.btnPresetFit.addEventListener('click', (e) => {
+      e.preventDefault();
+      applyPresetAction('fit');
+    });
+  }
+  if (el.btnPresetStretch) {
+    el.btnPresetStretch.addEventListener('click', (e) => {
+      e.preventDefault();
+      applyPresetAction('stretch');
+    });
+  }
+  if (el.btnPresetCenter) {
+    el.btnPresetCenter.addEventListener('click', (e) => {
+      e.preventDefault();
+      applyPresetAction('center');
+    });
+  }
+  if (el.btnPresetFlipH) {
+    el.btnPresetFlipH.addEventListener('click', (e) => {
+      e.preventDefault();
+      applyPresetAction('flip-h');
+    });
+  }
+  if (el.btnPresetFlipV) {
+    el.btnPresetFlipV.addEventListener('click', (e) => {
+      e.preventDefault();
+      applyPresetAction('flip-v');
+    });
+  }
+
+  if (el.btnRevertTransform) {
+    el.btnRevertTransform.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await revertTransformAction();
+    });
+  }
+
+  if (el.formEditTransform) {
+    el.formEditTransform.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await applyTransformAction();
+    });
+  }
+
+  // Quick Angle Buttons
+  const angleButtons = document.querySelectorAll('.btn-angle-nudge');
+  angleButtons.forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const deg = parseFloat(btn.getAttribute('data-angle') || '0');
+      if (el.transformRotation) {
+        el.transformRotation.value = deg;
+      }
+      if (state.activeEditTransform?.draftTransform) {
+        state.activeEditTransform.draftTransform.rotation = deg;
+      }
+    });
+  });
+
+  // Dynamic Scale & Size synchronization
+  if (el.transformSizeW) {
+    el.transformSizeW.addEventListener('input', () => {
+      const w = parseFloat(el.transformSizeW.value);
+      const sW = state.activeEditTransform?.draftTransform?.sourceWidth;
+      if (w > 0 && sW > 0 && el.transformScaleX) {
+        const sign = Math.sign(parseFloat(el.transformScaleX.value) || 1);
+        el.transformScaleX.value = Math.round((sign * (w / sW)) * 1000) / 1000;
+      }
+    });
+  }
+  if (el.transformSizeH) {
+    el.transformSizeH.addEventListener('input', () => {
+      const h = parseFloat(el.transformSizeH.value);
+      const sH = state.activeEditTransform?.draftTransform?.sourceHeight;
+      if (h > 0 && sH > 0 && el.transformScaleY) {
+        const sign = Math.sign(parseFloat(el.transformScaleY.value) || 1);
+        el.transformScaleY.value = Math.round((sign * (h / sH)) * 1000) / 1000;
+      }
+    });
+  }
+  if (el.transformScaleX) {
+    el.transformScaleX.addEventListener('input', () => {
+      const sx = Math.abs(parseFloat(el.transformScaleX.value) || 1);
+      const sW = state.activeEditTransform?.draftTransform?.sourceWidth || 1920;
+      if (el.transformSizeW) {
+        el.transformSizeW.value = Math.round(sW * sx);
+      }
+    });
+  }
+  if (el.transformScaleY) {
+    el.transformScaleY.addEventListener('input', () => {
+      const sy = Math.abs(parseFloat(el.transformScaleY.value) || 1);
+      const sH = state.activeEditTransform?.draftTransform?.sourceHeight || 1080;
+      if (el.transformSizeH) {
+        el.transformSizeH.value = Math.round(sH * sy);
+      }
+    });
+  }
 }
 
 // Filter labels map
@@ -1388,9 +1576,14 @@ function openSourceContextMenu(x, y, sceneName, item) {
     },
   });
 
-  // Advanced only: Edit Source, Add Source to Scene, Remove from Scene
+  // Advanced only: Edit Transform, Edit Source, Add Source, Remove from Scene
   if (state.advancedOptionsEnabled) {
     menuItems.push({ divider: true });
+    menuItems.push({
+      label: 'Edit Transform',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v18"/></svg>`,
+      onClick: () => openEditTransformModal(sceneName, item),
+    });
     menuItems.push({
       label: 'Edit Source',
       icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
@@ -2336,6 +2529,393 @@ function closeFullPreviewModal() {
     el.modalFullPreview.classList.remove('open');
   }
   activePreviewTarget = null;
+}
+
+// --- Edit Transform State & Functions (OBS 32+ Layout) ---
+function showTransformBanner(message, isError = false) {
+  if (!el.transformStatusBanner) return;
+  el.transformStatusBanner.textContent = message;
+  el.transformStatusBanner.className = `properties-status-banner ${isError ? 'error' : ''}`;
+  el.transformStatusBanner.style.display = 'block';
+  setTimeout(() => {
+    if (el.transformStatusBanner && el.transformStatusBanner.textContent === message) {
+      el.transformStatusBanner.style.display = 'none';
+    }
+  }, 4000);
+}
+
+function copyTransformData(transform, sourceName) {
+  if (!transform) return;
+  const toCopy = {
+    sourceName: sourceName || 'Source',
+    positionX: Number(transform.positionX ?? 0),
+    positionY: Number(transform.positionY ?? 0),
+    rotation: Number(transform.rotation ?? 0),
+    scaleX: Number(transform.scaleX ?? 1),
+    scaleY: Number(transform.scaleY ?? 1),
+    alignment: Number(transform.alignment ?? 5),
+    boundsType: transform.boundsType || 'OBS_BOUNDS_NONE',
+    boundsAlignment: Number(transform.boundsAlignment ?? 0),
+    boundsWidth: Number(transform.boundsWidth ?? 0),
+    boundsHeight: Number(transform.boundsHeight ?? 0),
+    cropLeft: Number(transform.cropLeft ?? 0),
+    cropRight: Number(transform.cropRight ?? 0),
+    cropTop: Number(transform.cropTop ?? 0),
+    cropBottom: Number(transform.cropBottom ?? 0),
+    copiedAt: Date.now(),
+  };
+
+  state.copiedTransform = toCopy;
+  try {
+    localStorage.setItem('obs_blade_copied_transform', JSON.stringify(toCopy));
+  } catch (_) {}
+
+  updatePasteTransformButtonState();
+  showTransformBanner(`✓ Copied transform from "${toCopy.sourceName}" to clipboard!`, false);
+}
+
+function updatePasteTransformButtonState() {
+  if (!el.btnPasteTransform) return;
+  if (state.copiedTransform) {
+    el.btnPasteTransform.disabled = false;
+    if (el.textPasteTransform) {
+      el.textPasteTransform.textContent = `Paste (${state.copiedTransform.sourceName || 'Transform'})`;
+    }
+  } else {
+    el.btnPasteTransform.disabled = true;
+    if (el.textPasteTransform) {
+      el.textPasteTransform.textContent = 'Paste Transform';
+    }
+  }
+}
+
+async function applyDirectPasteTransform(sceneName, sceneItemId) {
+  if (!state.copiedTransform) return;
+  const payload = {
+    positionX: state.copiedTransform.positionX,
+    positionY: state.copiedTransform.positionY,
+    rotation: state.copiedTransform.rotation,
+    scaleX: state.copiedTransform.scaleX,
+    scaleY: state.copiedTransform.scaleY,
+    alignment: state.copiedTransform.alignment,
+    boundsType: state.copiedTransform.boundsType,
+    boundsAlignment: state.copiedTransform.boundsAlignment,
+    boundsWidth: state.copiedTransform.boundsWidth,
+    boundsHeight: state.copiedTransform.boundsHeight,
+    cropLeft: state.copiedTransform.cropLeft,
+    cropRight: state.copiedTransform.cropRight,
+    cropTop: state.copiedTransform.cropTop,
+    cropBottom: state.copiedTransform.cropBottom,
+  };
+
+  await state.obs.setSceneItemTransform(sceneName, sceneItemId, payload);
+  if (state.isPreviewExpanded) {
+    setTimeout(fetchPreviewSnapshot, 250);
+  }
+}
+
+async function openEditTransformModal(sceneName, item) {
+  if (!item) return;
+
+  const resolvedScene =
+    sceneName === '__CURRENT__' || !sceneName
+      ? getCurrentTargetScene() || state.currentProgramScene
+      : sceneName;
+
+  state.activeEditTransform = {
+    sceneName: resolvedScene,
+    item,
+    originalTransform: null,
+    draftTransform: null,
+    baseWidth: 1920,
+    baseHeight: 1080,
+  };
+
+  if (el.editTransformTitle) {
+    el.editTransformTitle.textContent = `Edit Transform for '${item.sourceName}'`;
+  }
+  if (el.transformSceneBadge) {
+    el.transformSceneBadge.textContent = `Scene: ${resolvedScene}`;
+  }
+  if (el.transformTypeBadge) {
+    const category = getSourceTypeCategory(item);
+    el.transformTypeBadge.textContent = category.toUpperCase();
+  }
+  if (el.transformStatusBanner) {
+    el.transformStatusBanner.style.display = 'none';
+  }
+
+  updatePasteTransformButtonState();
+  el.modalEditTransform.classList.add('open');
+
+  try {
+    try {
+      const vid = await state.obs.getVideoSettings();
+      if (vid && vid.baseWidth) {
+        state.activeEditTransform.baseWidth = vid.baseWidth;
+        state.activeEditTransform.baseHeight = vid.baseHeight;
+      }
+    } catch (_) {}
+
+    const res = await state.obs.getSceneItemTransform(resolvedScene, item.sceneItemId);
+    const trans = res?.sceneItemTransform || {};
+
+    const normalized = {
+      sourceWidth: Number(trans.sourceWidth || 1920),
+      sourceHeight: Number(trans.sourceHeight || 1080),
+      width: Number(trans.width || trans.sourceWidth || 1920),
+      height: Number(trans.height || trans.sourceHeight || 1080),
+      positionX: Number(trans.positionX ?? 0),
+      positionY: Number(trans.positionY ?? 0),
+      rotation: Number(trans.rotation ?? 0),
+      scaleX: Number(trans.scaleX ?? 1),
+      scaleY: Number(trans.scaleY ?? 1),
+      alignment: Number(trans.alignment ?? 5),
+      boundsType: trans.boundsType || 'OBS_BOUNDS_NONE',
+      boundsAlignment: Number(trans.boundsAlignment ?? 0),
+      boundsWidth: Number(trans.boundsWidth ?? 0),
+      boundsHeight: Number(trans.boundsHeight ?? 0),
+      cropLeft: Number(trans.cropLeft ?? 0),
+      cropRight: Number(trans.cropRight ?? 0),
+      cropTop: Number(trans.cropTop ?? 0),
+      cropBottom: Number(trans.cropBottom ?? 0),
+    };
+
+    state.activeEditTransform.originalTransform = { ...normalized };
+    state.activeEditTransform.draftTransform = { ...normalized };
+
+    syncTransformInputsFromDraft();
+  } catch (err) {
+    console.error('Failed to load transform:', err);
+    showTransformBanner(`Failed to load transform from OBS: ${err.message}`, true);
+  }
+}
+
+function closeEditTransformModal() {
+  if (el.modalEditTransform) {
+    el.modalEditTransform.classList.remove('open');
+  }
+  state.activeEditTransform = null;
+}
+
+function syncTransformInputsFromDraft() {
+  const draft = state.activeEditTransform?.draftTransform;
+  if (!draft) return;
+
+  if (el.transformPosAlignment) el.transformPosAlignment.value = String(draft.alignment ?? 5);
+  if (el.transformPosX) el.transformPosX.value = Math.round(draft.positionX * 100) / 100;
+  if (el.transformPosY) el.transformPosY.value = Math.round(draft.positionY * 100) / 100;
+  if (el.transformRotation) el.transformRotation.value = Math.round(draft.rotation * 100) / 100;
+
+  if (el.transformSizeW) el.transformSizeW.value = Math.round(draft.width);
+  if (el.transformSizeH) el.transformSizeH.value = Math.round(draft.height);
+  if (el.transformScaleX) el.transformScaleX.value = Math.round(draft.scaleX * 1000) / 1000;
+  if (el.transformScaleY) el.transformScaleY.value = Math.round(draft.scaleY * 1000) / 1000;
+
+  if (el.transformBoundsType) el.transformBoundsType.value = draft.boundsType || 'OBS_BOUNDS_NONE';
+  if (el.transformBoundsAlignment) el.transformBoundsAlignment.value = String(draft.boundsAlignment ?? 0);
+  if (el.transformBoundsW) el.transformBoundsW.value = Math.round(draft.boundsWidth || 0);
+  if (el.transformBoundsH) el.transformBoundsH.value = Math.round(draft.boundsHeight || 0);
+
+  if (el.transformCropTop) el.transformCropTop.value = Math.max(0, Math.round(draft.cropTop || 0));
+  if (el.transformCropBottom) el.transformCropBottom.value = Math.max(0, Math.round(draft.cropBottom || 0));
+  if (el.transformCropLeft) el.transformCropLeft.value = Math.max(0, Math.round(draft.cropLeft || 0));
+  if (el.transformCropRight) el.transformCropRight.value = Math.max(0, Math.round(draft.cropRight || 0));
+
+  if (el.transformDimsBadge) {
+    const w = Math.round(draft.width || draft.sourceWidth || 1920);
+    const h = Math.round(draft.height || draft.sourceHeight || 1080);
+    el.transformDimsBadge.textContent = `${w} × ${h} px`;
+  }
+}
+
+function readTransformInputsToDraft() {
+  const draft = state.activeEditTransform?.draftTransform;
+  if (!draft) return;
+
+  if (el.transformPosAlignment) draft.alignment = parseInt(el.transformPosAlignment.value, 10);
+  if (el.transformPosX) draft.positionX = parseFloat(el.transformPosX.value) || 0;
+  if (el.transformPosY) draft.positionY = parseFloat(el.transformPosY.value) || 0;
+  if (el.transformRotation) draft.rotation = parseFloat(el.transformRotation.value) || 0;
+
+  if (el.transformScaleX) draft.scaleX = parseFloat(el.transformScaleX.value) || 1;
+  if (el.transformScaleY) draft.scaleY = parseFloat(el.transformScaleY.value) || 1;
+
+  if (draft.sourceWidth) draft.width = Math.round(draft.sourceWidth * Math.abs(draft.scaleX));
+  if (draft.sourceHeight) draft.height = Math.round(draft.sourceHeight * Math.abs(draft.scaleY));
+
+  if (el.transformBoundsType) draft.boundsType = el.transformBoundsType.value;
+  if (el.transformBoundsAlignment) draft.boundsAlignment = parseInt(el.transformBoundsAlignment.value, 10);
+  if (el.transformBoundsW) draft.boundsWidth = parseFloat(el.transformBoundsW.value) || 0;
+  if (el.transformBoundsH) draft.boundsHeight = parseFloat(el.transformBoundsH.value) || 0;
+
+  if (el.transformCropTop) draft.cropTop = Math.max(0, parseInt(el.transformCropTop.value, 10) || 0);
+  if (el.transformCropBottom) draft.cropBottom = Math.max(0, parseInt(el.transformCropBottom.value, 10) || 0);
+  if (el.transformCropLeft) draft.cropLeft = Math.max(0, parseInt(el.transformCropLeft.value, 10) || 0);
+  if (el.transformCropRight) draft.cropRight = Math.max(0, parseInt(el.transformCropRight.value, 10) || 0);
+}
+
+async function applyTransformAction() {
+  if (!state.activeEditTransform) return;
+  readTransformInputsToDraft();
+
+  const { sceneName, item, draftTransform } = state.activeEditTransform;
+  const payload = {
+    positionX: draftTransform.positionX,
+    positionY: draftTransform.positionY,
+    rotation: draftTransform.rotation,
+    scaleX: draftTransform.scaleX,
+    scaleY: draftTransform.scaleY,
+    alignment: draftTransform.alignment,
+    boundsType: draftTransform.boundsType,
+    boundsAlignment: draftTransform.boundsAlignment,
+    boundsWidth: draftTransform.boundsWidth,
+    boundsHeight: draftTransform.boundsHeight,
+    cropLeft: draftTransform.cropLeft,
+    cropRight: draftTransform.cropRight,
+    cropTop: draftTransform.cropTop,
+    cropBottom: draftTransform.cropBottom,
+  };
+
+  try {
+    if (el.btnApplyTransform) el.btnApplyTransform.textContent = 'Applying...';
+    await state.obs.setSceneItemTransform(sceneName, item.sceneItemId, payload);
+    showTransformBanner('✓ Transform successfully applied in OBS Studio!', false);
+
+    if (state.isPreviewExpanded) {
+      setTimeout(fetchPreviewSnapshot, 250);
+    }
+
+    if (el.btnApplyTransform) {
+      el.btnApplyTransform.textContent = '✓ Saved';
+      setTimeout(() => {
+        if (el.btnApplyTransform) el.btnApplyTransform.textContent = 'Apply Transform';
+      }, 1500);
+    }
+  } catch (err) {
+    console.error('Failed to apply transform:', err);
+    showTransformBanner(`Failed to apply transform: ${err.message}`, true);
+    if (el.btnApplyTransform) el.btnApplyTransform.textContent = 'Apply Transform';
+  }
+}
+
+async function revertTransformAction() {
+  if (!state.activeEditTransform?.originalTransform) return;
+  state.activeEditTransform.draftTransform = { ...state.activeEditTransform.originalTransform };
+  syncTransformInputsFromDraft();
+  await applyTransformAction();
+  showTransformBanner('Reverted to original transform settings.', false);
+}
+
+function pasteTransformAction() {
+  if (!state.copiedTransform || !state.activeEditTransform) return;
+  const draft = state.activeEditTransform.draftTransform;
+  if (!draft) return;
+
+  draft.positionX = state.copiedTransform.positionX;
+  draft.positionY = state.copiedTransform.positionY;
+  draft.rotation = state.copiedTransform.rotation;
+  draft.scaleX = state.copiedTransform.scaleX;
+  draft.scaleY = state.copiedTransform.scaleY;
+  draft.alignment = state.copiedTransform.alignment;
+  draft.boundsType = state.copiedTransform.boundsType;
+  draft.boundsAlignment = state.copiedTransform.boundsAlignment;
+  draft.boundsWidth = state.copiedTransform.boundsWidth;
+  draft.boundsHeight = state.copiedTransform.boundsHeight;
+  draft.cropLeft = state.copiedTransform.cropLeft;
+  draft.cropRight = state.copiedTransform.cropRight;
+  draft.cropTop = state.copiedTransform.cropTop;
+  draft.cropBottom = state.copiedTransform.cropBottom;
+
+  if (draft.sourceWidth) draft.width = Math.round(draft.sourceWidth * Math.abs(draft.scaleX));
+  if (draft.sourceHeight) draft.height = Math.round(draft.sourceHeight * Math.abs(draft.scaleY));
+
+  syncTransformInputsFromDraft();
+  showTransformBanner(`✓ Pasted transform from "${state.copiedTransform.sourceName}". Click "Apply" to save.`, false);
+}
+
+function resetTransformAction() {
+  if (!state.activeEditTransform?.draftTransform) return;
+  const draft = state.activeEditTransform.draftTransform;
+
+  draft.positionX = 0;
+  draft.positionY = 0;
+  draft.rotation = 0;
+  draft.scaleX = 1.0;
+  draft.scaleY = 1.0;
+  draft.alignment = 5;
+  draft.boundsType = 'OBS_BOUNDS_NONE';
+  draft.boundsAlignment = 0;
+  draft.boundsWidth = 0;
+  draft.boundsHeight = 0;
+  draft.cropLeft = 0;
+  draft.cropRight = 0;
+  draft.cropTop = 0;
+  draft.cropBottom = 0;
+
+  if (draft.sourceWidth) draft.width = draft.sourceWidth;
+  if (draft.sourceHeight) draft.height = draft.sourceHeight;
+
+  syncTransformInputsFromDraft();
+  showTransformBanner('Reset to default transform. Click "Apply" to save.', false);
+}
+
+function applyPresetAction(preset) {
+  if (!state.activeEditTransform?.draftTransform) return;
+  const draft = state.activeEditTransform.draftTransform;
+  const baseW = state.activeEditTransform.baseWidth || 1920;
+  const baseH = state.activeEditTransform.baseHeight || 1080;
+  const srcW = draft.sourceWidth || baseW;
+  const srcH = draft.sourceHeight || baseH;
+
+  switch (preset) {
+    case 'fit': {
+      const scale = Math.min(baseW / srcW, baseH / srcH);
+      draft.scaleX = Math.sign(draft.scaleX || 1) * scale;
+      draft.scaleY = Math.sign(draft.scaleY || 1) * scale;
+      draft.width = Math.round(srcW * scale);
+      draft.height = Math.round(srcH * scale);
+      draft.positionX = Math.round((baseW - srcW * scale) / 2);
+      draft.positionY = Math.round((baseH - srcH * scale) / 2);
+      draft.alignment = 5;
+      draft.rotation = 0;
+      showTransformBanner('✓ Fitted source to canvas bounds', false);
+      break;
+    }
+    case 'stretch': {
+      draft.scaleX = baseW / srcW;
+      draft.scaleY = baseH / srcH;
+      draft.width = baseW;
+      draft.height = baseH;
+      draft.positionX = 0;
+      draft.positionY = 0;
+      draft.alignment = 5;
+      draft.rotation = 0;
+      showTransformBanner('✓ Stretched source to canvas', false);
+      break;
+    }
+    case 'center': {
+      const curW = srcW * Math.abs(draft.scaleX);
+      const curH = srcH * Math.abs(draft.scaleY);
+      draft.positionX = Math.round((baseW - curW) / 2);
+      draft.positionY = Math.round((baseH - curH) / 2);
+      draft.alignment = 5;
+      showTransformBanner('✓ Centered source on canvas', false);
+      break;
+    }
+    case 'flip-h': {
+      draft.scaleX = -draft.scaleX;
+      showTransformBanner('✓ Flipped horizontally', false);
+      break;
+    }
+    case 'flip-v': {
+      draft.scaleY = -draft.scaleY;
+      showTransformBanner('✓ Flipped vertically', false);
+      break;
+    }
+  }
+
+  syncTransformInputsFromDraft();
 }
 
 // Dynamic Source Properties & Host File Browser State

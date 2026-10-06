@@ -255,6 +255,35 @@ export class ObsWebSocketSimulator {
         ],
       ],
     ]);
+
+    this.sceneItemTransforms = new Map();
+  }
+
+  getOrCreateItemTransform(sceneName, sceneItemId) {
+    const key = `${sceneName}:${sceneItemId}`;
+    if (!this.sceneItemTransforms.has(key)) {
+      this.sceneItemTransforms.set(key, {
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+        width: 1920,
+        height: 1080,
+        positionX: 0,
+        positionY: 0,
+        rotation: 0,
+        scaleX: 1.0,
+        scaleY: 1.0,
+        alignment: 5, // Top-Left (OBS default)
+        boundsType: 'OBS_BOUNDS_NONE',
+        boundsAlignment: 0,
+        boundsWidth: 0,
+        boundsHeight: 0,
+        cropLeft: 0,
+        cropRight: 0,
+        cropTop: 0,
+        cropBottom: 0,
+      });
+    }
+    return this.sceneItemTransforms.get(key);
   }
 
   attachToServer(server, path = '/obs-ws') {
@@ -409,6 +438,43 @@ export class ObsWebSocketSimulator {
           }
         }
         return { data: {} };
+      }
+
+      case 'GetSceneItemTransform': {
+        const transform = this.getOrCreateItemTransform(data.sceneName, data.sceneItemId);
+        return { data: { sceneItemTransform: { ...transform } } };
+      }
+
+      case 'SetSceneItemTransform': {
+        const transform = this.getOrCreateItemTransform(data.sceneName, data.sceneItemId);
+        if (data.sceneItemTransform) {
+          Object.assign(transform, data.sceneItemTransform);
+          if (typeof transform.scaleX === 'number' && typeof transform.sourceWidth === 'number') {
+            transform.width = Math.round(transform.sourceWidth * transform.scaleX);
+          }
+          if (typeof transform.scaleY === 'number' && typeof transform.sourceHeight === 'number') {
+            transform.height = Math.round(transform.sourceHeight * transform.scaleY);
+          }
+        }
+        this.broadcastEvent('SceneItemTransformChanged', {
+          sceneName: data.sceneName,
+          sceneItemId: data.sceneItemId,
+          sceneItemTransform: { ...transform },
+        });
+        return { data: {} };
+      }
+
+      case 'GetVideoSettings': {
+        return {
+          data: {
+            baseWidth: 1920,
+            baseHeight: 1080,
+            outputWidth: 1920,
+            outputHeight: 1080,
+            fpsNumerator: 60,
+            fpsDenominator: 1,
+          },
+        };
       }
 
       case 'GetInputSettings': {

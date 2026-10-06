@@ -262,6 +262,8 @@ export class ObsClient {
       eventType === 'SceneItemListReindexed'
     ) {
       this.emit('sceneItemsChanged', eventData);
+    } else if (eventType === 'SceneItemTransformChanged') {
+      this.emit('sceneItemTransformChanged', eventData);
     } else if (eventType === 'InputSettingsChanged') {
       this.emit('inputSettingsChanged', eventData);
     } else if (eventType === 'InputNameChanged') {
@@ -341,6 +343,25 @@ export class ObsClient {
       sceneItemId,
       sceneItemEnabled,
     });
+  }
+
+  getSceneItemTransform(sceneName, sceneItemId) {
+    return this.request('GetSceneItemTransform', {
+      sceneName,
+      sceneItemId,
+    });
+  }
+
+  setSceneItemTransform(sceneName, sceneItemId, sceneItemTransform) {
+    return this.request('SetSceneItemTransform', {
+      sceneName,
+      sceneItemId,
+      sceneItemTransform,
+    });
+  }
+
+  getVideoSettings() {
+    return this.request('GetVideoSettings');
   }
 
   getInputSettings(inputName) {

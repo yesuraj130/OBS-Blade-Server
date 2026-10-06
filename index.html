@@ -597,6 +597,256 @@
       </div>
     </div>
 
+    <!-- 12. Edit Transform Modal (OBS 32+ Layout for Advanced Users) -->
+    <div id="modal-edit-transform" class="blade-dialog-overlay">
+      <div class="blade-dialog-content transform-dialog-content">
+        <div class="dialog-header-blade">
+          <button id="btn-back-edit-transform" type="button" class="dialog-back-btn" title="Go Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Back</span>
+          </button>
+          <span id="edit-transform-title" class="dialog-title-blade">Edit Transform</span>
+          <button id="btn-done-edit-transform" type="button" class="dialog-done-btn">Done</button>
+        </div>
+
+        <!-- Source Context Info Bar -->
+        <div class="transform-context-bar">
+          <div class="transform-context-tags">
+            <span id="transform-scene-badge" class="transform-badge scene-badge">Scene: Current</span>
+            <span id="transform-type-badge" class="transform-badge type-badge">SOURCE</span>
+          </div>
+          <span id="transform-dims-badge" class="transform-dims-info">1920 × 1080</span>
+        </div>
+
+        <!-- Copy / Paste / Reset Toolbar -->
+        <div class="transform-clipboard-bar">
+          <button id="btn-copy-transform" type="button" class="btn-transform-tool" title="Copy current transform properties">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>Copy Transform</span>
+          </button>
+
+          <button id="btn-paste-transform" type="button" class="btn-transform-tool" title="Paste copied transform to this item" disabled>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+            </svg>
+            <span id="text-paste-transform">Paste Transform</span>
+          </button>
+
+          <button id="btn-reset-transform" type="button" class="btn-transform-tool secondary" title="Reset transform to default">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+              <path d="M3 3v5h5"></path>
+            </svg>
+            <span>Reset</span>
+          </button>
+        </div>
+
+        <!-- Status Notification Banner -->
+        <div id="transform-status-banner" class="properties-status-banner" style="display: none;"></div>
+
+        <!-- Quick OBS Studio Presets Strip -->
+        <div class="transform-presets-section">
+          <span class="transform-section-label">OBS Presets</span>
+          <div class="transform-presets-grid">
+            <button id="btn-preset-fit" type="button" class="btn-preset-pill" title="Fit to Screen (Ctrl+F)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              <span>Fit to Screen</span>
+            </button>
+            <button id="btn-preset-stretch" type="button" class="btn-preset-pill" title="Stretch to Screen (Ctrl+S)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              <span>Stretch</span>
+            </button>
+            <button id="btn-preset-center" type="button" class="btn-preset-pill" title="Center on Screen (Ctrl+D)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+              <span>Center</span>
+            </button>
+            <button id="btn-preset-flip-h" type="button" class="btn-preset-pill" title="Flip Horizontal">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M18 18l4-6-4-6v12z"/><path d="M6 18l-4-6 4-6v12z"/></svg>
+              <span>Flip H</span>
+            </button>
+            <button id="btn-preset-flip-v" type="button" class="btn-preset-pill" title="Flip Vertical">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"/><path d="M18 18l-6 4-6-4h12z"/><path d="M18 6l-6-4-6 4h12z"/></svg>
+              <span>Flip V</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Transform Parameters Form (OBS 32+ Sections) -->
+        <form id="form-edit-transform" class="transform-form-container">
+          <!-- 1. Position & Positional Alignment -->
+          <div class="transform-group-card">
+            <div class="transform-group-header">Position</div>
+            <div class="transform-field-row">
+              <div class="transform-field-half">
+                <label for="transform-pos-alignment" class="transform-label">Positional Alignment</label>
+                <select id="transform-pos-alignment" class="input-blade select-compact">
+                  <option value="5">Top Left</option>
+                  <option value="4">Top Center</option>
+                  <option value="6">Top Right</option>
+                  <option value="1">Center Left</option>
+                  <option value="0">Center</option>
+                  <option value="2">Center Right</option>
+                  <option value="9">Bottom Left</option>
+                  <option value="8">Bottom Center</option>
+                  <option value="10">Bottom Right</option>
+                </select>
+              </div>
+              <div class="transform-field-half">
+                <label class="transform-label">Position (X, Y px)</label>
+                <div class="transform-coord-grid">
+                  <div class="coord-input-wrap">
+                    <span class="coord-tag">X</span>
+                    <input id="transform-pos-x" type="number" step="1" class="input-blade coord-input" value="0" />
+                  </div>
+                  <div class="coord-input-wrap">
+                    <span class="coord-tag">Y</span>
+                    <input id="transform-pos-y" type="number" step="1" class="input-blade coord-input" value="0" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Rotation -->
+          <div class="transform-group-card">
+            <div class="transform-group-header">Rotation</div>
+            <div class="transform-field-row">
+              <div class="transform-field-half">
+                <label for="transform-rotation" class="transform-label">Degrees (°)</label>
+                <div class="coord-input-wrap">
+                  <input id="transform-rotation" type="number" step="0.5" class="input-blade coord-input" value="0" />
+                  <span class="coord-tag-deg">deg</span>
+                </div>
+              </div>
+              <div class="transform-field-half">
+                <label class="transform-label">Quick Angles</label>
+                <div class="quick-angles-grid">
+                  <button type="button" class="btn-angle-nudge" data-angle="0">0°</button>
+                  <button type="button" class="btn-angle-nudge" data-angle="90">90°</button>
+                  <button type="button" class="btn-angle-nudge" data-angle="180">180°</button>
+                  <button type="button" class="btn-angle-nudge" data-angle="270">270°</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Size & Scale -->
+          <div class="transform-group-card">
+            <div class="transform-group-header">Size &amp; Scale</div>
+            <div class="transform-field-row">
+              <div class="transform-field-half">
+                <label class="transform-label">Size (Width × Height px)</label>
+                <div class="transform-coord-grid">
+                  <div class="coord-input-wrap">
+                    <span class="coord-tag">W</span>
+                    <input id="transform-size-w" type="number" step="1" min="1" class="input-blade coord-input" value="1920" />
+                  </div>
+                  <div class="coord-input-wrap">
+                    <span class="coord-tag">H</span>
+                    <input id="transform-size-h" type="number" step="1" min="1" class="input-blade coord-input" value="1080" />
+                  </div>
+                </div>
+              </div>
+              <div class="transform-field-half">
+                <label class="transform-label">Scale (X, Y Ratio)</label>
+                <div class="transform-coord-grid">
+                  <div class="coord-input-wrap">
+                    <span class="coord-tag">SX</span>
+                    <input id="transform-scale-x" type="number" step="0.05" class="input-blade coord-input" value="1.0" />
+                  </div>
+                  <div class="coord-input-wrap">
+                    <span class="coord-tag">SY</span>
+                    <input id="transform-scale-y" type="number" step="0.05" class="input-blade coord-input" value="1.0" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Bounding Box -->
+          <div class="transform-group-card">
+            <div class="transform-group-header">Bounding Box</div>
+            <div class="transform-field-row">
+              <div class="transform-field-half">
+                <label for="transform-bounds-type" class="transform-label">Bounding Box Type</label>
+                <select id="transform-bounds-type" class="input-blade select-compact">
+                  <option value="OBS_BOUNDS_NONE">No bounds</option>
+                  <option value="OBS_BOUNDS_STRETCH">Stretch to bounds</option>
+                  <option value="OBS_BOUNDS_SCALE_INNER">Scale to inner bounds</option>
+                  <option value="OBS_BOUNDS_SCALE_OUTER">Scale to outer bounds</option>
+                  <option value="OBS_BOUNDS_SCALE_TO_WIDTH">Scale to width of bounds</option>
+                  <option value="OBS_BOUNDS_SCALE_TO_HEIGHT">Scale to height of bounds</option>
+                  <option value="OBS_BOUNDS_MAX_ONLY">Maximum size only</option>
+                </select>
+              </div>
+              <div class="transform-field-half">
+                <label for="transform-bounds-alignment" class="transform-label">Alignment in Bounding Box</label>
+                <select id="transform-bounds-alignment" class="input-blade select-compact">
+                  <option value="5">Top Left</option>
+                  <option value="4">Top Center</option>
+                  <option value="6">Top Right</option>
+                  <option value="1">Center Left</option>
+                  <option value="0">Center</option>
+                  <option value="2">Center Right</option>
+                  <option value="9">Bottom Left</option>
+                  <option value="8">Bottom Center</option>
+                  <option value="10">Bottom Right</option>
+                </select>
+              </div>
+            </div>
+            <div class="transform-field-row" id="bounds-size-row" style="margin-top: 10px;">
+              <div style="width: 100%;">
+                <label class="transform-label">Bounding Box Size (Width × Height px)</label>
+                <div class="transform-coord-grid">
+                  <div class="coord-input-wrap">
+                    <span class="coord-tag">W</span>
+                    <input id="transform-bounds-w" type="number" step="1" min="0" class="input-blade coord-input" value="0" />
+                  </div>
+                  <div class="coord-input-wrap">
+                    <span class="coord-tag">H</span>
+                    <input id="transform-bounds-h" type="number" step="1" min="0" class="input-blade coord-input" value="0" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. Crop -->
+          <div class="transform-group-card">
+            <div class="transform-group-header">Crop (Pixels)</div>
+            <div class="transform-crop-grid">
+              <div class="coord-input-wrap">
+                <span class="coord-tag">Top</span>
+                <input id="transform-crop-top" type="number" step="1" min="0" class="input-blade coord-input" value="0" />
+              </div>
+              <div class="coord-input-wrap">
+                <span class="coord-tag">Bottom</span>
+                <input id="transform-crop-bottom" type="number" step="1" min="0" class="input-blade coord-input" value="0" />
+              </div>
+              <div class="coord-input-wrap">
+                <span class="coord-tag">Left</span>
+                <input id="transform-crop-left" type="number" step="1" min="0" class="input-blade coord-input" value="0" />
+              </div>
+              <div class="coord-input-wrap">
+                <span class="coord-tag">Right</span>
+                <input id="transform-crop-right" type="number" step="1" min="0" class="input-blade coord-input" value="0" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Action Buttons -->
+          <div class="transform-footer-actions">
+            <button id="btn-revert-transform" type="button" class="btn-gray-secondary">Revert</button>
+            <button id="btn-apply-transform" type="submit" class="btn-blue-primary">Apply Transform</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <script type="module" src="/src/app.js"></script>
   </body>
 </html>
