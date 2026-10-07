@@ -847,6 +847,218 @@
       </div>
     </div>
 
+    <!-- 13. Pan & Zoom (Live PTZ) Modal (Solution B: Move Transition Plugin) -->
+    <div id="modal-ptz" class="blade-dialog-overlay">
+      <div class="blade-dialog-content ptz-dialog-content">
+        <div class="dialog-header-blade">
+          <button id="btn-back-ptz" type="button" class="dialog-back-btn" title="Go Back">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Back</span>
+          </button>
+          <span id="ptz-modal-title" class="dialog-title-blade">Pan &amp; Zoom (PTZ)</span>
+          <button id="btn-done-ptz" type="button" class="dialog-done-btn">Done</button>
+        </div>
+
+        <!-- Missing Plugin Warning Banner (Displayed if Move Transition plugin is not detected) -->
+        <div id="ptz-plugin-warning" class="ptz-warning-banner" style="display: none;">
+          <div class="ptz-warning-icon">⚠️</div>
+          <div class="ptz-warning-text">
+            <strong>Move Transition plugin not detected in OBS.</strong>
+            <span>Please install the <a href="https://obsproject.com/forum/resources/move-transition.913/" target="_blank" rel="noopener noreferrer">Move Transition plugin</a> on your OBS host to enable automated PTZ source filters.</span>
+          </div>
+        </div>
+
+        <!-- Source & Scene Meta Header -->
+        <div class="ptz-context-bar">
+          <div class="transform-context-tags">
+            <span id="ptz-source-badge" class="transform-badge type-badge">SOURCE</span>
+            <span id="ptz-scene-badge" class="transform-badge scene-badge">Scene: Current</span>
+          </div>
+          <div class="ptz-status-tags">
+            <span id="ptz-zoom-indicator" class="ptz-zoom-pill">1.00x</span>
+            <button id="btn-ptz-refresh-frame" type="button" class="btn-ptz-mini-tool" title="Refresh Live Frame">↻</button>
+          </div>
+        </div>
+
+        <!-- Notification Banner -->
+        <div id="ptz-status-banner" class="properties-status-banner" style="display: none;"></div>
+
+        <!-- 1. Top Section: Clean Live Video Preview with Gesture Touch Surface -->
+        <div class="ptz-preview-wrapper">
+          <div id="ptz-gesture-viewport" class="ptz-gesture-viewport" title="Drag to Pan • Pinch or Wheel to Zoom">
+            <img id="ptz-live-img" class="ptz-live-img" alt="PTZ Live Preview" style="display: none;" />
+            
+            <div id="ptz-loading-spinner" class="full-preview-loading" style="display: none;">
+              <div class="spinner-blade"></div>
+              <span>Connecting live frame...</span>
+            </div>
+
+            <!-- Always visible fallback / placeholder if live screenshot pending -->
+            <div id="ptz-preview-fallback" class="ptz-fallback-container">
+              <div class="ptz-fallback-icon-wrap">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.8">
+                  <path d="M23 7l-7 5 7 5V7z" />
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+              </div>
+              <span id="ptz-fallback-title" class="ptz-fallback-title">Live Video Preview</span>
+              <span class="ptz-fallback-subtitle">Touch &amp; Drag to Pan • Pinch to Zoom</span>
+            </div>
+
+            <!-- Viewport Overlay Crosshair & Framing Guide -->
+            <div class="ptz-framing-guide">
+              <div class="ptz-crosshair-h"></div>
+              <div class="ptz-crosshair-v"></div>
+            </div>
+
+            <!-- Gesture Hint Overlay Badge -->
+            <div class="ptz-gesture-hint">
+              <span>Touch: Drag to Pan • Pinch to Zoom</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Lower Controls (Below Preview) -->
+        <div class="ptz-controls-container">
+          <!-- Zoom Bar -->
+          <div class="ptz-control-card">
+            <div class="ptz-card-header">
+              <span>Digital Zoom</span>
+              <span id="ptz-zoom-level-text" class="ptz-level-text">1.00x (Wide)</span>
+            </div>
+            <div class="ptz-zoom-row">
+              <button id="btn-ptz-zoom-out" type="button" class="btn-zoom-step" title="Zoom Out (-10%)">−</button>
+              <input id="slider-ptz-zoom" type="range" min="1.0" max="4.0" step="0.05" value="1.0" class="ptz-slider" />
+              <button id="btn-ptz-zoom-in" type="button" class="btn-zoom-step" title="Zoom In (+10%)">+</button>
+              <button id="btn-ptz-zoom-reset" type="button" class="btn-preset-pill" style="min-width: 60px;" title="Reset Zoom to 1.0x (Wide)">Wide 1x</button>
+            </div>
+          </div>
+
+          <!-- Hik-Connect Style 360° PTZ Joystick & Directional Controls -->
+          <div class="ptz-control-card">
+            <div class="ptz-card-header">
+              <span>Pan &amp; Tilt (Hik-Connect PTZ)</span>
+              <div class="ptz-step-toggles">
+                <button type="button" class="btn-pan-step-size" data-step="0.02">Fine</button>
+                <button type="button" class="btn-pan-step-size active" data-step="0.06">Normal</button>
+                <button type="button" class="btn-pan-step-size" data-step="0.15">Coarse</button>
+              </div>
+            </div>
+
+            <div class="hik-ptz-controller-wrap">
+              <div id="hik-ptz-dial" class="hik-ptz-dial" title="Drag Red Center 360° to Pan • Click Arrows to Step">
+                <!-- Outer Directional Arrow Buttons (Up, Left, Right, Down) -->
+                <button id="btn-ptz-pan-up" type="button" class="hik-arrow-btn hik-arrow-up" title="Tilt Up">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="12,5 5,17 19,17" />
+                  </svg>
+                </button>
+
+                <button id="btn-ptz-pan-left" type="button" class="hik-arrow-btn hik-arrow-left" title="Pan Left">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5,12 17,5 17,19" />
+                  </svg>
+                </button>
+
+                <button id="btn-ptz-pan-right" type="button" class="hik-arrow-btn hik-arrow-right" title="Pan Right">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="19,12 7,5 7,19" />
+                  </svg>
+                </button>
+
+                <button id="btn-ptz-pan-down" type="button" class="hik-arrow-btn hik-arrow-down" title="Tilt Down">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="12,19 5,7 19,7" />
+                  </svg>
+                </button>
+
+                <!-- Concentric Guide Ring -->
+                <div class="hik-dial-inner-track"></div>
+
+                <!-- Center 360° Draggable Red Puck -->
+                <div id="hik-ptz-knob" class="hik-ptz-knob" title="Drag 360° to Pan/Tilt">
+                  <div class="hik-knob-core"></div>
+                </div>
+              </div>
+
+              <!-- Coordinate readout & center button below dial -->
+              <div class="hik-coords-bar">
+                <span id="hik-pan-x-text">Pan: 0%</span>
+                <button id="btn-ptz-pan-center" type="button" class="hik-recenter-pill" title="Reset to Center">Center</button>
+                <span id="hik-pan-y-text">Tilt: 0%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Move Transition Animation Settings -->
+          <div class="ptz-control-card">
+            <div class="ptz-card-header">
+              <span>Move Transition Settings</span>
+              <span id="ptz-duration-text" class="ptz-level-text">500 ms</span>
+            </div>
+            <div class="ptz-settings-row">
+              <div style="flex: 1;">
+                <label for="slider-ptz-duration" class="transform-label">Animation Glide Duration</label>
+                <input id="slider-ptz-duration" type="range" min="0" max="2000" step="100" value="500" class="ptz-slider" />
+              </div>
+              <div style="width: 140px;">
+                <label for="select-ptz-easing" class="transform-label">Easing Curve</label>
+                <select id="select-ptz-easing" class="input-blade select-compact" style="width: 100%;">
+                  <option value="ease_in_out">Ease In Out</option>
+                  <option value="ease_out">Ease Out</option>
+                  <option value="ease_in">Ease In</option>
+                  <option value="linear">Linear</option>
+                  <option value="cubic">Cubic</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Presets Section -->
+          <div class="ptz-control-card">
+            <div class="ptz-card-header">
+              <span>Saved PTZ Filter Presets</span>
+              <button id="btn-open-save-preset" type="button" class="btn-blue-primary btn-save-preset-action">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Save as Filter Preset</span>
+              </button>
+            </div>
+            <div id="ptz-presets-list-container" class="ptz-presets-list">
+              <!-- Populated dynamically with saved Move/Crop filters on this source -->
+            </div>
+          </div>
+
+          <!-- Bottom Actions -->
+          <div class="transform-footer-actions">
+            <button id="btn-ptz-return-wide" type="button" class="btn-gray-secondary">Return to Wide (Reset)</button>
+            <button id="btn-ptz-apply-now" type="button" class="btn-blue-primary">Apply PTZ to OBS</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 14. Save PTZ Preset Mini Modal -->
+    <div id="modal-save-ptz-preset" class="blade-dialog-overlay">
+      <div class="blade-dialog-content blade-dialog-compact">
+        <div class="dialog-header-blade">
+          <span class="dialog-title-blade">Save PTZ Filter Preset</span>
+        </div>
+        <form id="form-save-ptz-preset" style="margin-top: 10px; display: flex; flex-direction: column; gap: 12px;">
+          <div>
+            <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-ptz-preset-name">Preset Filter Name</label>
+            <input id="input-ptz-preset-name" class="input-blade" style="width: 100%; margin-top: 4px;" placeholder="e.g. PTZ - Pastor Close-up" required />
+            <div style="font-size: 11px; color: var(--obs-text-gray); margin-top: 4px;">
+              This creates a permanent Move filter in OBS Studio under this source so you can toggle it anytime.
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button id="btn-cancel-save-ptz-preset" type="button" class="btn-gray-secondary">Cancel</button>
+            <button id="btn-submit-save-ptz-preset" type="submit" class="btn-blue-primary">Save Filter</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <script type="module" src="/src/app.js"></script>
   </body>
 </html>

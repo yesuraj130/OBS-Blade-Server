@@ -333,6 +333,14 @@ export class ObsClient {
     return this.request('TriggerStudioModeTransition');
   }
 
+  getSceneTransitionList() {
+    return this.request('GetSceneTransitionList');
+  }
+
+  getTransitionKindList() {
+    return this.request('GetTransitionKindList');
+  }
+
   getSceneItemList(sceneName) {
     return this.request('GetSceneItemList', { sceneName });
   }
@@ -474,6 +482,15 @@ export class ObsClient {
       filterName,
       filterKind,
       filterSettings,
+    });
+  }
+
+  setSourceFilterSettings(sourceName, filterName, filterSettings = {}, overlay = true) {
+    return this.request('SetSourceFilterSettings', {
+      sourceName,
+      filterName,
+      filterSettings,
+      overlay,
     });
   }
 

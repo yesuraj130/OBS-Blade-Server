@@ -1982,6 +1982,538 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+/* 13. Pan & Zoom (Live PTZ) Styles */
+.ptz-dialog-content {
+  max-width: 620px;
+  max-height: min(94vh, 800px);
+  gap: 12px;
+}
+
+.ptz-warning-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #fbbf24;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.ptz-warning-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.ptz-warning-text a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.ptz-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #090e18;
+  border: 1px solid #1a2333;
+  border-radius: 8px;
+}
+
+.ptz-status-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ptz-zoom-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.btn-ptz-mini-tool {
+  background: #141c2c;
+  border: 1px solid #1f2c42;
+  color: #cbd5e1;
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-ptz-mini-tool:hover {
+  background: #1e2c45;
+  color: #60a5fa;
+}
+
+/* 1. Preview Container on Top */
+.ptz-preview-wrapper {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 220px;
+  max-height: 340px;
+  background: #060911;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #1f2c42;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), inset 0 0 30px rgba(0, 0, 0, 0.9);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ptz-gesture-viewport {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ptz-gesture-viewport:active {
+  cursor: grabbing;
+}
+
+.ptz-live-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  transition: transform 0.05s ease-out;
+}
+
+/* Fallback placeholder when live screenshot is waiting */
+.ptz-fallback-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ptz-fallback-icon-wrap {
+  width: 68px;
+  height: 68px;
+  border-radius: 16px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ptz-fallback-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.ptz-fallback-subtitle {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ptz-framing-guide {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.ptz-crosshair-h {
+  position: absolute;
+  top: 50%;
+  left: 20%;
+  right: 20%;
+  height: 1px;
+  background: rgba(56, 189, 248, 0.25);
+  transform: translateY(-50%);
+}
+
+.ptz-crosshair-v {
+  position: absolute;
+  left: 50%;
+  top: 20%;
+  bottom: 20%;
+  width: 1px;
+  background: rgba(56, 189, 248, 0.25);
+  transform: translateX(-50%);
+}
+
+.ptz-gesture-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.75);
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 4;
+}
+
+/* 2. Lower Controls (Below Preview) */
+.ptz-controls-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ptz-control-card {
+  background: #0c121e;
+  border: 1px solid #182234;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ptz-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.ptz-level-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #38bdf8;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.ptz-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-zoom-step {
+  width: 34px;
+  height: 34px;
+  background: #162032;
+  border: 1px solid #27364f;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
+}
+
+.btn-zoom-step:hover {
+  background: #2563eb;
+  border-color: #3b82f6;
+}
+
+.btn-zoom-step:active {
+  transform: scale(0.94);
+}
+
+.ptz-slider {
+  flex: 1;
+  accent-color: #38bdf8;
+  height: 6px;
+  cursor: pointer;
+}
+
+/* Hik-Connect Style 360° Joystick Controller */
+.ptz-step-toggles {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-pan-step-size {
+  background: #111723;
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  color: #94a3b8;
+  font-size: 10.5px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.btn-pan-step-size.active {
+  background: #1e3a8a;
+  border-color: #3b82f6;
+  color: #93c5fd;
+  font-weight: 700;
+}
+
+.hik-ptz-controller-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 4px;
+  gap: 10px;
+}
+
+.hik-ptz-dial {
+  width: 196px;
+  height: 196px;
+  border-radius: 50%;
+  background: #f8fafc; /* Crisp clean white/silver dial as in Hik-Connect PTZ */
+  border: 4px solid #e2e8f0;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5), inset 0 2px 6px rgba(0, 0, 0, 0.08);
+  position: relative;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hik-dial-inner-track {
+  position: absolute;
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  border: 1px dashed rgba(100, 116, 139, 0.4);
+  pointer-events: none;
+}
+
+/* Directional Arrow Buttons */
+.hik-arrow-btn {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 5;
+  padding: 0;
+}
+
+.hik-arrow-btn:hover {
+  color: #0f172a;
+  background: rgba(0, 0, 0, 0.08);
+  transform: scale(1.15);
+}
+
+.hik-arrow-btn:active {
+  color: #ef4444;
+  transform: scale(0.9);
+}
+
+.hik-arrow-up {
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.hik-arrow-up:hover {
+  transform: translateX(-50%) scale(1.15);
+}
+.hik-arrow-up:active {
+  transform: translateX(-50%) scale(0.9);
+}
+
+.hik-arrow-down {
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.hik-arrow-down:hover {
+  transform: translateX(-50%) scale(1.15);
+}
+.hik-arrow-down:active {
+  transform: translateX(-50%) scale(0.9);
+}
+
+.hik-arrow-left {
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.hik-arrow-left:hover {
+  transform: translateY(-50%) scale(1.15);
+}
+.hik-arrow-left:active {
+  transform: translateY(-50%) scale(0.9);
+}
+
+.hik-arrow-right {
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.hik-arrow-right:hover {
+  transform: translateY(-50%) scale(1.15);
+}
+.hik-arrow-right:active {
+  transform: translateY(-50%) scale(0.9);
+}
+
+/* Center Red Draggable Joystick Puck */
+.hik-ptz-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: #f43f5e;
+  background: radial-gradient(circle at 35% 35%, #fb7185, #e11d48);
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.55), 0 1px 3px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  z-index: 10;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.12s ease;
+}
+
+.hik-ptz-knob:active,
+.hik-ptz-knob.dragging {
+  cursor: grabbing;
+  box-shadow: 0 8px 24px rgba(225, 29, 72, 0.8), 0 0 0 4px rgba(244, 63, 94, 0.25);
+}
+
+.hik-knob-core {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+/* Coordinates & Recenter readout */
+.hik-coords-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.hik-recenter-pill {
+  background: #162032;
+  border: 1px solid #27364f;
+  border-radius: 6px;
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hik-recenter-pill:hover {
+  background: #1e2c45;
+  color: #fff;
+  border-color: #38bdf8;
+}
+
+.hik-recenter-pill:active {
+  transform: scale(0.94);
+}
+
+.btn-dpad-center:hover {
+  color: #f43f5e;
+  border-color: #f43f5e;
+}
+
+/* Move Settings Row */
+.ptz-settings-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+/* Presets List */
+.btn-save-preset-action {
+  font-size: 11.5px;
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ptz-presets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.ptz-preset-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #0f1726;
+  border: 1px solid #1a2538;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+
+.ptz-preset-item-card.active {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.ptz-preset-info-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ptz-preset-name {
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.ptz-preset-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
 
 
 

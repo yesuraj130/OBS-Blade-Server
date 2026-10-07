@@ -241,6 +241,47 @@ const el = {
   transformCropRight: document.getElementById('transform-crop-right'),
   btnRevertTransform: document.getElementById('btn-revert-transform'),
   btnApplyTransform: document.getElementById('btn-apply-transform'),
+
+  // Pan & Zoom (PTZ) Modal Elements
+  modalPtz: document.getElementById('modal-ptz'),
+  btnBackPtz: document.getElementById('btn-back-ptz'),
+  btnDonePtz: document.getElementById('btn-done-ptz'),
+  ptzModalTitle: document.getElementById('ptz-modal-title'),
+  ptzPluginWarning: document.getElementById('ptz-plugin-warning'),
+  ptzSourceBadge: document.getElementById('ptz-source-badge'),
+  ptzSceneBadge: document.getElementById('ptz-scene-badge'),
+  ptzZoomIndicator: document.getElementById('ptz-zoom-indicator'),
+  btnPtzRefreshFrame: document.getElementById('btn-ptz-refresh-frame'),
+  ptzStatusBanner: document.getElementById('ptz-status-banner'),
+  ptzGestureViewport: document.getElementById('ptz-gesture-viewport'),
+  ptzLiveImg: document.getElementById('ptz-live-img'),
+  ptzLoadingSpinner: document.getElementById('ptz-loading-spinner'),
+  ptzPreviewFallback: document.getElementById('ptz-preview-fallback'),
+  ptzZoomLevelText: document.getElementById('ptz-zoom-level-text'),
+  btnPtzZoomOut: document.getElementById('btn-ptz-zoom-out'),
+  sliderPtzZoom: document.getElementById('slider-ptz-zoom'),
+  btnPtzZoomIn: document.getElementById('btn-ptz-zoom-in'),
+  btnPtzZoomReset: document.getElementById('btn-ptz-zoom-reset'),
+  btnPtzPanUp: document.getElementById('btn-ptz-pan-up'),
+  btnPtzPanDown: document.getElementById('btn-ptz-pan-down'),
+  btnPtzPanLeft: document.getElementById('btn-ptz-pan-left'),
+  btnPtzPanRight: document.getElementById('btn-ptz-pan-right'),
+  btnPtzPanCenter: document.getElementById('btn-ptz-pan-center'),
+  hikPtzDial: document.getElementById('hik-ptz-dial'),
+  hikPtzKnob: document.getElementById('hik-ptz-knob'),
+  hikPanXText: document.getElementById('hik-pan-x-text'),
+  hikPanYText: document.getElementById('hik-pan-y-text'),
+  sliderPtzDuration: document.getElementById('slider-ptz-duration'),
+  ptzDurationText: document.getElementById('ptz-duration-text'),
+  selectPtzEasing: document.getElementById('select-ptz-easing'),
+  btnOpenSavePreset: document.getElementById('btn-open-save-preset'),
+  ptzPresetsListContainer: document.getElementById('ptz-presets-list-container'),
+  btnPtzReturnWide: document.getElementById('btn-ptz-return-wide'),
+  btnPtzApplyNow: document.getElementById('btn-ptz-apply-now'),
+  modalSavePtzPreset: document.getElementById('modal-save-ptz-preset'),
+  formSavePtzPreset: document.getElementById('form-save-ptz-preset'),
+  inputPtzPresetName: document.getElementById('input-ptz-preset-name'),
+  btnCancelSavePtzPreset: document.getElementById('btn-cancel-save-ptz-preset'),
 };
 
 // Wake lock sentinel instance
@@ -1316,6 +1357,203 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Pan & Zoom (PTZ) Modal Handlers (Solution B: Move Transition Plugin)
+  if (el.btnBackPtz) {
+    el.btnBackPtz.addEventListener('click', (e) => {
+      e.preventDefault();
+      closePtzModal();
+    });
+  }
+
+  if (el.btnDonePtz) {
+    el.btnDonePtz.addEventListener('click', (e) => {
+      e.preventDefault();
+      closePtzModal();
+    });
+  }
+
+  if (el.btnPtzRefreshFrame) {
+    el.btnPtzRefreshFrame.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (activePtzSession) {
+        fetchPtzPreviewFrame(activePtzSession.sourceName);
+      }
+    });
+  }
+
+  if (el.btnPtzZoomIn) {
+    el.btnPtzZoomIn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activePtzSession) return;
+      activePtzSession.zoom = Math.min(4.0, Math.round((activePtzSession.zoom + 0.15) * 100) / 100);
+      queuePtzUpdate(true);
+    });
+  }
+
+  if (el.btnPtzZoomOut) {
+    el.btnPtzZoomOut.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activePtzSession) return;
+      activePtzSession.zoom = Math.max(1.0, Math.round((activePtzSession.zoom - 0.15) * 100) / 100);
+      queuePtzUpdate(true);
+    });
+  }
+
+  if (el.btnPtzZoomReset) {
+    el.btnPtzZoomReset.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activePtzSession) return;
+      activePtzSession.zoom = 1.0;
+      activePtzSession.panX = 0;
+      activePtzSession.panY = 0;
+      queuePtzUpdate(true);
+    });
+  }
+
+  if (el.sliderPtzZoom) {
+    el.sliderPtzZoom.addEventListener('input', () => {
+      if (!activePtzSession) return;
+      activePtzSession.zoom = parseFloat(el.sliderPtzZoom.value) || 1.0;
+      queuePtzUpdate(false);
+    });
+    el.sliderPtzZoom.addEventListener('change', () => {
+      if (!activePtzSession) return;
+      activePtzSession.zoom = parseFloat(el.sliderPtzZoom.value) || 1.0;
+      queuePtzUpdate(true);
+    });
+  }
+
+  // Hik-Connect Style PTZ Directional Pan Buttons & Recenter
+  if (el.btnPtzPanUp) {
+    el.btnPtzPanUp.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activePtzSession) return;
+      activePtzSession.panY = Math.max(-1.0, Math.round((activePtzSession.panY - ptzPanStepSize) * 1000) / 1000);
+      updateHikKnobVisual();
+      queuePtzUpdate(true);
+    });
+  }
+
+  if (el.btnPtzPanDown) {
+    el.btnPtzPanDown.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activePtzSession) return;
+      activePtzSession.panY = Math.min(1.0, Math.round((activePtzSession.panY + ptzPanStepSize) * 1000) / 1000);
+      updateHikKnobVisual();
+      queuePtzUpdate(true);
+    });
+  }
+
+  if (el.btnPtzPanLeft) {
+    el.btnPtzPanLeft.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activePtzSession) return;
+      activePtzSession.panX = Math.max(-1.0, Math.round((activePtzSession.panX - ptzPanStepSize) * 1000) / 1000);
+      updateHikKnobVisual();
+      queuePtzUpdate(true);
+    });
+  }
+
+  if (el.btnPtzPanRight) {
+    el.btnPtzPanRight.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activePtzSession) return;
+      activePtzSession.panX = Math.min(1.0, Math.round((activePtzSession.panX + ptzPanStepSize) * 1000) / 1000);
+      updateHikKnobVisual();
+      queuePtzUpdate(true);
+    });
+  }
+
+  if (el.btnPtzPanCenter) {
+    el.btnPtzPanCenter.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activePtzSession) return;
+      activePtzSession.panX = 0;
+      activePtzSession.panY = 0;
+      updateHikKnobVisual();
+      queuePtzUpdate(true);
+    });
+  }
+
+  // D-Pad Pan Step Size Toggles
+  const stepButtons = document.querySelectorAll('.btn-pan-step-size');
+  stepButtons.forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      stepButtons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      ptzPanStepSize = parseFloat(btn.getAttribute('data-step') || '0.06');
+    });
+  });
+
+  // Move Transition Glide Duration & Easing
+  if (el.sliderPtzDuration) {
+    el.sliderPtzDuration.addEventListener('input', () => {
+      const dur = parseInt(el.sliderPtzDuration.value, 10);
+      if (el.ptzDurationText) el.ptzDurationText.textContent = `${dur} ms`;
+      if (activePtzSession) activePtzSession.duration = dur;
+    });
+  }
+
+  if (el.selectPtzEasing) {
+    el.selectPtzEasing.addEventListener('change', () => {
+      if (activePtzSession) activePtzSession.easing = el.selectPtzEasing.value;
+    });
+  }
+
+  // Return to Wide Action
+  if (el.btnPtzReturnWide) {
+    el.btnPtzReturnWide.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await returnToWideAction();
+    });
+  }
+
+  // Apply PTZ Now Action
+  if (el.btnPtzApplyNow) {
+    el.btnPtzApplyNow.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!isMovePluginInstalled) {
+        showPtzBanner('⚠️ Move Transition plugin not detected in OBS. Please install Move Transition plugin to have this action.', true);
+      }
+      await dispatchPtzToObs();
+      showPtzBanner('✓ PTZ framing applied to OBS Studio!', false);
+    });
+  }
+
+  // Save Preset Mini Modal Handlers
+  if (el.btnOpenSavePreset) {
+    el.btnOpenSavePreset.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!isMovePluginInstalled) {
+        showPtzBanner('⚠️ Move Transition plugin not detected. Please install Move Transition plugin to have this action.', true);
+      }
+      openSavePtzPresetModal();
+    });
+  }
+
+  if (el.btnCancelSavePtzPreset) {
+    el.btnCancelSavePtzPreset.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeSavePtzPresetModal();
+    });
+  }
+
+  if (el.formSavePtzPreset) {
+    el.formSavePtzPreset.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (el.inputPtzPresetName) {
+        await saveCurrentPtzPreset(el.inputPtzPresetName.value);
+      }
+    });
+  }
+
+  // Setup Gesture Viewport Handlers (Drag to Pan, Pinch to Zoom, Wheel)
+  setupPtzGestureHandlers();
+
+  // Setup Hik-Connect Style 360° Analog Joystick
+  setupHikJoystick();
 }
 
 // Filter labels map
@@ -1329,6 +1567,8 @@ const FILTER_KIND_LABELS = {
   crop_filter: 'Crop / Pad',
   sharpness_filter_v2: 'Sharpen',
   scroll_filter: 'Scroll',
+  move_source_filter: 'Move Source',
+  move_value_filter: 'Move Value',
 };
 
 // Target tracker variables
@@ -1576,9 +1816,14 @@ function openSourceContextMenu(x, y, sceneName, item) {
     },
   });
 
-  // Advanced only: Edit Transform, Edit Source, Add Source, Remove from Scene
+  // Advanced only: Pan & Zoom (PTZ), Edit Transform, Edit Source, Add Source, Remove from Scene
   if (state.advancedOptionsEnabled) {
     menuItems.push({ divider: true });
+    menuItems.push({
+      label: 'Pan & Zoom (PTZ)',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>`,
+      onClick: () => openPtzModal(sceneName, item),
+    });
     menuItems.push({
       label: 'Edit Transform',
       icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v18"/></svg>`,
@@ -2916,6 +3161,659 @@ function applyPresetAction(preset) {
   }
 
   syncTransformInputsFromDraft();
+}
+
+// --- Pan & Zoom (Live PTZ) Engine (Solution B: Move Transition Plugin) ---
+let activePtzSession = null;
+let ptzPanStepSize = 0.06;
+let isMovePluginInstalled = true;
+let ptzDispatchTimeout = null;
+let lastPtzDispatchTime = 0;
+const activePtzPointers = new Map();
+let initialPinchDistance = 0;
+let initialPtzZoom = 1.0;
+
+function showPtzBanner(message, isError = false) {
+  if (!el.ptzStatusBanner) return;
+  el.ptzStatusBanner.textContent = message;
+  el.ptzStatusBanner.className = `properties-status-banner ${isError ? 'error' : ''}`;
+  el.ptzStatusBanner.style.display = 'block';
+  setTimeout(() => {
+    if (el.ptzStatusBanner && el.ptzStatusBanner.textContent === message) {
+      el.ptzStatusBanner.style.display = 'none';
+    }
+  }, 4000);
+}
+
+async function checkMovePluginStatus() {
+  try {
+    let hasMove = false;
+    const res = await state.obs.getSceneTransitionList().catch(() => null);
+    const transitions = res?.transitions || [];
+    if (
+      transitions.some(
+        (t) =>
+          (t.transitionKind && t.transitionKind.toLowerCase().includes('move')) ||
+          (t.transitionName && t.transitionName.toLowerCase().includes('move'))
+      )
+    ) {
+      hasMove = true;
+    }
+
+    if (!hasMove) {
+      const kindsRes = await state.obs.getTransitionKindList().catch(() => null);
+      if (kindsRes?.transitionKinds?.some((k) => k.toLowerCase().includes('move'))) {
+        hasMove = true;
+      }
+    }
+
+    if (!hasMove && activePtzSession?.sourceName) {
+      const filtersRes = await state.obs.getSourceFilterList(activePtzSession.sourceName).catch(() => null);
+      if (
+        filtersRes?.filters?.some(
+          (f) =>
+            (f.filterKind && f.filterKind.toLowerCase().includes('move')) ||
+            (f.filterName && f.filterName.toLowerCase().includes('move'))
+        )
+      ) {
+        hasMove = true;
+      }
+    }
+
+    isMovePluginInstalled = hasMove;
+    if (el.ptzPluginWarning) {
+      el.ptzPluginWarning.style.display = hasMove ? 'none' : 'flex';
+    }
+
+    if (!hasMove) {
+      showPtzBanner('⚠️ Move Transition plugin not detected in OBS. Please install the plugin on your host to enable this action.', true);
+    }
+  } catch (err) {
+    console.warn('[Check Move Plugin Error]', err);
+    isMovePluginInstalled = true;
+    if (el.ptzPluginWarning) {
+      el.ptzPluginWarning.style.display = 'none';
+    }
+  }
+}
+
+async function openPtzModal(sceneName, item) {
+  if (!item || !item.sourceName) return;
+
+  const resolvedScene =
+    sceneName === '__CURRENT__' || !sceneName
+      ? getCurrentTargetScene() || state.currentProgramScene
+      : sceneName;
+
+  activePtzSession = {
+    sourceName: item.sourceName,
+    sceneName: resolvedScene,
+    item,
+    zoom: 1.0,
+    panX: 0,
+    panY: 0,
+    duration: 500,
+    easing: 'ease_in_out',
+    sourceWidth: 1920,
+    sourceHeight: 1080,
+  };
+
+  try {
+    if (item.sceneItemId != null) {
+      const transRes = await state.obs.getSceneItemTransform(resolvedScene, item.sceneItemId).catch(() => null);
+      if (transRes?.sceneItemTransform) {
+        activePtzSession.sourceWidth = transRes.sceneItemTransform.sourceWidth || 1920;
+        activePtzSession.sourceHeight = transRes.sceneItemTransform.sourceHeight || 1080;
+      }
+    }
+  } catch (_) {}
+
+  if (el.ptzModalTitle) {
+    el.ptzModalTitle.textContent = `Pan & Zoom: ${item.sourceName}`;
+  }
+  if (el.ptzSourceBadge) {
+    el.ptzSourceBadge.textContent = item.sourceName;
+  }
+  if (el.ptzSceneBadge) {
+    el.ptzSceneBadge.textContent = `Scene: ${resolvedScene}`;
+  }
+  if (el.sliderPtzZoom) el.sliderPtzZoom.value = '1.0';
+  if (el.sliderPtzDuration) el.sliderPtzDuration.value = '500';
+  if (el.ptzDurationText) el.ptzDurationText.textContent = '500 ms';
+  if (el.selectPtzEasing) el.selectPtzEasing.value = 'ease_in_out';
+
+  updatePtzUiIndicators();
+
+  if (el.modalPtz) {
+    el.modalPtz.classList.add('open');
+  }
+
+  // 1. Check if Move Transition plugin is available in OBS
+  await checkMovePluginStatus();
+
+  // 2. Fetch live image frame
+  await fetchPtzPreviewFrame(item.sourceName);
+
+  // 3. Load existing PTZ filter presets on this source
+  await loadPtzPresetsList(item.sourceName);
+}
+
+function closePtzModal() {
+  if (el.modalPtz) {
+    el.modalPtz.classList.remove('open');
+  }
+  activePtzPointers.clear();
+  if (ptzDispatchTimeout) {
+    clearTimeout(ptzDispatchTimeout);
+    ptzDispatchTimeout = null;
+  }
+  activePtzSession = null;
+}
+
+function generateSyntheticPtzFrame(sourceName) {
+  const safeName = escapeHtml(sourceName || 'Live Video Feed');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+    <rect width="640" height="360" fill="#090e18" />
+    <defs>
+      <pattern id="ptzgrid" width="40" height="40" patternUnits="userSpaceOnUse">
+        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+      </pattern>
+      <radialGradient id="vignette" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#182438" stop-opacity="0.8"/>
+        <stop offset="100%" stop-color="#060911" stop-opacity="0.95"/>
+      </radialGradient>
+    </defs>
+    <rect width="640" height="360" fill="url(#ptzgrid)" />
+    <rect width="640" height="360" fill="url(#vignette)" />
+    <!-- Viewfinder Corners -->
+    <path d="M 28 48 L 28 28 L 48 28 M 592 28 L 612 28 L 612 48 M 28 312 L 28 332 L 48 332 M 592 332 L 612 332 L 612 312" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Center Framing Marker -->
+    <circle cx="320" cy="180" r="54" fill="none" stroke="rgba(56,189,248,0.25)" stroke-width="1.5" stroke-dasharray="5 5"/>
+    <circle cx="320" cy="180" r="3.5" fill="#38bdf8"/>
+    <!-- Top Badge -->
+    <rect x="28" y="28" width="76" height="20" rx="4" fill="rgba(56,189,248,0.18)"/>
+    <text x="66" y="42" fill="#38bdf8" font-family="-apple-system, sans-serif" font-size="10" font-weight="bold" text-anchor="middle">LIVE PTZ</text>
+    <!-- Source Name -->
+    <text x="320" y="172" fill="#f8fafc" font-family="-apple-system, sans-serif" font-size="18" font-weight="700" text-anchor="middle">${safeName}</text>
+    <text x="320" y="196" fill="#64748b" font-family="-apple-system, sans-serif" font-size="12" text-anchor="middle">Touch &amp; Drag Preview to Pan • Pinch to Zoom</text>
+  </svg>`;
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+}
+
+async function fetchPtzPreviewFrame(sourceName) {
+  if (!el.ptzLiveImg) return;
+  try {
+    if (el.ptzLoadingSpinner) el.ptzLoadingSpinner.style.display = 'flex';
+
+    // 1. Show cached thumbnail if available
+    const cached = thumbnailCache.get(sourceName);
+    if (cached && cached.dataUrl) {
+      el.ptzLiveImg.src = cached.dataUrl;
+      el.ptzLiveImg.style.display = 'block';
+      if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+    }
+
+    let gotImage = false;
+
+    // 2. Try direct source screenshot
+    try {
+      const res = await state.obs.getSourceScreenshot(sourceName, 'jpg', 1280);
+      if (res && res.imageData) {
+        el.ptzLiveImg.src = res.imageData;
+        el.ptzLiveImg.style.display = 'block';
+        if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+        thumbnailCache.set(sourceName, { dataUrl: res.imageData, timestamp: Date.now() });
+        gotImage = true;
+      }
+    } catch (_) {}
+
+    // 3. Fallback to active scene screenshot if direct source screenshot failed
+    if (!gotImage && activePtzSession?.sceneName) {
+      try {
+        const sceneRes = await state.obs.getSourceScreenshot(activePtzSession.sceneName, 'jpg', 1280);
+        if (sceneRes && sceneRes.imageData) {
+          el.ptzLiveImg.src = sceneRes.imageData;
+          el.ptzLiveImg.style.display = 'block';
+          if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+          gotImage = true;
+        }
+      } catch (_) {}
+    }
+
+    // 4. Fallback to synthetic active viewfinder frame if screenshot unavailable
+    if (!gotImage && (!el.ptzLiveImg.src || el.ptzLiveImg.style.display === 'none')) {
+      el.ptzLiveImg.src = generateSyntheticPtzFrame(sourceName);
+      el.ptzLiveImg.style.display = 'block';
+      if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+    }
+  } catch (err) {
+    console.warn('[PTZ Preview Frame Failed]', err);
+    if (!el.ptzLiveImg.src || el.ptzLiveImg.style.display === 'none') {
+      el.ptzLiveImg.src = generateSyntheticPtzFrame(sourceName);
+      el.ptzLiveImg.style.display = 'block';
+      if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+    }
+  } finally {
+    if (el.ptzLoadingSpinner) el.ptzLoadingSpinner.style.display = 'none';
+  }
+}
+
+function calculatePtzCrop(zoom, panX, panY, srcW = 1920, srcH = 1080) {
+  const z = Math.max(1.0, Math.min(4.0, zoom));
+  const visW = srcW / z;
+  const visH = srcH / z;
+  const marginX = (srcW - visW) / 2;
+  const marginY = (srcH - visH) / 2;
+
+  const px = Math.max(-1.0, Math.min(1.0, panX));
+  const py = Math.max(-1.0, Math.min(1.0, panY));
+
+  const left = Math.max(0, Math.round(marginX * (1 + px)));
+  const right = Math.max(0, Math.round(marginX * (1 - px)));
+  const top = Math.max(0, Math.round(marginY * (1 + py)));
+  const bottom = Math.max(0, Math.round(marginY * (1 - py)));
+
+  return { left, right, top, bottom, relative: true };
+}
+
+function updatePtzUiIndicators() {
+  if (!activePtzSession) return;
+  const z = activePtzSession.zoom;
+  const zText = `${z.toFixed(2)}x`;
+
+  if (el.ptzZoomIndicator) el.ptzZoomIndicator.textContent = zText;
+  if (el.ptzZoomLevelText) {
+    el.ptzZoomLevelText.textContent = z <= 1.01 ? '1.00x (Wide)' : `${zText} Zoomed`;
+  }
+  if (el.sliderPtzZoom) {
+    el.sliderPtzZoom.value = String(z);
+  }
+
+  // Update visual framing guide crosshair position
+  const crossH = document.querySelector('.ptz-crosshair-h');
+  const crossV = document.querySelector('.ptz-crosshair-v');
+  if (crossH) {
+    const normY = 50 + activePtzSession.panY * 30;
+    crossH.style.top = `${normY}%`;
+  }
+  if (crossV) {
+    const normX = 50 + activePtzSession.panX * 30;
+    crossV.style.left = `${normX}%`;
+  }
+
+  // Live CSS transform on preview image for immediate silky-smooth interactive feedback
+  if (el.ptzLiveImg && el.ptzLiveImg.style.display !== 'none') {
+    const maxTranslate = (1 - 1 / Math.max(1, z)) * 50;
+    const transX = -activePtzSession.panX * maxTranslate;
+    const transY = -activePtzSession.panY * maxTranslate;
+    el.ptzLiveImg.style.transform = `scale(${z}) translate(${transX}%, ${transY}%)`;
+    el.ptzLiveImg.style.transformOrigin = 'center center';
+  }
+
+  // Update Hik-Connect 360° red joystick puck and coordinates
+  updateHikKnobVisual();
+}
+
+function queuePtzUpdate(immediate = false) {
+  if (!activePtzSession) return;
+  updatePtzUiIndicators();
+
+  const now = Date.now();
+  const delay = immediate ? 0 : Math.max(0, 50 - (now - lastPtzDispatchTime));
+
+  if (ptzDispatchTimeout) clearTimeout(ptzDispatchTimeout);
+  ptzDispatchTimeout = setTimeout(async () => {
+    lastPtzDispatchTime = Date.now();
+    await dispatchPtzToObs();
+  }, delay);
+}
+
+async function dispatchPtzToObs() {
+  if (!activePtzSession) return;
+  const { sourceName, zoom, panX, panY, sourceWidth, sourceHeight } = activePtzSession;
+  const cropSettings = calculatePtzCrop(zoom, panX, panY, sourceWidth, sourceHeight);
+
+  try {
+    const res = await state.obs.getSourceFilterList(sourceName);
+    const filters = res?.filters || [];
+    const workingFilter = filters.find((f) => f.filterName === 'Blade Live PTZ');
+
+    if (!workingFilter) {
+      await state.obs.createSourceFilter(sourceName, 'Blade Live PTZ', 'crop_filter', cropSettings);
+    } else {
+      await state.obs.setSourceFilterSettings(sourceName, 'Blade Live PTZ', cropSettings);
+      if (!workingFilter.filterEnabled) {
+        await state.obs.setSourceFilterEnabled(sourceName, 'Blade Live PTZ', true);
+      }
+    }
+
+    if (state.isPreviewExpanded) {
+      setTimeout(fetchPreviewSnapshot, 200);
+    }
+  } catch (err) {
+    console.error('[dispatchPtzToObs Error]', err);
+  }
+}
+
+async function returnToWideAction() {
+  if (!activePtzSession) return;
+  activePtzSession.zoom = 1.0;
+  activePtzSession.panX = 0;
+  activePtzSession.panY = 0;
+  updatePtzUiIndicators();
+  if (el.ptzLiveImg) {
+    el.ptzLiveImg.style.transform = '';
+  }
+
+  const { sourceName } = activePtzSession;
+  try {
+    const res = await state.obs.getSourceFilterList(sourceName);
+    const filters = res?.filters || [];
+
+    // Disable working filter and all PTZ presets on this source
+    for (const f of filters) {
+      if (f.filterName.startsWith('PTZ') || f.filterName.startsWith('Blade Live PTZ')) {
+        if (f.filterEnabled) {
+          await state.obs.setSourceFilterEnabled(sourceName, f.filterName, false);
+        }
+      }
+    }
+
+    await loadPtzPresetsList(sourceName);
+    showPtzBanner('✓ Returned to Wide view (all PTZ filters disabled)', false);
+
+    if (state.isPreviewExpanded) {
+      setTimeout(fetchPreviewSnapshot, 200);
+    }
+  } catch (err) {
+    console.error('Failed to return to wide:', err);
+    showPtzBanner(`Error returning to wide: ${err.message}`, true);
+  }
+}
+
+async function loadPtzPresetsList(sourceName) {
+  if (!el.ptzPresetsListContainer) return;
+  el.ptzPresetsListContainer.innerHTML = `
+    <div style="font-size: 11.5px; color: var(--obs-text-gray); padding: 8px 0; text-align: center;">
+      Loading filter presets...
+    </div>
+  `;
+
+  try {
+    const res = await state.obs.getSourceFilterList(sourceName);
+    const filters = res?.filters || [];
+    const ptzFilters = filters.filter(
+      (f) =>
+        f.filterName.startsWith('PTZ') ||
+        (f.filterKind === 'crop_filter' && f.filterName !== 'Blade Live PTZ')
+    );
+
+    if (ptzFilters.length === 0) {
+      el.ptzPresetsListContainer.innerHTML = `
+        <div style="font-size: 11.5px; color: var(--obs-text-gray); padding: 10px 0; text-align: center;">
+          No PTZ presets saved yet. Adjust framing above and click "Save as Filter Preset".
+        </div>
+      `;
+      return;
+    }
+
+    el.ptzPresetsListContainer.innerHTML = '';
+    ptzFilters.forEach((filter) => {
+      const card = document.createElement('div');
+      card.className = `ptz-preset-item-card ${filter.filterEnabled ? 'active' : ''}`;
+
+      card.innerHTML = `
+        <div class="ptz-preset-info-left">
+          <span class="ptz-preset-name">${escapeHtml(filter.filterName)}</span>
+          <span class="filter-kind-pill" style="font-size: 10px;">${escapeHtml(filter.filterKind)}</span>
+        </div>
+        <div class="ptz-preset-actions-right">
+          <button type="button" class="btn-blade-eye ${filter.filterEnabled ? 'visible' : 'hidden'}" title="Toggle Preset">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              ${
+                filter.filterEnabled
+                  ? `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3" fill="currentColor"/>`
+                  : `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`
+              }
+            </svg>
+          </button>
+          <button type="button" class="btn-filter-trash" title="Delete Preset">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
+      `;
+
+      // Eye button toggles this preset exclusively
+      const btnEye = card.querySelector('.btn-blade-eye');
+      btnEye.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const next = !filter.filterEnabled;
+        try {
+          if (next) {
+            // Disable other PTZ filters for exclusive activation
+            for (const other of ptzFilters) {
+              if (other.filterName !== filter.filterName && other.filterEnabled) {
+                await state.obs.setSourceFilterEnabled(sourceName, other.filterName, false);
+              }
+            }
+          }
+          await state.obs.setSourceFilterEnabled(sourceName, filter.filterName, next);
+          await loadPtzPresetsList(sourceName);
+          showPtzBanner(`✓ Preset "${filter.filterName}" ${next ? 'activated' : 'disabled'}`, false);
+        } catch (err) {
+          console.error(err);
+        }
+      });
+
+      // Delete button
+      const btnTrash = card.querySelector('.btn-filter-trash');
+      btnTrash.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await state.obs.removeSourceFilter(sourceName, filter.filterName);
+          await loadPtzPresetsList(sourceName);
+          showPtzBanner(`Removed preset filter "${filter.filterName}"`, false);
+        } catch (err) {
+          console.error(err);
+        }
+      });
+
+      el.ptzPresetsListContainer.appendChild(card);
+    });
+  } catch (err) {
+    console.error('Failed to load presets:', err);
+    el.ptzPresetsListContainer.innerHTML = `
+      <div style="font-size: 11.5px; color: var(--obs-red); padding: 8px 0; text-align: center;">
+        Failed to load presets: ${escapeHtml(err.message)}
+      </div>
+    `;
+  }
+}
+
+async function saveCurrentPtzPreset(presetName) {
+  if (!activePtzSession) return;
+  const cleanName = presetName.trim();
+  if (!cleanName) return;
+
+  const { sourceName, zoom, panX, panY, sourceWidth, sourceHeight } = activePtzSession;
+  const cropSettings = calculatePtzCrop(zoom, panX, panY, sourceWidth, sourceHeight);
+
+  try {
+    await state.obs.createSourceFilter(sourceName, cleanName, 'crop_filter', cropSettings);
+    showPtzBanner(`✓ Created PTZ filter preset "${cleanName}" in OBS Studio!`, false);
+    await loadPtzPresetsList(sourceName);
+    closeSavePtzPresetModal();
+  } catch (err) {
+    console.error('Failed to save preset filter:', err);
+    showPtzBanner(`Error saving preset filter: ${err.message}`, true);
+  }
+}
+
+function openSavePtzPresetModal() {
+  if (!activePtzSession) return;
+  if (el.inputPtzPresetName) {
+    el.inputPtzPresetName.value = `PTZ - Zoom ${activePtzSession.zoom.toFixed(1)}x`;
+  }
+  if (el.modalSavePtzPreset) {
+    el.modalSavePtzPreset.classList.add('open');
+    setTimeout(() => {
+      el.inputPtzPresetName.focus();
+      el.inputPtzPresetName.select();
+    }, 100);
+  }
+}
+
+function closeSavePtzPresetModal() {
+  if (el.modalSavePtzPreset) {
+    el.modalSavePtzPreset.classList.remove('open');
+  }
+}
+
+function setupPtzGestureHandlers() {
+  if (!el.ptzGestureViewport) return;
+
+  el.ptzGestureViewport.addEventListener('pointerdown', (e) => {
+    if (!activePtzSession) return;
+    el.ptzGestureViewport.setPointerCapture(e.pointerId);
+    activePtzPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePtzPointers.size === 2) {
+      const pts = Array.from(activePtzPointers.values());
+      initialPinchDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      initialPtzZoom = activePtzSession.zoom;
+    }
+  });
+
+  el.ptzGestureViewport.addEventListener('pointermove', (e) => {
+    if (!activePtzSession || !activePtzPointers.has(e.pointerId)) return;
+
+    if (activePtzPointers.size === 2) {
+      // 2-Finger Pinch to Zoom
+      activePtzPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const pts = Array.from(activePtzPointers.values());
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (initialPinchDistance > 10) {
+        const ratio = currentDist / initialPinchDistance;
+        activePtzSession.zoom = Math.max(1.0, Math.min(4.0, initialPtzZoom * ratio));
+        queuePtzUpdate(false);
+      }
+    } else if (activePtzPointers.size === 1) {
+      // 1-Finger Drag to Pan
+      const prev = activePtzPointers.get(e.pointerId);
+      const deltaX = e.clientX - prev.x;
+      const deltaY = e.clientY - prev.y;
+      activePtzPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      const rect = el.ptzGestureViewport.getBoundingClientRect();
+      const sensitivity = 2.0 / (activePtzSession.zoom * Math.max(100, rect.width));
+
+      activePtzSession.panX = Math.max(-1.0, Math.min(1.0, activePtzSession.panX - deltaX * sensitivity * 1.5));
+      activePtzSession.panY = Math.max(-1.0, Math.min(1.0, activePtzSession.panY - deltaY * sensitivity * 1.5));
+
+      queuePtzUpdate(false);
+    }
+  });
+
+  const onPointerEnd = (e) => {
+    activePtzPointers.delete(e.pointerId);
+    if (activePtzSession && activePtzPointers.size === 0) {
+      queuePtzUpdate(true);
+    }
+  };
+
+  el.ptzGestureViewport.addEventListener('pointerup', onPointerEnd);
+  el.ptzGestureViewport.addEventListener('pointercancel', onPointerEnd);
+
+  // Mouse wheel zoom
+  el.ptzGestureViewport.addEventListener(
+    'wheel',
+    (e) => {
+      if (!activePtzSession) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      activePtzSession.zoom = Math.max(1.0, Math.min(4.0, activePtzSession.zoom + delta));
+      queuePtzUpdate(true);
+    },
+    { passive: false }
+  );
+}
+
+// --- Hik-Connect PTZ 360° Joystick Engine ---
+function updateHikKnobVisual() {
+  const knob = document.getElementById('hik-ptz-knob');
+  if (!knob || !activePtzSession) return;
+  const maxR = 56;
+  const px = Math.round(activePtzSession.panX * maxR * 10) / 10;
+  const py = Math.round(activePtzSession.panY * maxR * 10) / 10;
+  knob.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
+
+  const txtX = document.getElementById('hik-pan-x-text');
+  const txtY = document.getElementById('hik-pan-y-text');
+  if (txtX) txtX.textContent = `Pan: ${Math.round(activePtzSession.panX * 100)}%`;
+  if (txtY) txtY.textContent = `Tilt: ${Math.round(activePtzSession.panY * 100)}%`;
+}
+
+let isJoystickDragging = false;
+
+function setupHikJoystick() {
+  const dial = document.getElementById('hik-ptz-dial');
+  const knob = document.getElementById('hik-ptz-knob');
+  if (!dial || !knob) return;
+
+  function handleJoystickPointer(clientX, clientY) {
+    if (!activePtzSession) return;
+    const rect = dial.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    let dx = clientX - centerX;
+    let dy = clientY - centerY;
+    const maxR = 56;
+
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxR) {
+      dx = (dx / dist) * maxR;
+      dy = (dy / dist) * maxR;
+    }
+
+    activePtzSession.panX = Math.round((dx / maxR) * 1000) / 1000;
+    activePtzSession.panY = Math.round((dy / maxR) * 1000) / 1000;
+
+    updateHikKnobVisual();
+    queuePtzUpdate(false);
+  }
+
+  const onPointerDown = (e) => {
+    if (e.target.closest('.hik-arrow-btn')) return;
+    e.preventDefault();
+    isJoystickDragging = true;
+    dial.setPointerCapture(e.pointerId);
+    knob.classList.add('dragging');
+    handleJoystickPointer(e.clientX, e.clientY);
+  };
+
+  const onPointerMove = (e) => {
+    if (!isJoystickDragging) return;
+    e.preventDefault();
+    handleJoystickPointer(e.clientX, e.clientY);
+  };
+
+  const onPointerUp = (e) => {
+    if (!isJoystickDragging) return;
+    isJoystickDragging = false;
+    knob.classList.remove('dragging');
+    if (activePtzSession) {
+      queuePtzUpdate(true);
+    }
+  };
+
+  dial.addEventListener('pointerdown', onPointerDown);
+  dial.addEventListener('pointermove', onPointerMove);
+  dial.addEventListener('pointerup', onPointerUp);
+  dial.addEventListener('pointercancel', onPointerUp);
 }
 
 // Dynamic Source Properties & Host File Browser State

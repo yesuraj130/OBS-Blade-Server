@@ -415,6 +415,32 @@ export class ObsWebSocketSimulator {
         this.broadcastEvent('CurrentProgramSceneChanged', { sceneName: this.currentProgramScene });
         return { data: {} };
 
+      case 'GetSceneTransitionList':
+        return {
+          data: {
+            currentSceneTransitionName: 'Fade',
+            currentSceneTransitionKind: 'fade_transition',
+            transitions: [
+              { transitionName: 'Cut', transitionKind: 'cut_transition', transitionFixed: true, transitionConfigurable: false },
+              { transitionName: 'Fade', transitionKind: 'fade_transition', transitionFixed: false, transitionConfigurable: true },
+              { transitionName: 'Move', transitionKind: 'move_transition', transitionFixed: false, transitionConfigurable: true },
+            ],
+          },
+        };
+
+      case 'GetTransitionKindList':
+        return {
+          data: {
+            transitionKinds: [
+              'cut_transition',
+              'fade_transition',
+              'swipe_transition',
+              'slide_transition',
+              'move_transition',
+            ],
+          },
+        };
+
       case 'GetSceneItemList': {
         const scene = this.scenes.find((s) => s.sceneName === data.sceneName);
         return {
@@ -730,6 +756,20 @@ export class ObsWebSocketSimulator {
           filterName: newName,
           oldFilterName: oldName,
         });
+        return { data: {} };
+      }
+
+      case 'SetSourceFilterSettings': {
+        const list = this.sourceFilters.get(data.sourceName) || [];
+        const filter = list.find((f) => f.filterName === data.filterName);
+        if (filter) {
+          filter.filterSettings = { ...(filter.filterSettings || {}), ...(data.filterSettings || {}) };
+          this.broadcastEvent('SourceFilterSettingsChanged', {
+            sourceName: data.sourceName,
+            filterName: data.filterName,
+            filterSettings: filter.filterSettings,
+          });
+        }
         return { data: {} };
       }
 
