@@ -143,7 +143,9 @@ export class ObsClient {
         if (requestStatus && requestStatus.result) {
           pending.resolve(responseData || {});
         } else {
-          pending.reject(new Error(requestStatus?.comment || 'Request failed'));
+          const err = new Error(requestStatus?.comment || 'Request failed');
+          err.code = requestStatus?.code;
+          pending.reject(err);
         }
       }
     }

@@ -3607,7 +3607,10 @@ function queuePtzUpdate(immediate = false) {
   }, delay);
 }
 
-async function dispatchPtzToObs() {
+let isPtzDispatching = false;
+let hasQueuedPtzDispatch = false;
+
+async function executePtzDispatch() {
   if (!activePtzSession) return;
   const { sourceName, zoom, panX, panY, sourceWidth, sourceHeight } = activePtzSession;
 
@@ -3622,32 +3625,48 @@ async function dispatchPtzToObs() {
 
   const cropSettings = calculatePtzCrop(zoom, panX, panY, sourceWidth, sourceHeight);
 
+  // Fast path: Try updating existing filter settings directly
   try {
-    const res = await state.obs.getSourceFilterList(sourceName);
-    const filters = res?.filters || [];
-    const workingFilter = filters.find((f) => f.filterName === LIVE_PTZ_FILTER_NAME);
-
-    // Clean up any old filter names if found
-    for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
-      if (filters.some((f) => f.filterName === legacy)) {
-        await state.obs.removeSourceFilter(sourceName, legacy).catch(() => null);
-      }
-    }
-
-    if (!workingFilter) {
+    await state.obs.setSourceFilterSettings(sourceName, LIVE_PTZ_FILTER_NAME, cropSettings);
+    await state.obs.setSourceFilterEnabled(sourceName, LIVE_PTZ_FILTER_NAME, true).catch(() => null);
+  } catch (setErr) {
+    // If filter does not exist yet (code 600 or "not found"), create it
+    try {
       await state.obs.createSourceFilter(sourceName, LIVE_PTZ_FILTER_NAME, 'crop_filter', cropSettings);
-    } else {
-      await state.obs.setSourceFilterSettings(sourceName, LIVE_PTZ_FILTER_NAME, cropSettings);
-      if (!workingFilter.filterEnabled) {
-        await state.obs.setSourceFilterEnabled(sourceName, LIVE_PTZ_FILTER_NAME, true);
+    } catch (createErr) {
+      // If it already exists (code 601 or "already exists"), update its settings safely
+      const isAlreadyExists = createErr?.code === 601 || 
+        (createErr?.message && createErr.message.toLowerCase().includes('already exists'));
+      if (isAlreadyExists) {
+        await state.obs.setSourceFilterSettings(sourceName, LIVE_PTZ_FILTER_NAME, cropSettings).catch(() => null);
+        await state.obs.setSourceFilterEnabled(sourceName, LIVE_PTZ_FILTER_NAME, true).catch(() => null);
+      } else {
+        console.warn('[PTZ Filter Create Notice]', createErr?.message || createErr);
       }
     }
+  }
 
-    if (state.isPreviewExpanded) {
-      setTimeout(fetchPreviewSnapshot, 200);
-    }
+  if (state.isPreviewExpanded) {
+    setTimeout(fetchPreviewSnapshot, 200);
+  }
+}
+
+async function dispatchPtzToObs() {
+  if (!activePtzSession) return;
+  if (isPtzDispatching) {
+    hasQueuedPtzDispatch = true;
+    return;
+  }
+  isPtzDispatching = true;
+  try {
+    do {
+      hasQueuedPtzDispatch = false;
+      await executePtzDispatch();
+    } while (hasQueuedPtzDispatch && activePtzSession);
   } catch (err) {
-    console.error('[dispatchPtzToObs Error]', err);
+    console.warn('[dispatchPtzToObs Handled]', err?.message || err);
+  } finally {
+    isPtzDispatching = false;
   }
 }
 
@@ -3799,6 +3818,19 @@ async function saveCurrentPtzPreset(presetName) {
     await loadPtzPresetsList(sourceName);
     closeSavePtzPresetModal();
   } catch (err) {
+    const isAlreadyExists = err?.code === 601 || (err?.message && err.message.toLowerCase().includes('already exists'));
+    if (isAlreadyExists) {
+      try {
+        await state.obs.setSourceFilterSettings(sourceName, cleanName, cropSettings);
+        await state.obs.setSourceFilterEnabled(sourceName, cleanName, true).catch(() => null);
+        showPtzBanner(`✓ Updated existing PTZ preset "${cleanName}" in OBS Studio!`, false);
+        await loadPtzPresetsList(sourceName);
+        closeSavePtzPresetModal();
+        return;
+      } catch (updateErr) {
+        console.error('Failed to update existing preset:', updateErr);
+      }
+    }
     console.error('Failed to save preset filter:', err);
     showPtzBanner(`Error saving preset filter: ${err.message}`, true);
   }
