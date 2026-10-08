@@ -79,13 +79,13 @@ export class ObsWebSocketSimulator {
     ];
 
     this.sourceSettings = new Map([
-      ['Sermon Slide', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/sermon_slide_01.png', unload: false } }],
-      ['Countdown Video', { inputKind: 'ffmpeg_source', inputSettings: { local_file: 'C:/OBS/Assets/countdown_5min.mp4', looping: true, restart_on_activate: true, speed_percent: 100, buffering_mb: 2, is_local_file: true } }],
-      ['Testimony Video', { inputKind: 'ffmpeg_source', inputSettings: { local_file: 'C:/OBS/Videos/testimony_maria.mp4', looping: false, restart_on_activate: true, speed_percent: 100, buffering_mb: 2, is_local_file: true } }],
-      ['Graphic Overlay', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/overlay_frame.png', unload: false } }],
-      ['QR Code Banner', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/tithe_qr.png', unload: false } }],
-      ['Welcome Graphic', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/welcome_banner.jpg', unload: false } }],
-      ['Church Logo', { inputKind: 'image_source', inputSettings: { file: 'C:/OBS/Assets/church_logo_white.png', unload: false } }],
+      ['Sermon Slide', { inputKind: 'image_source', inputSettings: { file: '/.aistudio/assets/camera_backdrop.png', unload: false } }],
+      ['Countdown Video', { inputKind: 'ffmpeg_source', inputSettings: { local_file: '/.aistudio/assets/motion_backdrop.mp4', looping: true, restart_on_activate: true, speed_percent: 100, buffering_mb: 2, is_local_file: true } }],
+      ['Testimony Video', { inputKind: 'ffmpeg_source', inputSettings: { local_file: '/.aistudio/assets/speaker_cam_feed.mp4', looping: true, restart_on_activate: true, speed_percent: 100, buffering_mb: 2, is_local_file: true } }],
+      ['Graphic Overlay', { inputKind: 'image_source', inputSettings: { file: '/.aistudio/assets/scripture_lowerthird.png', unload: false } }],
+      ['QR Code Banner', { inputKind: 'image_source', inputSettings: { file: '/.aistudio/assets/animated_radar.gif', unload: false } }],
+      ['Welcome Graphic', { inputKind: 'image_source', inputSettings: { file: '/.aistudio/assets/testimony_backdrop.png', unload: false } }],
+      ['Church Logo', { inputKind: 'image_source', inputSettings: { file: '/.aistudio/assets/standby_slate.png', unload: false } }],
       ['Live Web Page', { inputKind: 'browser_source', inputSettings: { url: 'https://obsblade.app', width: 1920, height: 1080, fps: 60, custom_css: 'body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }', shutdown: false, restart_when_active: false, reroute_audio: false } }],
       ['Praise Lyrics', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'Amazing Grace, how sweet the sound\nThat saved a wretch like me', color: 16777215, opacity: 100, gradient: false, outline: true, outline_color: 0, outline_size: 2, read_from_file: false } }],
       ['Scripture LowerThird', { inputKind: 'text_gdiplus_v2', inputSettings: { text: 'John 3:16 - For God so loved the world...', color: 16777215, opacity: 100, gradient: false, outline: true, outline_color: 0, outline_size: 2, read_from_file: false } }],

@@ -4,11 +4,11 @@
   "name": "Default",
   "scene_order": [
     { "name": "Verse Bottom" },
-    { "name": "Testimony" },
     { "name": "Main Camera" },
+    { "name": "Testimony" },
     { "name": "Intermission" }
   ],
-  "name_counter": 10,
+  "name_counter": 15,
   "sources": [
     {
       "prev_ver": 486539266,
@@ -17,17 +17,17 @@
       "id": "scene",
       "versioned_id": "scene",
       "settings": {
-        "id_counter": 3,
+        "id_counter": 4,
         "custom_size": false,
         "items": [
           {
-            "name": "Lower Third Background",
-            "source_uuid": "c018241d-d242-452f-b44c-11b0e77d8531",
+            "name": "Motion Video Backdrop",
+            "source_uuid": "b101a001-4444-4888-8888-111111111111",
             "visible": true,
             "locked": false,
             "rot": 0.0,
             "scale_ref": { "x": 1280.0, "y": 720.0 },
-            "pos": { "x": 100.0, "y": 550.0 },
+            "pos": { "x": 0.0, "y": 0.0 },
             "scale": { "x": 1.0, "y": 1.0 },
             "align": 5,
             "bounds_type": 0,
@@ -41,13 +41,122 @@
             "group_item_backup": false
           },
           {
-            "name": "Scripture Banner",
-            "source_uuid": "37a942bc-2be2-4467-b50a-f11186ce6bc9",
+            "name": "Live Camera Video Feed",
+            "source_uuid": "c202b002-5555-4999-9999-222222222222",
             "visible": true,
             "locked": false,
             "rot": 0.0,
             "scale_ref": { "x": 1280.0, "y": 720.0 },
-            "pos": { "x": 120.0, "y": 570.0 },
+            "pos": { "x": 60.0, "y": 50.0 },
+            "scale": { "x": 0.58, "y": 0.58 },
+            "align": 5,
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "bounds": { "x": 0.0, "y": 0.0 },
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 2,
+            "group_item_backup": false
+          },
+          {
+            "name": "Live Radar GIF",
+            "source_uuid": "d303c003-6666-4aaa-aaaa-333333333333",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "scale_ref": { "x": 1280.0, "y": 720.0 },
+            "pos": { "x": 920.0, "y": 60.0 },
+            "scale": { "x": 0.75, "y": 0.75 },
+            "align": 5,
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "bounds": { "x": 0.0, "y": 0.0 },
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 3,
+            "group_item_backup": false
+          },
+          {
+            "name": "Scripture LowerThird Overlay",
+            "source_uuid": "e404d004-7777-4bbb-bbbb-444444444444",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "scale_ref": { "x": 1280.0, "y": 720.0 },
+            "pos": { "x": 100.0, "y": 530.0 },
+            "scale": { "x": 1.0, "y": 1.0 },
+            "align": 5,
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "bounds": { "x": 0.0, "y": 0.0 },
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 4,
+            "group_item_backup": false
+          }
+        ]
+      },
+      "mixers": 0,
+      "sync": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "push-to-mute": false,
+      "push-to-mute-delay": 0,
+      "push-to-talk": false,
+      "push-to-talk-delay": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Main Camera",
+      "uuid": "993a4087-35d2-43bb-a5a4-0ef6be19c0de",
+      "id": "scene",
+      "versioned_id": "scene",
+      "settings": {
+        "id_counter": 3,
+        "custom_size": false,
+        "items": [
+          {
+            "name": "Camera Backdrop Image",
+            "source_uuid": "a505e005-8888-4ccc-cccc-555555555555",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "scale_ref": { "x": 1280.0, "y": 720.0 },
+            "pos": { "x": 0.0, "y": 0.0 },
+            "scale": { "x": 1.0, "y": 1.0 },
+            "align": 5,
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "bounds": { "x": 0.0, "y": 0.0 },
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 1,
+            "group_item_backup": false
+          },
+          {
+            "name": "Live Camera Video Feed",
+            "source_uuid": "c202b002-5555-4999-9999-222222222222",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "scale_ref": { "x": 1280.0, "y": 720.0 },
+            "pos": { "x": 0.0, "y": 0.0 },
             "scale": { "x": 1.0, "y": 1.0 },
             "align": 5,
             "bounds_type": 0,
@@ -58,6 +167,26 @@
             "crop_right": 0,
             "crop_bottom": 0,
             "id": 2,
+            "group_item_backup": false
+          },
+          {
+            "name": "Live Radar GIF",
+            "source_uuid": "d303c003-6666-4aaa-aaaa-333333333333",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "scale_ref": { "x": 1280.0, "y": 720.0 },
+            "pos": { "x": 50.0, "y": 50.0 },
+            "scale": { "x": 0.45, "y": 0.45 },
+            "align": 5,
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "bounds": { "x": 0.0, "y": 0.0 },
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 3,
             "group_item_backup": false
           }
         ]
@@ -90,8 +219,8 @@
         "custom_size": false,
         "items": [
           {
-            "name": "Speaker Backdrop",
-            "source_uuid": "e3914a58-6ef4-4f1d-9cb1-74f882193ba2",
+            "name": "Interview Stage Backdrop",
+            "source_uuid": "f606f006-9999-4ddd-dddd-666666666666",
             "visible": true,
             "locked": false,
             "rot": 0.0,
@@ -108,45 +237,16 @@
             "crop_bottom": 0,
             "id": 1,
             "group_item_backup": false
-          }
-        ]
-      },
-      "mixers": 0,
-      "sync": 0,
-      "flags": 0,
-      "volume": 1.0,
-      "balance": 0.5,
-      "enabled": true,
-      "muted": false,
-      "push-to-mute": false,
-      "push-to-mute-delay": 0,
-      "push-to-talk": false,
-      "push-to-talk-delay": 0,
-      "hotkeys": {},
-      "deinterlace_mode": 0,
-      "deinterlace_field_order": 0,
-      "monitoring_type": 0,
-      "private_settings": {}
-    },
-    {
-      "prev_ver": 486539266,
-      "name": "Main Camera",
-      "uuid": "993a4087-35d2-43bb-a5a4-0ef6be19c0de",
-      "id": "scene",
-      "versioned_id": "scene",
-      "settings": {
-        "id_counter": 1,
-        "custom_size": false,
-        "items": [
+          },
           {
-            "name": "Camera Feed",
-            "source_uuid": "a823f991-534a-4eef-93a8-444a1bbcc421",
+            "name": "Live Camera Video Feed",
+            "source_uuid": "c202b002-5555-4999-9999-222222222222",
             "visible": true,
             "locked": false,
             "rot": 0.0,
             "scale_ref": { "x": 1280.0, "y": 720.0 },
-            "pos": { "x": 0.0, "y": 0.0 },
-            "scale": { "x": 1.0, "y": 1.0 },
+            "pos": { "x": 100.0, "y": 160.0 },
+            "scale": { "x": 0.46, "y": 0.46 },
             "align": 5,
             "bounds_type": 0,
             "bounds_align": 0,
@@ -155,7 +255,7 @@
             "crop_top": 0,
             "crop_right": 0,
             "crop_bottom": 0,
-            "id": 1,
+            "id": 2,
             "group_item_backup": false
           }
         ]
@@ -184,12 +284,12 @@
       "id": "scene",
       "versioned_id": "scene",
       "settings": {
-        "id_counter": 1,
+        "id_counter": 2,
         "custom_size": false,
         "items": [
           {
-            "name": "Standby Slate",
-            "source_uuid": "fb77299a-f4ef-4b47-8a6c-9a0027f6eb01",
+            "name": "Broadcast Standby Slate",
+            "source_uuid": "a707a007-aaaa-4eee-eeee-777777777777",
             "visible": true,
             "locked": false,
             "rot": 0.0,
@@ -205,6 +305,26 @@
             "crop_right": 0,
             "crop_bottom": 0,
             "id": 1,
+            "group_item_backup": false
+          },
+          {
+            "name": "Live Radar GIF",
+            "source_uuid": "d303c003-6666-4aaa-aaaa-333333333333",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "scale_ref": { "x": 1280.0, "y": 720.0 },
+            "pos": { "x": 490.0, "y": 420.0 },
+            "scale": { "x": 0.75, "y": 0.75 },
+            "align": 5,
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "bounds": { "x": 0.0, "y": 0.0 },
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 2,
             "group_item_backup": false
           }
         ]
@@ -227,14 +347,13 @@
       "private_settings": {}
     },
     {
-      "name": "Lower Third Background",
-      "uuid": "c018241d-d242-452f-b44c-11b0e77d8531",
-      "id": "color_source",
-      "versioned_id": "color_source_v3",
+      "name": "Camera Backdrop Image",
+      "uuid": "a505e005-8888-4ccc-cccc-555555555555",
+      "id": "image_source",
+      "versioned_id": "image_source",
       "settings": {
-        "color": 4278190335,
-        "width": 1080,
-        "height": 120
+        "file": "/.aistudio/assets/camera_backdrop.png",
+        "unload": false
       },
       "mixers": 0,
       "sync": 0,
@@ -254,14 +373,13 @@
       "private_settings": {}
     },
     {
-      "name": "Scripture Banner",
-      "uuid": "37a942bc-2be2-4467-b50a-f11186ce6bc9",
-      "id": "color_source",
-      "versioned_id": "color_source_v3",
+      "name": "Interview Stage Backdrop",
+      "uuid": "f606f006-9999-4ddd-dddd-666666666666",
+      "id": "image_source",
+      "versioned_id": "image_source",
       "settings": {
-        "color": 4280032486,
-        "width": 1040,
-        "height": 80
+        "file": "/.aistudio/assets/testimony_backdrop.png",
+        "unload": false
       },
       "mixers": 0,
       "sync": 0,
@@ -281,14 +399,13 @@
       "private_settings": {}
     },
     {
-      "name": "Speaker Backdrop",
-      "uuid": "e3914a58-6ef4-4f1d-9cb1-74f882193ba2",
-      "id": "color_source",
-      "versioned_id": "color_source_v3",
+      "name": "Broadcast Standby Slate",
+      "uuid": "a707a007-aaaa-4eee-eeee-777777777777",
+      "id": "image_source",
+      "versioned_id": "image_source",
       "settings": {
-        "color": 4281216550,
-        "width": 1280,
-        "height": 720
+        "file": "/.aistudio/assets/standby_slate.png",
+        "unload": false
       },
       "mixers": 0,
       "sync": 0,
@@ -308,14 +425,13 @@
       "private_settings": {}
     },
     {
-      "name": "Camera Feed",
-      "uuid": "a823f991-534a-4eef-93a8-444a1bbcc421",
-      "id": "color_source",
-      "versioned_id": "color_source_v3",
+      "name": "Scripture LowerThird Overlay",
+      "uuid": "e404d004-7777-4bbb-bbbb-444444444444",
+      "id": "image_source",
+      "versioned_id": "image_source",
       "settings": {
-        "color": 4284769380,
-        "width": 1280,
-        "height": 720
+        "file": "/.aistudio/assets/scripture_lowerthird.png",
+        "unload": false
       },
       "mixers": 0,
       "sync": 0,
@@ -335,16 +451,71 @@
       "private_settings": {}
     },
     {
-      "name": "Standby Slate",
-      "uuid": "fb77299a-f4ef-4b47-8a6c-9a0027f6eb01",
-      "id": "color_source",
-      "versioned_id": "color_source_v3",
+      "name": "Live Radar GIF",
+      "uuid": "d303c003-6666-4aaa-aaaa-333333333333",
+      "id": "image_source",
+      "versioned_id": "image_source",
       "settings": {
-        "color": 4279045396,
-        "width": 1280,
-        "height": 720
+        "file": "/.aistudio/assets/animated_radar.gif",
+        "unload": false
       },
       "mixers": 0,
+      "sync": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "push-to-mute": false,
+      "push-to-mute-delay": 0,
+      "push-to-talk": false,
+      "push-to-talk-delay": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "name": "Live Camera Video Feed",
+      "uuid": "c202b002-5555-4999-9999-222222222222",
+      "id": "ffmpeg_source",
+      "versioned_id": "ffmpeg_source",
+      "settings": {
+        "local_file": "/.aistudio/assets/speaker_cam_feed.mp4",
+        "looping": true,
+        "hw_decode": false,
+        "restart_on_activate": true
+      },
+      "mixers": 255,
+      "sync": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "push-to-mute": false,
+      "push-to-mute-delay": 0,
+      "push-to-talk": false,
+      "push-to-talk-delay": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "name": "Motion Video Backdrop",
+      "uuid": "b101a001-4444-4888-8888-111111111111",
+      "id": "ffmpeg_source",
+      "versioned_id": "ffmpeg_source",
+      "settings": {
+        "local_file": "/.aistudio/assets/motion_backdrop.mp4",
+        "looping": true,
+        "hw_decode": false,
+        "restart_on_activate": true
+      },
+      "mixers": 255,
       "sync": 0,
       "flags": 0,
       "volume": 1.0,
@@ -394,6 +565,6 @@
     }
   ],
   "saved_projectors": [],
-  "current_transition": "Fade",
-  "transition_duration": 300
+  "current_transition": "Move",
+  "transition_duration": 500
 }

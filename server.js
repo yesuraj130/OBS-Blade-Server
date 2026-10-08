@@ -21,7 +21,7 @@ import { ObsWebSocketSimulator } from './.obs-websocket-simulator/simulator.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Ensure uploads directory exists
@@ -117,13 +117,21 @@ async function startServer() {
 
     obsWs.on('close', (code, reason) => {
       if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.close(code, reason);
+        if (typeof code === 'number' && code >= 1000 && code !== 1005 && code !== 1006) {
+          clientWs.close(code, reason);
+        } else {
+          clientWs.close();
+        }
       }
     });
 
     clientWs.on('close', (code, reason) => {
       if (obsWs.readyState === WebSocket.OPEN) {
-        obsWs.close(code, reason);
+        if (typeof code === 'number' && code >= 1000 && code !== 1005 && code !== 1006) {
+          obsWs.close(code, reason);
+        } else {
+          obsWs.close();
+        }
       }
     });
 

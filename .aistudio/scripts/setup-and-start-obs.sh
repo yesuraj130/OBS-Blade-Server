@@ -15,6 +15,16 @@ if [ ! -f "/usr/lib/x86_64-linux-gnu/obs-plugins/move-transition.so" ]; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends obs-move-transition || true
 fi
 
+# 0b. Ensure sample media assets exist
+mkdir -p "/.aistudio/assets" "/uploads"
+if [ ! -f "/.aistudio/assets/camera_backdrop.png" ]; then
+  echo "[Real OBS] Generating sample media assets..."
+  python3 "$REPO_ROOT/.aistudio/scripts/generate_obs_media.py" || true
+  ffmpeg -y -f lavfi -i "testsrc=duration=4:size=1280x720:rate=30" -c:v libx264 -pix_fmt yuv420p -tune stillimage -preset ultrafast /.aistudio/assets/motion_backdrop.mp4 || true
+  ffmpeg -y -f lavfi -i "smptebars=duration=4:size=1280x720:rate=30" -c:v libx264 -pix_fmt yuv420p -preset ultrafast /.aistudio/assets/speaker_cam_feed.mp4 || true
+fi
+cp -f /.aistudio/assets/* /uploads/ 2>/dev/null || true
+
 # 1. Ensure directories exist
 mkdir -p "$OBS_CONFIG_DIR/basic/profiles/Default"
 mkdir -p "$OBS_CONFIG_DIR/basic/scenes"
