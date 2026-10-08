@@ -82,6 +82,7 @@ export class ObsClient {
 
     this.ws.onerror = (err) => {
       this.setStatus('disconnected', 'Network error or connection refused');
+      this.rejectPendingRequests('WebSocket connection error');
     };
 
     this.ws.onmessage = async (event) => {
@@ -96,7 +97,12 @@ export class ObsClient {
 
   disconnect() {
     if (this.ws) {
-      this.ws.close();
+      try {
+        this.ws.onclose = null;
+        this.ws.onerror = null;
+        this.ws.onmessage = null;
+        this.ws.close();
+      } catch (err) {}
       this.ws = null;
     }
     this.setStatus('disconnected');
@@ -105,8 +111,11 @@ export class ObsClient {
 
   rejectPendingRequests(reason) {
     for (const [id, req] of this.pendingRequests.entries()) {
-      req.reject(new Error(reason));
       clearTimeout(req.timeout);
+      const err = new Error(reason);
+      err.isDisconnect = true;
+      err.code = 'DISCONNECTED';
+      req.reject(err);
     }
     this.pendingRequests.clear();
   }
@@ -213,7 +222,10 @@ export class ObsClient {
       if (this.status !== 'connected' && requestType !== 'GetVersion') {
         // allow during handshake if needed, else reject
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-          return reject(new Error('OBS WebSocket is not connected'));
+          const err = new Error('OBS WebSocket is not connected');
+          err.isDisconnect = true;
+          err.code = 'DISCONNECTED';
+          return reject(err);
         }
       }
 
@@ -221,17 +233,26 @@ export class ObsClient {
       const timeout = setTimeout(() => {
         if (this.pendingRequests.has(requestId)) {
           this.pendingRequests.delete(requestId);
-          reject(new Error(`Request timed out: ${requestType}`));
+          const err = new Error(`Request timed out: ${requestType}`);
+          err.code = 'TIMEOUT';
+          reject(err);
         }
       }, 7000);
 
       this.pendingRequests.set(requestId, { resolve, reject, timeout });
 
-      this.sendOp(6, {
-        requestType,
-        requestId,
-        requestData,
-      });
+      try {
+        this.sendOp(6, {
+          requestType,
+          requestId,
+          requestData,
+        });
+      } catch (err) {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(requestId);
+        err.isDisconnect = true;
+        reject(err);
+      }
     });
   }
 

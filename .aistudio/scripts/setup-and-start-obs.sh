@@ -8,11 +8,11 @@ TEMPLATE_DIR="$REPO_ROOT/.aistudio/obs-config"
 
 echo "=== [Real OBS Setup & Launcher] ==="
 
-# 0. Ensure Move Transition plugin is installed
-if [ ! -f "/usr/lib/x86_64-linux-gnu/obs-plugins/move-transition.so" ]; then
-  echo "[Real OBS] Installing obs-move-transition plugin..."
+# 0. Ensure Move Transition plugin and Xvfb are installed
+if [ ! -f "/usr/lib/x86_64-linux-gnu/obs-plugins/move-transition.so" ] || [ ! -f "/usr/bin/Xvfb" ]; then
+  echo "[Real OBS] Installing obs-move-transition and xvfb..."
   DEBIAN_FRONTEND=noninteractive apt-get update -qq && \
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends obs-move-transition || true
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends obs-move-transition xvfb || true
 fi
 
 # 0b. Ensure sample media assets exist

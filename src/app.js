@@ -473,6 +473,13 @@ function setupObsEvents() {
       el.navTopTitle.textContent = 'OBS Dashboard (Offline)';
       isExpanderAutoRefreshRunning = false;
       isFullPreviewAutoRefreshRunning = false;
+      if (state.isRealObs && error && !state.hasFallenBackToSimulator) {
+        state.hasFallenBackToSimulator = true;
+        console.warn('[OBS Client] Real OBS not currently reachable, connecting to local simulator...');
+        setTimeout(() => {
+          connectToLocalSimulator();
+        }, 300);
+      }
     }
   });
 
@@ -553,6 +560,10 @@ function setupEventListeners() {
   // Top Close Button: Disconnect & Open Connection modal
   el.btnTopClose.addEventListener('click', (e) => {
     e.preventDefault();
+    if (typeof closePtzModal === 'function') closePtzModal();
+    if (typeof closeFullPreviewModal === 'function') closeFullPreviewModal();
+    if (typeof closeRenameModal === 'function') closeRenameModal();
+    if (typeof closeSettingsModal === 'function') closeSettingsModal();
     state.obs.disconnect();
     openConnectionModal();
   });
@@ -3831,6 +3842,14 @@ async function returnToWideAction() {
 
 async function loadPtzPresetsList(sourceName) {
   if (!el.ptzPresetsListContainer) return;
+  if (!sourceName || state.obs.status !== 'connected') {
+    el.ptzPresetsListContainer.innerHTML = `
+      <div style="font-size: 11.5px; color: var(--obs-text-gray); padding: 8px 0; text-align: center;">
+        OBS Studio is offline. Connect to view presets.
+      </div>
+    `;
+    return;
+  }
   el.ptzPresetsListContainer.innerHTML = `
     <div style="font-size: 11.5px; color: var(--obs-text-gray); padding: 8px 0; text-align: center;">
       Loading filter presets...
@@ -3923,12 +3942,30 @@ async function loadPtzPresetsList(sourceName) {
       el.ptzPresetsListContainer.appendChild(card);
     });
   } catch (err) {
-    console.error('Failed to load presets:', err);
-    el.ptzPresetsListContainer.innerHTML = `
-      <div style="font-size: 11.5px; color: var(--obs-red); padding: 8px 0; text-align: center;">
-        Failed to load presets: ${escapeHtml(err.message)}
-      </div>
-    `;
+    if (
+      err?.isDisconnect ||
+      err?.code === 'DISCONNECTED' ||
+      err?.message?.includes('disconnect') ||
+      err?.message?.includes('closed') ||
+      state.obs.status !== 'connected'
+    ) {
+      if (el.ptzPresetsListContainer) {
+        el.ptzPresetsListContainer.innerHTML = `
+          <div style="font-size: 11.5px; color: var(--obs-text-gray); padding: 8px 0; text-align: center;">
+            Disconnected from OBS Studio.
+          </div>
+        `;
+      }
+      return;
+    }
+    console.warn('Notice loading presets:', err?.message || err);
+    if (el.ptzPresetsListContainer) {
+      el.ptzPresetsListContainer.innerHTML = `
+        <div style="font-size: 11.5px; color: var(--obs-text-gray); padding: 8px 0; text-align: center;">
+          Presets temporarily unavailable.
+        </div>
+      `;
+    }
   }
 }
 
