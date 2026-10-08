@@ -51,6 +51,7 @@ const el = {
   previewLiveImg: document.getElementById('preview-live-img'),
   previewEmptyText: document.getElementById('preview-empty-text'),
   btnPreviewRefresh: document.getElementById('btn-preview-refresh'),
+  chkExpanderAutoRefresh: document.getElementById('chk-expander-auto-refresh'),
 
   // Category / Scene Text Grid
   categoryTextGrid: document.getElementById('category-text-grid'),
@@ -142,6 +143,7 @@ const el = {
   fullPreviewSceneHint: document.getElementById('full-preview-scene-hint'),
   fullPreviewResHint: document.getElementById('full-preview-res-hint'),
   btnFullPreviewRefresh: document.getElementById('btn-full-preview-refresh'),
+  chkFullPreviewAutoRefresh: document.getElementById('chk-full-preview-auto-refresh'),
 
   // OBS Host Filesystem Browser Modal
   modalHostFileBrowser: document.getElementById('modal-host-file-browser'),
@@ -469,6 +471,8 @@ function setupObsEvents() {
       el.navTopTitle.textContent = 'Connecting...';
     } else {
       el.navTopTitle.textContent = 'OBS Dashboard (Offline)';
+      isExpanderAutoRefreshRunning = false;
+      isFullPreviewAutoRefreshRunning = false;
     }
   });
 
@@ -672,9 +676,39 @@ function setupEventListeners() {
     el.previewAccordionBody.classList.toggle('open', state.isPreviewExpanded);
 
     if (state.isPreviewExpanded) {
-      fetchPreviewSnapshot();
+      if (el.chkExpanderAutoRefresh && el.chkExpanderAutoRefresh.checked) {
+        runExpanderAutoRefreshLoop();
+      } else {
+        fetchPreviewSnapshot();
+      }
+    } else {
+      isExpanderAutoRefreshRunning = false;
     }
   });
+
+  // Expander Auto Refresh Checkbox (5 FPS rate limit)
+  if (el.chkExpanderAutoRefresh) {
+    el.chkExpanderAutoRefresh.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const parentLabel = el.chkExpanderAutoRefresh.closest('.preview-auto-refresh-label');
+      if (parentLabel) parentLabel.classList.toggle('active', el.chkExpanderAutoRefresh.checked);
+      if (el.chkExpanderAutoRefresh.checked) {
+        if (!state.isPreviewExpanded) {
+          state.isPreviewExpanded = true;
+          el.previewChevron.classList.add('expanded');
+          el.previewAccordionBody.classList.add('open');
+        }
+        runExpanderAutoRefreshLoop();
+      } else {
+        isExpanderAutoRefreshRunning = false;
+      }
+    });
+
+    // Prevent clicking on the label or checkbox from toggling the preview accordion
+    el.chkExpanderAutoRefresh.closest('.preview-auto-refresh-label')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
 
   // Refresh Preview button
   el.btnPreviewRefresh.addEventListener('click', (e) => {
@@ -714,6 +748,20 @@ function setupEventListeners() {
     el.btnFullPreviewRefresh.addEventListener('click', (e) => {
       e.preventDefault();
       refreshFullPreview();
+    });
+  }
+
+  // Full Preview Page Auto-refresh Checkbox (5 FPS rate limit)
+  if (el.chkFullPreviewAutoRefresh) {
+    el.chkFullPreviewAutoRefresh.addEventListener('change', (e) => {
+      const parentLabel = el.chkFullPreviewAutoRefresh.closest('.preview-auto-refresh-label');
+      if (parentLabel) parentLabel.classList.toggle('active', el.chkFullPreviewAutoRefresh.checked);
+      if (el.chkFullPreviewAutoRefresh.checked) {
+        runFullPreviewAutoRefreshLoop();
+      } else {
+        isFullPreviewAutoRefreshRunning = false;
+        if (el.fullPreviewStatusText) el.fullPreviewStatusText.textContent = 'LATEST FRAME';
+      }
     });
   }
 
@@ -2727,7 +2775,10 @@ function closeEditTabsModal() {
   el.modalEditTabs.classList.remove('open');
 }
 
-// Preview Snapshot
+// Preview Snapshot & Auto Refresh Loops (5 FPS, min 200ms per frame)
+let isExpanderAutoRefreshRunning = false;
+let isFullPreviewAutoRefreshRunning = false;
+
 async function fetchPreviewSnapshot() {
   const target =
     state.clientStudioModeControls && state.studioMode
@@ -2744,6 +2795,69 @@ async function fetchPreviewSnapshot() {
     }
   } catch (err) {
     console.warn(err);
+  }
+}
+
+async function runExpanderAutoRefreshLoop() {
+  if (isExpanderAutoRefreshRunning) return;
+  isExpanderAutoRefreshRunning = true;
+
+  try {
+    while (
+      isExpanderAutoRefreshRunning &&
+      el.chkExpanderAutoRefresh &&
+      el.chkExpanderAutoRefresh.checked &&
+      state.isPreviewExpanded &&
+      state.obs.status === 'connected'
+    ) {
+      const frameStart = performance.now();
+      try {
+        await fetchPreviewSnapshot();
+      } catch (err) {
+        // Silently continue
+      }
+      const elapsed = performance.now() - frameStart;
+      // Rate limit to 5fps: minimum 200ms between each frame, max as high as next frame comes
+      const delay = Math.max(0, 200 - elapsed);
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  } finally {
+    isExpanderAutoRefreshRunning = false;
+  }
+}
+
+async function runFullPreviewAutoRefreshLoop() {
+  if (isFullPreviewAutoRefreshRunning) return;
+  isFullPreviewAutoRefreshRunning = true;
+
+  try {
+    while (
+      isFullPreviewAutoRefreshRunning &&
+      el.chkFullPreviewAutoRefresh &&
+      el.chkFullPreviewAutoRefresh.checked &&
+      activePreviewTarget &&
+      activePreviewTarget.item &&
+      el.modalFullPreview &&
+      el.modalFullPreview.classList.contains('open') &&
+      state.obs.status === 'connected'
+    ) {
+      const frameStart = performance.now();
+      try {
+        await fetchFullPreviewFrame(activePreviewTarget.item.sourceName, /* isSilentAuto */ true);
+      } catch (err) {
+        // Silently continue
+      }
+      const elapsed = performance.now() - frameStart;
+      // Rate limit to 5fps: minimum 200ms between each frame, max as high as next frame comes
+      const delay = Math.max(0, 200 - elapsed);
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  } finally {
+    isFullPreviewAutoRefreshRunning = false;
   }
 }
 
@@ -2812,11 +2926,16 @@ async function openSourceFullPreview(item, sceneName) {
   if (el.modalFullPreview) el.modalFullPreview.classList.add('open');
 
   await fetchFullPreviewFrame(item.sourceName);
+  if (el.chkFullPreviewAutoRefresh && el.chkFullPreviewAutoRefresh.checked) {
+    runFullPreviewAutoRefreshLoop();
+  }
 }
 
-async function fetchFullPreviewFrame(sourceName) {
+async function fetchFullPreviewFrame(sourceName, isSilentAuto = false) {
   try {
-    if (el.fullPreviewLoading) el.fullPreviewLoading.style.display = 'flex';
+    if (!isSilentAuto && el.fullPreviewLoading) {
+      el.fullPreviewLoading.style.display = 'flex';
+    }
     // Request high-resolution frame (1280px width)
     const res = await state.obs.getSourceScreenshot(sourceName, 'jpg', 1280);
     if (res && res.imageData) {
@@ -2829,6 +2948,9 @@ async function fetchFullPreviewFrame(sourceName) {
       }
       if (el.fullPreviewTimestamp) {
         el.fullPreviewTimestamp.textContent = new Date().toLocaleTimeString();
+      }
+      if (el.fullPreviewStatusText) {
+        el.fullPreviewStatusText.textContent = isSilentAuto ? 'LIVE (5 FPS)' : 'LATEST FRAME';
       }
       // Update cache
       thumbnailCache.set(sourceName, { dataUrl: res.imageData, timestamp: Date.now() });
@@ -2848,7 +2970,7 @@ async function fetchFullPreviewFrame(sourceName) {
     }
   } catch (err) {
     console.warn('[Full Preview Screenshot Failed]', err);
-    if (el.fullPreviewImg && !el.fullPreviewImg.getAttribute('src')) {
+    if (!isSilentAuto && el.fullPreviewImg && !el.fullPreviewImg.getAttribute('src')) {
       el.fullPreviewImg.style.display = 'none';
       if (el.fullPreviewFallback) {
         el.fullPreviewFallback.style.display = 'flex';
@@ -2875,6 +2997,12 @@ function closeFullPreviewModal() {
     el.modalFullPreview.classList.remove('open');
   }
   activePreviewTarget = null;
+  isFullPreviewAutoRefreshRunning = false;
+  if (el.chkFullPreviewAutoRefresh) {
+    el.chkFullPreviewAutoRefresh.checked = false;
+    const parentLabel = el.chkFullPreviewAutoRefresh.closest('.preview-auto-refresh-label');
+    if (parentLabel) parentLabel.classList.remove('active');
+  }
 }
 
 // --- Edit Transform State & Functions (OBS 32+ Layout) ---

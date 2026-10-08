@@ -92,7 +92,13 @@
       <div id="preview-accordion-body" class="preview-accordion-body">
         <img id="preview-live-img" style="display: none;" alt="Live Scene Preview" />
         <div id="preview-empty-text" style="color: var(--obs-text-gray); font-size: 13px;">Tap Refresh to load preview</div>
-        <button id="btn-preview-refresh" type="button" class="btn-refresh-overlay">↻ Refresh</button>
+        <div class="preview-accordion-controls">
+          <label class="preview-auto-refresh-label" for="chk-expander-auto-refresh" title="Auto-refresh live frame (max 5 FPS)">
+            <input type="checkbox" id="chk-expander-auto-refresh" class="preview-auto-checkbox" />
+            <span class="preview-auto-text">Auto Refresh (5 FPS)</span>
+          </label>
+          <button id="btn-preview-refresh" type="button" class="btn-refresh-overlay">↻ Refresh</button>
+        </div>
       </div>
     </section>
 
@@ -397,6 +403,10 @@
             <span id="full-preview-res-hint" class="preview-meta-pill">OBS Studio</span>
           </div>
           <div class="full-preview-actions-group">
+            <label class="preview-auto-refresh-label" for="chk-full-preview-auto-refresh" title="Auto-refresh live frame (max 5 FPS)">
+              <input type="checkbox" id="chk-full-preview-auto-refresh" class="preview-auto-checkbox" />
+              <span class="preview-auto-text">Auto Refresh (5 FPS)</span>
+            </label>
             <button id="btn-full-preview-refresh" type="button" class="btn-blue-primary preview-action-btn" title="Refresh Latest Frame">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               <span>Refresh Frame</span>

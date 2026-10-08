@@ -265,10 +265,54 @@ body {
   object-fit: contain;
 }
 
-.btn-refresh-overlay {
+.preview-accordion-controls {
   position: absolute;
   bottom: 8px;
   right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+}
+
+.preview-auto-refresh-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.preview-auto-refresh-label:hover {
+  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(30, 41, 59, 0.95);
+}
+
+.preview-auto-checkbox {
+  appearance: auto;
+  accent-color: #3b82f6;
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+
+.preview-auto-refresh-label.active {
+  background: rgba(30, 58, 138, 0.9);
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+
+.btn-refresh-overlay {
   background: rgba(0, 0, 0, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
@@ -276,6 +320,11 @@ body {
   padding: 4px 8px;
   border-radius: 4px;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-refresh-overlay:hover {
+  background: rgba(30, 41, 59, 0.9);
 }
 
 /* 4. Category / Scene Text Tabs (Organic Flow, No Rigid Vertical Grid) */
