@@ -78,6 +78,7 @@ const el = {
   setIp: document.getElementById('set-ip'),
   setPort: document.getElementById('set-port'),
   setPass: document.getElementById('set-pass'),
+  btnUseRealObs: document.getElementById('btn-use-real-obs'),
   btnUseSim: document.getElementById('btn-use-sim'),
 
   // Edit Scene Buttons Modal
@@ -446,13 +447,24 @@ function connectToLocalSimulator() {
   const protocol = isSecure ? 'wss://' : 'ws://';
   state.url = `${protocol}${location.host}/obs-ws`;
   state.password = '';
+  state.isRealObs = false;
+  state.obs.connect(state.url, '');
+}
+
+function connectToRealObs() {
+  const isSecure = location.protocol === 'https:';
+  const protocol = isSecure ? 'wss://' : 'ws://';
+  state.url = `${protocol}${location.host}/obs-real-ws`;
+  state.password = '';
+  state.isRealObs = true;
   state.obs.connect(state.url, '');
 }
 
 function setupObsEvents() {
-  state.obs.on('status', ({ status }) => {
+  state.obs.on('status', ({ status, error }) => {
     if (status === 'connected') {
-      el.navTopTitle.textContent = 'OBS Dashboard';
+      const isReal = state.url && state.url.includes('/obs-real-ws');
+      el.navTopTitle.textContent = isReal ? 'OBS Studio 29 (Live)' : 'OBS Dashboard';
     } else if (status === 'connecting') {
       el.navTopTitle.textContent = 'Connecting...';
     } else {
@@ -776,16 +788,29 @@ function setupEventListeners() {
   if (el.formSettingsConn) {
     el.formSettingsConn.addEventListener('submit', (e) => {
       e.preventDefault();
-      const host = el.setIp.value.trim() || '127.0.0.1';
+      let host = el.setIp.value.trim() || '127.0.0.1';
       const port = el.setPort.value.trim() || '4455';
       const pass = el.setPass.value;
 
       saveCredentials(host, port, pass);
-      const protocol = location.protocol === 'https:' && host === location.hostname ? 'wss://' : 'ws://';
-      state.url = `${protocol}${host}:${port}`;
+      if (host.startsWith('ws://') || host.startsWith('wss://')) {
+        state.url = host;
+      } else {
+        const protocol = location.protocol === 'https:' && host === location.hostname ? 'wss://' : 'ws://';
+        state.url = `${protocol}${host}:${port}`;
+      }
       state.password = pass;
+      state.isRealObs = state.url.includes('/obs-real-ws');
 
       state.obs.connect(state.url, state.password);
+      closeConnectionModal();
+    });
+  }
+
+  if (el.btnUseRealObs) {
+    el.btnUseRealObs.addEventListener('click', (e) => {
+      e.preventDefault();
+      connectToRealObs();
       closeConnectionModal();
     });
   }

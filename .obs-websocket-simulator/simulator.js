@@ -287,7 +287,7 @@ export class ObsWebSocketSimulator {
   }
 
   attachToServer(server, path = '/obs-ws') {
-    this.wss = new WebSocketServer({ server, path });
+    this.wss = new WebSocketServer({ noServer: true });
 
     this.wss.on('connection', (ws) => {
       // OpCode 0: Hello
@@ -311,6 +311,19 @@ export class ObsWebSocketSimulator {
         }
       });
     });
+
+    if (server) {
+      server.on('upgrade', (request, socket, head) => {
+        try {
+          const { pathname } = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+          if (pathname === path) {
+            this.wss.handleUpgrade(request, socket, head, (ws) => {
+              this.wss.emit('connection', ws, request);
+            });
+          }
+        } catch (_) {}
+      });
+    }
 
     console.log(`[OBS Sim] WebSocket Simulator listening on ${path}`);
   }

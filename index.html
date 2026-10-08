@@ -238,12 +238,18 @@
             <label style="font-size: 12px; color: var(--obs-text-gray);" for="set-pass">Server Password</label>
             <input id="set-pass" class="input-blade" type="password" placeholder="Leave empty if none" style="width: 100%; margin-top: 4px;" />
           </div>
-          <button type="submit" class="btn-blue-primary">Connect to OBS</button>
+          <button type="submit" class="btn-blue-primary">Connect to Custom OBS Host</button>
         </form>
 
-        <button id="btn-use-sim" type="button" style="background: #171f30; color: #93c5fd; border: 1px solid #253350; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 10px;">
-          ⚡ Connect to Built-in Simulator
-        </button>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+          <button id="btn-use-real-obs" type="button" style="background: #143026; color: #4ade80; border: 1px solid #166534; border-radius: 8px; padding: 11px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <span style="font-size: 14px;">🟢</span>
+            <span>Connect to Real OBS Studio (Hosted v29)</span>
+          </button>
+          <button id="btn-use-sim" type="button" style="background: #171f30; color: #93c5fd; border: 1px solid #253350; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 600; cursor: pointer;">
+            ⚡ Connect to Built-in Simulator
+          </button>
+        </div>
       </div>
     </div>
 

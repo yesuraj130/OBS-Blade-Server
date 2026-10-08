@@ -1,0 +1,7 @@
+{
+  "ServerEnabled": true,
+  "ServerPort": 4455,
+  "ServerPassword": "",
+  "AuthRequired": false,
+  "AlertsEnabled": false
+}

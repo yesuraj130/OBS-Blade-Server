@@ -13,6 +13,9 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+import { WebSocketServer, WebSocket } from 'ws';
+import { execFile } from 'child_process';
+import net from 'net';
 import { ObsWebSocketSimulator } from './.obs-websocket-simulator/simulator.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -60,7 +63,127 @@ async function startServer() {
   const simulator = new ObsWebSocketSimulator();
   simulator.attachToServer(server, '/obs-ws');
 
+  // Helper to check if internal port 4455 is accepting connections
+  function checkPort4455() {
+    return new Promise((resolve) => {
+      const sock = new net.Socket();
+      sock.setTimeout(800);
+      sock.on('connect', () => {
+        sock.destroy();
+        resolve(true);
+      });
+      sock.on('error', () => resolve(false));
+      sock.on('timeout', () => {
+        sock.destroy();
+        resolve(false);
+      });
+      sock.connect(4455, '127.0.0.1');
+    });
+  }
+
+  // Real OBS WebSocket v5 transparent proxy on /obs-real-ws
+  const realObsWss = new WebSocketServer({ noServer: true });
+
+  server.on('upgrade', (request, socket, head) => {
+    try {
+      const { pathname } = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+      if (pathname === '/obs-real-ws') {
+        realObsWss.handleUpgrade(request, socket, head, (clientWs) => {
+          realObsWss.emit('connection', clientWs, request);
+        });
+      }
+    } catch (_) {}
+  });
+
+  realObsWss.on('connection', (clientWs) => {
+    console.log('[Real OBS Proxy] Incoming client connected, bridging to 127.0.0.1:4455...');
+    const obsWs = new WebSocket('ws://127.0.0.1:4455');
+
+    obsWs.on('open', () => {
+      console.log('[Real OBS Proxy] Established bridge to local OBS Studio 4455');
+    });
+
+    obsWs.on('message', (data, isBinary) => {
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(data, { binary: isBinary });
+      }
+    });
+
+    clientWs.on('message', (data, isBinary) => {
+      if (obsWs.readyState === WebSocket.OPEN) {
+        obsWs.send(data, { binary: isBinary });
+      }
+    });
+
+    obsWs.on('close', (code, reason) => {
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.close(code, reason);
+      }
+    });
+
+    clientWs.on('close', (code, reason) => {
+      if (obsWs.readyState === WebSocket.OPEN) {
+        obsWs.close(code, reason);
+      }
+    });
+
+    obsWs.on('error', (err) => {
+      console.error('[Real OBS Proxy] Failed to connect to local OBS:', err.message);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.close(1011, `Local OBS connection error: ${err.message}`);
+      }
+    });
+
+    clientWs.on('error', (err) => {
+      console.error('[Real OBS Proxy] Client error:', err.message);
+    });
+  });
+
+  // Automatically ensure Real OBS is launched in background if script exists
+  const launcherScript = path.resolve(__dirname, '.aistudio/scripts/setup-and-start-obs.sh');
+  function triggerRealObsLaunch() {
+    if (fs.existsSync(launcherScript)) {
+      console.log('[Real OBS] Launching / verifying Real OBS daemon...');
+      execFile('bash', [launcherScript], (err, stdout, stderr) => {
+        if (err) {
+          console.warn('[Real OBS] Launch notice:', err.message);
+        } else {
+          console.log('[Real OBS] Launcher output:', stdout.trim());
+        }
+      });
+    }
+  }
+
+  // Trigger launch on server start
+  setTimeout(triggerRealObsLaunch, 500);
+
   // --- API Endpoints ---
+
+  /**
+   * Real OBS Status & Control APIs
+   */
+  app.get('/api/real-obs/status', async (_req, res) => {
+    const isOnline = await checkPort4455();
+    res.json({
+      online: isOnline,
+      port: 4455,
+      endpoint: '/obs-real-ws',
+      fullUrl: `${_req.protocol === 'https' ? 'wss' : 'ws'}://${_req.get('host')}/obs-real-ws`,
+      time: new Date().toISOString(),
+    });
+  });
+
+  app.post('/api/real-obs/start', (_req, res) => {
+    if (!fs.existsSync(launcherScript)) {
+      return res.status(404).json({ error: 'Launcher script not found' });
+    }
+    execFile('bash', [launcherScript], (err, stdout, stderr) => {
+      if (err) {
+        return res.status(500).json({ error: err.message, details: stderr });
+      }
+      res.json({ success: true, output: stdout });
+    });
+  });
 
   /**
    * Status and Server Diagnostics
