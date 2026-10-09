@@ -13,8 +13,14 @@ if (fs.existsSync(distDir)) {
 }
 fs.mkdirSync(distDir, { recursive: true });
 
-// Copy index.html and src directory
-fs.copyFileSync(path.resolve(__dirname, 'index.html'), path.join(distDir, 'index.html'));
-fs.cpSync(path.resolve(__dirname, 'src'), path.join(distDir, 'src'), { recursive: true });
+// Copy entire self-contained src directory into dist
+fs.cpSync(path.resolve(__dirname, 'src'), distDir, { recursive: true });
+
+// Also copy standalone file-browser into dist
+const fileBrowserSrc = path.resolve(__dirname, 'file-browser');
+if (fs.existsSync(fileBrowserSrc)) {
+  fs.cpSync(fileBrowserSrc, path.join(distDir, 'file-browser'), { recursive: true });
+}
 
 console.log('[Build] Successfully generated static production bundle in /dist');
+

@@ -1,0 +1,14 @@
+{
+  "name": "obs-host-file-browser",
+  "version": "1.0.0",
+  "description": "Standalone file browser and media upload server for OBS Studio",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^2.4.0"
+  }
+}

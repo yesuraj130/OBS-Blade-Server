@@ -371,7 +371,7 @@ async function startServer() {
   // --- Frontend Serving (Pure Express Static Serving - Zero Bundlers) ---
   const staticRoot = isProduction && fs.existsSync(path.resolve(__dirname, 'dist'))
     ? path.resolve(__dirname, 'dist')
-    : __dirname;
+    : path.resolve(__dirname, 'src');
 
   app.use(express.static(staticRoot));
   app.get('*', (_req, res) => {
