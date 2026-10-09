@@ -100,6 +100,9 @@ const el = {
   btnCloseSettings: document.getElementById('btn-close-settings'),
   toggleWakeLock: document.getElementById('toggle-wake-lock'),
   toggleClientStudio: document.getElementById('toggle-client-studio'),
+  inputFileServerUrl: document.getElementById('input-file-server-url'),
+  btnSaveFileServerUrl: document.getElementById('btn-save-file-server-url'),
+  linkStandaloneFileBrowser: document.getElementById('link-standalone-file-browser'),
 
   // Edit Source / Source Settings Modal (Native Dynamic OBS Properties)
   modalMediaFile: document.getElementById('modal-media-file'),
@@ -289,6 +292,22 @@ const el = {
 
 // Wake lock sentinel instance
 let wakeLockSentinel = null;
+
+// Helper to resolve the File Browser microservice URL (defaults to port 3000 on current host)
+function getFileServerApiUrl(endpoint) {
+  try {
+    const customUrl = localStorage.getItem('obs_blade_file_server_url');
+    if (customUrl && customUrl.trim()) {
+      return customUrl.trim().replace(/\/+$/, '') + endpoint;
+    }
+  } catch (_) {}
+
+  // If dashboard is served from IIS or another port (e.g. port 80/443), connect to port 3000
+  if (location.port && location.port !== '3000') {
+    return `${location.protocol}//${location.hostname}:3000${endpoint}`;
+  }
+  return endpoint;
+}
 
 export function init() {
   loadSavedCredentials();
@@ -830,6 +849,26 @@ function setupEventListeners() {
       applyAdvancedOptionsVisibility();
     });
   }
+
+  // Save File Browser Server URL handler
+  if (el.btnSaveFileServerUrl && el.inputFileServerUrl) {
+    el.btnSaveFileServerUrl.addEventListener('click', (e) => {
+      e.preventDefault();
+      const val = el.inputFileServerUrl.value.trim();
+      try {
+        if (val) {
+          localStorage.setItem('obs_blade_file_server_url', val);
+        } else {
+          localStorage.removeItem('obs_blade_file_server_url');
+        }
+        if (el.linkStandaloneFileBrowser) {
+          el.linkStandaloneFileBrowser.href = val ? `${val.replace(/\/+$/, '')}/file-browser` : '/file-browser';
+        }
+        alert('File Browser Server URL saved!');
+      } catch (_) {}
+    });
+  }
+
   // OBS Connection Modal Handlers
   if (el.btnBackConnection) {
     el.btnBackConnection.addEventListener('click', (e) => {
@@ -1232,10 +1271,16 @@ function setupEventListeners() {
       formData.append('media', file);
 
       try {
-        const response = await fetch('/api/upload', {
+        const uploadUrl = getFileServerApiUrl('/api/upload');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const response = await fetch(uploadUrl, {
           method: 'POST',
           body: formData,
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error(`Upload failed (${response.status})`);
@@ -1250,7 +1295,7 @@ function setupEventListeners() {
         }
       } catch (err) {
         console.error('[Upload Error]', err);
-        showBanner(`Upload failed: ${err.message}`, true);
+        showBanner('Not possible now since file browser server not connected', true);
       }
     });
   }
@@ -4557,12 +4602,18 @@ function closeHostFileBrowser() {
 async function loadHostDirectory(dir) {
   el.hostBrowserEntries.innerHTML = `
     <div style="text-align: center; color: var(--obs-text-gray); padding: 28px 0; font-size: 13px;">
-      Loading host directory...
+      Connecting to file browser server...
     </div>
   `;
 
   try {
-    const res = await fetch(`/api/fs/browse?dir=${encodeURIComponent(dir || '')}`);
+    const apiUrl = getFileServerApiUrl(`/api/fs/browse?dir=${encodeURIComponent(dir || '')}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const res = await fetch(apiUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
@@ -4580,10 +4631,27 @@ async function loadHostDirectory(dir) {
     renderHostEntries(data.entries || []);
   } catch (err) {
     el.hostBrowserEntries.innerHTML = `
-      <div style="text-align: center; color: var(--obs-red); padding: 24px 12px; font-size: 13px;">
-        Failed to browse host folder: ${escapeHtml(err.message)}
+      <div style="text-align: center; padding: 28px 16px; font-size: 13px; line-height: 1.6;">
+        <div style="font-size: 26px; margin-bottom: 8px;">⚠️</div>
+        <div style="font-weight: 600; color: #f87171; margin-bottom: 6px; font-size: 14px;">
+          Not possible now since file browser server not connected
+        </div>
+        <div style="color: var(--obs-text-gray); font-size: 12px; margin-bottom: 16px;">
+          Live OBS scene switching, audio, and broadcast controls remain active.
+        </div>
+        <button type="button" id="btn-retry-browse-server" class="btn-blue-primary" style="padding: 7px 18px; font-size: 12.5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+          <span>🔄</span>
+          <span>Retry Connection</span>
+        </button>
       </div>
     `;
+    const retryBtn = document.getElementById('btn-retry-browse-server');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        loadHostDirectory(dir);
+      });
+    }
   }
 }
 
@@ -4693,6 +4761,13 @@ function openSettingsModal() {
   }
   if (el.toggleAdvancedOptions) {
     el.toggleAdvancedOptions.checked = state.advancedOptionsEnabled;
+  }
+  if (el.inputFileServerUrl) {
+    const savedFileUrl = localStorage.getItem('obs_blade_file_server_url') || '';
+    el.inputFileServerUrl.value = savedFileUrl;
+    if (el.linkStandaloneFileBrowser) {
+      el.linkStandaloneFileBrowser.href = savedFileUrl ? `${savedFileUrl.replace(/\/+$/, '')}/file-browser` : '/file-browser';
+    }
   }
   el.modalSettings.classList.add('open');
 }

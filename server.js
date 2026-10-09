@@ -16,7 +16,6 @@ import multer from 'multer';
 import { WebSocketServer, WebSocket } from 'ws';
 import { execFile } from 'child_process';
 import net from 'net';
-import { ObsWebSocketSimulator } from './.obs-websocket-simulator/simulator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,12 +55,39 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Enable CORS for external callers (e.g. IIS on port 80 or network LAN clients)
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-OBS-Password');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Serve uploaded media files publicly for browser preview
   app.use('/uploads', express.static(uploadsDir));
 
-  // Initialize and attach OBS WebSocket Simulator / Bridge on /obs-ws
-  const simulator = new ObsWebSocketSimulator();
-  simulator.attachToServer(server, '/obs-ws');
+  // Serve standalone File Browser UI
+  const fileBrowserDir = path.resolve(__dirname, 'file-browser');
+  if (fs.existsSync(fileBrowserDir)) {
+    app.use('/file-browser', express.static(fileBrowserDir));
+    app.use('/files', express.static(fileBrowserDir));
+  }
+
+  // Initialize and attach OBS WebSocket Simulator only if simulator folder exists (for dev)
+  const simulatorModulePath = path.resolve(__dirname, '.obs-websocket-simulator/simulator.js');
+  if (fs.existsSync(simulatorModulePath)) {
+    try {
+      const { ObsWebSocketSimulator } = await import('./.obs-websocket-simulator/simulator.js');
+      const simulator = new ObsWebSocketSimulator();
+      simulator.attachToServer(server, '/obs-ws');
+      console.log('[Dev] Attached OBS WebSocket Simulator on /obs-ws');
+    } catch (simErr) {
+      console.warn('[Dev] Simulator module not loaded:', simErr.message);
+    }
+  }
 
   // Helper to check if internal port 4455 is accepting connections
   function checkPort4455() {

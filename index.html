@@ -211,6 +211,21 @@
               <span class="switch-slider"></span>
             </label>
           </div>
+
+          <!-- File Browser Server URL Row -->
+          <div class="settings-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+            <div class="settings-row-text">
+              <span class="settings-row-label">File Browser Server URL</span>
+              <span class="settings-row-desc">Address of the file server for media uploads & browsing (default: port 3000).</span>
+            </div>
+            <div style="display: flex; gap: 8px; width: 100%;">
+              <input type="text" id="input-file-server-url" class="input-blade" placeholder="http://localhost:3000" style="flex: 1;" />
+              <button type="button" id="btn-save-file-server-url" class="btn-blue-primary" style="padding: 6px 14px; font-size: 12px;">Save</button>
+            </div>
+            <a id="link-standalone-file-browser" href="/file-browser" target="_blank" style="font-size: 11.5px; color: var(--obs-blue); text-decoration: none; margin-top: 4px;">
+              📁 Open Standalone File Browser ↗
+            </a>
+          </div>
         </div>
       </div>
     </div>
