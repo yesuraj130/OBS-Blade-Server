@@ -54,12 +54,18 @@ app.use(express.static(__dirname));
 /**
  * Health Check API
  */
-app.get('/api/status', (_req, res) => {
+app.get('/api/status', (req, res) => {
+  const reqPass = req.headers['x-obs-password'] || req.query.password || '';
+  const configuredPass = process.env.FILE_SERVER_PASSWORD || process.env.OBS_PASSWORD || '';
+  const authValid = !configuredPass || reqPass === configuredPass;
+
   res.json({
     service: 'OBS Host File Browser',
     status: 'online',
     port: PORT,
     uploadsDir,
+    authRequired: Boolean(configuredPass),
+    authValid: authValid,
     time: new Date().toISOString(),
   });
 });

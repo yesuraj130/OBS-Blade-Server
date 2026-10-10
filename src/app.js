@@ -79,6 +79,10 @@ const el = {
   setIp: document.getElementById('set-ip'),
   setPort: document.getElementById('set-port'),
   setPass: document.getElementById('set-pass'),
+  setFileUrl: document.getElementById('set-file-url'),
+  chkFileSamePass: document.getElementById('chk-file-same-pass'),
+  rowFilePass: document.getElementById('row-file-pass'),
+  setFilePass: document.getElementById('set-file-pass'),
   btnUseRealObs: document.getElementById('btn-use-real-obs'),
   btnUseSim: document.getElementById('btn-use-sim'),
 
@@ -100,9 +104,6 @@ const el = {
   btnCloseSettings: document.getElementById('btn-close-settings'),
   toggleWakeLock: document.getElementById('toggle-wake-lock'),
   toggleClientStudio: document.getElementById('toggle-client-studio'),
-  inputFileServerUrl: document.getElementById('input-file-server-url'),
-  btnSaveFileServerUrl: document.getElementById('btn-save-file-server-url'),
-  linkStandaloneFileBrowser: document.getElementById('link-standalone-file-browser'),
 
   // Edit Source / Source Settings Modal (Native Dynamic OBS Properties)
   modalMediaFile: document.getElementById('modal-media-file'),
@@ -309,6 +310,97 @@ function getFileServerApiUrl(endpoint) {
   return endpoint;
 }
 
+// Helper to resolve the active File Browser password
+function getFileServerPassword() {
+  try {
+    const same = localStorage.getItem('obs_blade_file_same_pass') !== 'false';
+    if (same) {
+      return state.password || localStorage.getItem('obs_blade_pw') || '';
+    }
+    return localStorage.getItem('obs_blade_file_pw') || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// Non-blocking asynchronous verification of File Browser server upon OBS connection
+async function checkFileBrowserStatus(customUrl, password) {
+  const fileUrl = customUrl || localStorage.getItem('obs_blade_file_server_url') || (location.port !== '3000' ? `${location.protocol}//${location.hostname}:3000` : '');
+  if (!fileUrl) return;
+
+  const targetUrl = fileUrl.replace(/\/+$/, '') + '/api/status';
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const headers = password ? { 'X-OBS-Password': password } : {};
+    const res = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        showGlobalNotice(`⚠️ Connected to OBS, but File Browser password was incorrect (${res.status}).`, true);
+      } else {
+        showGlobalNotice(`⚠️ Connected to OBS, but File Browser returned error HTTP ${res.status}.`, true);
+      }
+      return;
+    }
+
+    const data = await res.json();
+    if (data.authValid === false) {
+      showGlobalNotice(`⚠️ Connected to OBS, but File Browser password did not match.`, true);
+    } else {
+      console.log('[File Server] Verified connection to', fileUrl);
+      showGlobalNotice(`✓ Connected to OBS & File Browser server`, false);
+    }
+  } catch (err) {
+    console.warn('[File Server Notice]', err.message);
+    showGlobalNotice(`Notice: Connected to OBS. File Browser server unreachable at ${fileUrl} (media uploads disabled).`, false, 6000);
+  }
+}
+
+// Global non-intrusive floating toast notice
+function showGlobalNotice(message, isError = false, duration = 4500) {
+  let toast = document.getElementById('global-obs-notice-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'global-obs-notice-toast';
+    toast.style.position = 'fixed';
+    toast.style.top = '16px';
+    toast.style.left = '50%';
+    toast.style.transform = 'translateX(-50%)';
+    toast.style.zIndex = '99999';
+    toast.style.maxWidth = '90vw';
+    toast.style.padding = '10px 18px';
+    toast.style.borderRadius = '8px';
+    toast.style.fontSize = '12.5px';
+    toast.style.fontWeight = '500';
+    toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.5)';
+    toast.style.display = 'flex';
+    toast.style.alignItems = 'center';
+    toast.style.gap = '8px';
+    toast.style.transition = 'opacity 0.3s ease';
+    document.body.appendChild(toast);
+  }
+
+  toast.style.background = isError ? '#3f1212' : '#14291f';
+  toast.style.color = isError ? '#fca5a5' : '#86efac';
+  toast.style.border = `1px solid ${isError ? '#991b1b' : '#166534'}`;
+  toast.textContent = message;
+  toast.style.opacity = '1';
+  toast.style.display = 'flex';
+
+  setTimeout(() => {
+    if (toast && toast.textContent === message) {
+      toast.style.opacity = '0';
+      setTimeout(() => { toast.style.display = 'none'; }, 300);
+    }
+  }, duration);
+}
+
 export function init() {
   loadSavedCredentials();
   loadSavedPreferences();
@@ -401,6 +493,9 @@ function loadSavedCredentials() {
     const host = localStorage.getItem('obs_blade_ip');
     const port = localStorage.getItem('obs_blade_port');
     const pass = localStorage.getItem('obs_blade_pw');
+    const fileUrl = localStorage.getItem('obs_blade_file_server_url') || '';
+    const samePass = localStorage.getItem('obs_blade_file_same_pass') !== 'false';
+    const filePass = localStorage.getItem('obs_blade_file_pw') || '';
 
     if (host) {
       el.setIp.value = host;
@@ -412,16 +507,32 @@ function loadSavedCredentials() {
       const protocol = isSecure && host === location.hostname ? 'wss://' : 'ws://';
       state.url = `${protocol}${host}:${port || '4455'}`;
     }
+
+    if (el.setFileUrl) el.setFileUrl.value = fileUrl;
+    if (el.chkFileSamePass) el.chkFileSamePass.checked = samePass;
+    if (el.setFilePass) el.setFilePass.value = filePass;
+    if (el.rowFilePass) el.rowFilePass.style.display = samePass ? 'none' : 'block';
   } catch (e) {
     console.warn(e);
   }
 }
 
-function saveCredentials(host, port, pass) {
+function saveCredentials(host, port, pass, fileUrl = '', samePass = true, filePass = '') {
   try {
     localStorage.setItem('obs_blade_ip', host);
     localStorage.setItem('obs_blade_port', port);
     localStorage.setItem('obs_blade_pw', pass);
+    if (fileUrl) {
+      localStorage.setItem('obs_blade_file_server_url', fileUrl);
+    } else {
+      localStorage.removeItem('obs_blade_file_server_url');
+    }
+    localStorage.setItem('obs_blade_file_same_pass', String(samePass));
+    if (!samePass && filePass) {
+      localStorage.setItem('obs_blade_file_pw', filePass);
+    } else {
+      localStorage.removeItem('obs_blade_file_pw');
+    }
   } catch (e) {}
 }
 
@@ -850,22 +961,10 @@ function setupEventListeners() {
     });
   }
 
-  // Save File Browser Server URL handler
-  if (el.btnSaveFileServerUrl && el.inputFileServerUrl) {
-    el.btnSaveFileServerUrl.addEventListener('click', (e) => {
-      e.preventDefault();
-      const val = el.inputFileServerUrl.value.trim();
-      try {
-        if (val) {
-          localStorage.setItem('obs_blade_file_server_url', val);
-        } else {
-          localStorage.removeItem('obs_blade_file_server_url');
-        }
-        if (el.linkStandaloneFileBrowser) {
-          el.linkStandaloneFileBrowser.href = val ? `${val.replace(/\/+$/, '')}/file-browser` : '/file-browser';
-        }
-        alert('File Browser Server URL saved!');
-      } catch (_) {}
+  // Toggle custom file server password row
+  if (el.chkFileSamePass && el.rowFilePass) {
+    el.chkFileSamePass.addEventListener('change', (e) => {
+      el.rowFilePass.style.display = e.target.checked ? 'none' : 'block';
     });
   }
 
@@ -889,8 +988,11 @@ function setupEventListeners() {
       let host = el.setIp.value.trim() || '127.0.0.1';
       const port = el.setPort.value.trim() || '4455';
       const pass = el.setPass.value;
+      const fileUrl = el.setFileUrl ? el.setFileUrl.value.trim() : '';
+      const fileSamePass = el.chkFileSamePass ? el.chkFileSamePass.checked : true;
+      const filePass = el.setFilePass ? el.setFilePass.value : '';
 
-      saveCredentials(host, port, pass);
+      saveCredentials(host, port, pass, fileUrl, fileSamePass, filePass);
       if (host.startsWith('ws://') || host.startsWith('wss://')) {
         state.url = host;
       } else {
@@ -902,6 +1004,9 @@ function setupEventListeners() {
 
       state.obs.connect(state.url, state.password);
       closeConnectionModal();
+
+      // Non-blocking asynchronous verification of File Browser server
+      checkFileBrowserStatus(fileUrl, fileSamePass ? pass : filePass);
     });
   }
 
@@ -1275,10 +1380,14 @@ function setupEventListeners() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 12000);
 
+        const filePw = getFileServerPassword();
+        const headers = filePw ? { 'X-OBS-Password': filePw } : {};
+
         const response = await fetch(uploadUrl, {
           method: 'POST',
           body: formData,
           signal: controller.signal,
+          headers,
         });
         clearTimeout(timeoutId);
 
@@ -4611,7 +4720,10 @@ async function loadHostDirectory(dir) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-    const res = await fetch(apiUrl, { signal: controller.signal });
+    const filePw = getFileServerPassword();
+    const headers = filePw ? { 'X-OBS-Password': filePw } : {};
+
+    const res = await fetch(apiUrl, { signal: controller.signal, headers });
     clearTimeout(timeoutId);
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -4761,13 +4873,6 @@ function openSettingsModal() {
   }
   if (el.toggleAdvancedOptions) {
     el.toggleAdvancedOptions.checked = state.advancedOptionsEnabled;
-  }
-  if (el.inputFileServerUrl) {
-    const savedFileUrl = localStorage.getItem('obs_blade_file_server_url') || '';
-    el.inputFileServerUrl.value = savedFileUrl;
-    if (el.linkStandaloneFileBrowser) {
-      el.linkStandaloneFileBrowser.href = savedFileUrl ? `${savedFileUrl.replace(/\/+$/, '')}/file-browser` : '/file-browser';
-    }
   }
   el.modalSettings.classList.add('open');
 }

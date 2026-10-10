@@ -27,9 +27,14 @@ npm install
 ```
 
 ### 3. Start the Server
-```bash
-npm start
-```
+You have three easy ways to start the server:
+
+* **Double-click `StartServer.bat`**: Opens a terminal window and starts the service.
+* **Double-click `StartServer.vbs`**: Starts the service **silently in the background** without keeping a command prompt open.
+* **Or run via command line**:
+  ```bash
+  npm start
+  ```
 *(Runs by default on port `3000`. You can change the port with `PORT=3000`)*
 
 ---
@@ -37,9 +42,7 @@ npm start
 ## Connecting from OBS Blade Dashboard (IIS)
 
 In your OBS Blade Web Dashboard (running on IIS or another device):
-* Open **Settings** (••• > Settings).
-* Set **File Browser Server URL** to:
-  ```
-  http://<this-machine-ip>:3000
-  ```
-* Media uploads and file browsing will immediately connect to this server!
+* In the **OBS Connection dialog**, enter your OBS IP/Port/Password.
+* Enter the **File Browser Server URL** (e.g. `http://<this-machine-ip>:3000`).
+* Keep **"Same password as OBS"** checked (or specify a custom password).
+* When you connect, the dashboard automatically verifies the file service in the background!

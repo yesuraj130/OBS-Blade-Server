@@ -116,14 +116,12 @@ The web application is pure static HTML/JavaScript. It requires **no Node.js, no
 *(Optional: Only needed if operators need to upload media or browse host files from their mobile browser).*
 
 1. Copy the **`/file-browser/`** folder to the computer where media files will be stored (usually the OBS computer).
-2. Open a command prompt inside that folder:
-   ```bash
-   cd file-browser
-   npm install
-   npm start
-   ```
+2. Start the service using any method:
+   * **Double-click `StartServer.bat`** (Windows command prompt launcher with auto npm install check).
+   * **Double-click `StartServer.vbs`** (silent background Windows launcher; no black window).
+   * Or run `npm install && npm start` in terminal.
 3. The file service is now running on port `3000`.
-4. *(Optional Windows Auto-Start)*: Use **NSSM (Non-Sucking Service Manager)** or Windows Task Scheduler to run `node server.js` automatically on Windows boot.
+4. *(Optional Windows Auto-Start)*: Use **NSSM (Non-Sucking Service Manager)** or Windows Task Scheduler to run `StartServer.bat` automatically on Windows boot.
 
 ---
 
@@ -134,17 +132,14 @@ The web application is pure static HTML/JavaScript. It requires **no Node.js, no
    ```text
    http://<iis-server-ip>/
    ```
-3. Click the **Connect** button or open the connection dialog:
+3. In the **OBS Connection Dialog**:
    * **OBS IP Address**: The local IP of your OBS Studio PC (e.g. `192.168.1.50`).
    * **WebSocket Port**: `4455`.
    * **Server Password**: Your OBS WebSocket password (if enabled).
-   * Click **Connect**. The status indicator will turn green (`🟢 Live`).
-4. In the top-right menu (•••) > **Settings**:
-   * Under **File Browser Server URL**, enter:
-     ```text
-     http://<file-server-ip>:3000
-     ```
-   * Click **Save**.
+   * **File Browser Server URL**: e.g. `http://192.168.1.50:3000` (optional).
+   * **Same password as OBS**: Checked by default (or uncheck to provide a custom file server password).
+   * Click **Connect**.
+4. The dashboard will immediately connect to OBS, and automatically verifies the file service in the background! (Non-blocking: live broadcast controls remain 100% active even if the file service is offline).
 
 Your studio remote is now 100% operational!
 
