@@ -7,6 +7,7 @@
 export class ObsClient {
   constructor() {
     this.ws = null;
+    this.url = '';
     this.status = 'disconnected'; // 'disconnected' | 'connecting' | 'connected'
     this.password = '';
     this.requestCounter = 0;
@@ -16,6 +17,10 @@ export class ObsClient {
     this.currentProgramScene = '';
     this.currentPreviewScene = '';
     this.scenes = [];
+    this.autoReconnect = true;
+    this.reconnectTimer = null;
+    this.reconnectAttempts = 0;
+    this.isManualDisconnect = false;
   }
 
   on(event, callback) {
@@ -53,21 +58,38 @@ export class ObsClient {
    * Connect to OBS WebSocket Server
    * @param {string} url - ws:// or wss:// URL
    * @param {string} [password=''] - OBS WebSocket server password
+   * @param {boolean} [isAutoRetry=false] - Whether this connection is triggered by auto-retry
    */
-  connect(url, password = '') {
-    if (this.ws) {
-      try {
-        this.ws.close();
-      } catch (_) {}
+  connect(url, password = '', isAutoRetry = false) {
+    if (!isAutoRetry) {
+      this.isManualDisconnect = false;
+      this.reconnectAttempts = 0;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
 
-    this.password = password || '';
+    if (this.ws) {
+      try {
+        this.ws.onopen = null;
+        this.ws.onclose = null;
+        this.ws.onerror = null;
+        this.ws.onmessage = null;
+        this.ws.close();
+      } catch (_) {}
+      this.ws = null;
+    }
+
+    if (url) this.url = url;
+    if (password != null) this.password = password;
     this.setStatus('connecting');
 
     try {
-      this.ws = new WebSocket(url);
+      this.ws = new WebSocket(this.url);
     } catch (err) {
       this.setStatus('disconnected', err.message);
+      this.scheduleAutoReconnect();
       return;
     }
 
@@ -78,11 +100,13 @@ export class ObsClient {
     this.ws.onclose = (e) => {
       this.setStatus('disconnected', e.reason || 'Connection closed');
       this.rejectPendingRequests('WebSocket closed');
+      this.scheduleAutoReconnect();
     };
 
     this.ws.onerror = (err) => {
       this.setStatus('disconnected', 'Network error or connection refused');
       this.rejectPendingRequests('WebSocket connection error');
+      this.scheduleAutoReconnect();
     };
 
     this.ws.onmessage = async (event) => {
@@ -95,9 +119,30 @@ export class ObsClient {
     };
   }
 
-  disconnect() {
+  scheduleAutoReconnect() {
+    if (this.isManualDisconnect || !this.autoReconnect || !this.url) return;
+    if (this.reconnectTimer) return;
+
+    // Exponential backoff: 1.5s, 2.25s, 3.4s, 5.1s, max 8s
+    const delay = Math.min(1500 * Math.pow(1.5, Math.min(this.reconnectAttempts++, 5)), 8000);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.isManualDisconnect && this.status === 'disconnected') {
+        console.log(`[OBS Client] Attempting auto-reconnect (${this.url})...`);
+        this.connect(this.url, this.password, true);
+      }
+    }, delay);
+  }
+
+  disconnect(isManual = true) {
+    this.isManualDisconnect = isManual;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       try {
+        this.ws.onopen = null;
         this.ws.onclose = null;
         this.ws.onerror = null;
         this.ws.onmessage = null;
@@ -107,6 +152,45 @@ export class ObsClient {
     }
     this.setStatus('disconnected');
     this.rejectPendingRequests('Client disconnected');
+  }
+
+  /**
+   * Check connection health (e.g. when tab becomes active / visible)
+   * If socket is closed or unresponsive, immediately initiates reconnection.
+   */
+  async checkConnectionHealth() {
+    if (this.isManualDisconnect) return false;
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || this.status !== 'connected') {
+      console.log('[OBS Client] Socket not connected during health check. Reconnecting immediately...');
+      if (this.url) {
+        this.connect(this.url, this.password, false);
+      }
+      return false;
+    }
+
+    // Socket claims to be OPEN, verify responsiveness via quick GetVersion
+    try {
+      const pingPromise = this.request('GetVersion');
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Health check timeout')), 1800)
+      );
+      await Promise.race([pingPromise, timeoutPromise]);
+      // Active! Re-sync initial state to reflect any background updates
+      await this.syncInitialState();
+      return true;
+    } catch (err) {
+      console.warn('[OBS Client] Socket failed health check (zombie/silent drop). Reconnecting...', err);
+      if (this.ws) {
+        try {
+          this.ws.close();
+        } catch (_) {}
+      }
+      if (this.url) {
+        this.connect(this.url, this.password, false);
+      }
+      return false;
+    }
   }
 
   rejectPendingRequests(reason) {
@@ -131,6 +215,11 @@ export class ObsClient {
 
     // OpCode 2: Identified
     if (op === 2) {
+      this.reconnectAttempts = 0;
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
       this.setStatus('connected');
       await this.syncInitialState();
       return;

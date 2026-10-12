@@ -481,11 +481,46 @@ async function releaseWakeLock() {
   }
 }
 
-// Re-acquire wake lock if tab becomes visible again
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && state.wakeLockEnabled) {
+// Re-acquire wake lock & automatically re-connect / health-check OBS WebSocket when tab becomes active
+async function handleTabActive() {
+  if (state.wakeLockEnabled) {
     requestWakeLock();
   }
+
+  // If user deliberately opened connection modal, don't interrupt them
+  const isConnModalOpen = el.modalConnection && el.modalConnection.classList.contains('open');
+  if (isConnModalOpen) return;
+
+  console.log('[App] Tab active / visible. Checking OBS connection health...');
+  if (state.obs.status !== 'connected' || !state.obs.ws || state.obs.ws.readyState !== WebSocket.OPEN) {
+    if (state.url) {
+      state.obs.connect(state.url, state.password, false);
+    } else {
+      connectToLocalSimulator();
+    }
+  } else {
+    // Check health & re-sync initial state
+    state.obs.checkConnectionHealth();
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    handleTabActive();
+  }
+});
+
+window.addEventListener('focus', () => {
+  handleTabActive();
+});
+
+window.addEventListener('pageshow', () => {
+  handleTabActive();
+});
+
+window.addEventListener('online', () => {
+  console.log('[App] Network recovered online.');
+  handleTabActive();
 });
 
 function loadSavedCredentials() {
@@ -595,6 +630,7 @@ function connectToRealObs() {
 function setupObsEvents() {
   state.obs.on('status', ({ status, error }) => {
     if (status === 'connected') {
+      state.hasFallenBackToSimulator = false;
       const isReal = state.url && state.url.includes('/obs-real-ws');
       el.navTopTitle.textContent = isReal ? 'OBS Studio 29 (Live)' : 'OBS Dashboard';
     } else if (status === 'connecting') {
@@ -2406,12 +2442,15 @@ function syncStudioModeCheckbox() {
 }
 
 // 2. Render Top Scene Buttons Grid (4 Columns, with visibility filter)
+// OBS WebSocket v5 returns scenes array from bottom to top.
+// We reverse the array to match OBS Studio's top-to-bottom dock order 1:1.
 function renderTopSceneButtons() {
   el.scenesGridTop.innerHTML = '';
 
-  const visibleScenes = state.scenes.filter(
-    (s) => !state.hiddenSceneButtons.has(s.sceneName)
-  );
+  const visibleScenes = state.scenes
+    .slice()
+    .reverse()
+    .filter((s) => !state.hiddenSceneButtons.has(s.sceneName));
 
   visibleScenes.forEach((scene) => {
     const isProgram = scene.sceneName === state.currentProgramScene;
@@ -2480,13 +2519,16 @@ function getCurrentTargetScene() {
 }
 
 // 4. Render Category / Scene Text Tabs (with dynamic "Current" tab as the last tab and organic flow)
+// OBS WebSocket v5 returns scenes array from bottom to top.
+// We reverse the array to match OBS Studio's top-to-bottom dock order 1:1.
 function renderCategoryGrid() {
   el.categoryTextGrid.innerHTML = '';
 
-  // 1. Individual Pinned Scene Tabs (do not change when active scene changes)
-  const visibleTabs = state.scenes.filter(
-    (s) => !state.hiddenSceneTabs.has(s.sceneName)
-  );
+  // 1. Individual Pinned Scene Tabs (matching OBS Studio GUI scene order)
+  const visibleTabs = state.scenes
+    .slice()
+    .reverse()
+    .filter((s) => !state.hiddenSceneTabs.has(s.sceneName));
 
   visibleTabs.forEach((scene) => {
     const btn = document.createElement('button');
@@ -2777,7 +2819,12 @@ function renderSourcesList(sceneName, items) {
     return;
   }
 
-  items.forEach((item) => {
+  // OBS WebSocket v5 returns sceneItems in bottom-to-top Z-order (index 0 is bottom layer).
+  // In OBS Studio GUI, sources are displayed top-to-bottom (foreground to background).
+  // We reverse the array to match OBS Studio's Sources dock 1:1.
+  const displayItems = items.slice().reverse();
+
+  displayItems.forEach((item) => {
     const row = document.createElement('div');
     row.className = 'source-item-row-blade';
     row.setAttribute('data-source-name', item.sourceName);
@@ -2864,7 +2911,7 @@ function renderSourcesList(sceneName, items) {
 function openEditScenesModal() {
   el.editScenesCheckboxList.innerHTML = '';
 
-  state.scenes.forEach((scene) => {
+  state.scenes.slice().reverse().forEach((scene) => {
     const isVisible = !state.hiddenSceneButtons.has(scene.sceneName);
 
     const row = document.createElement('div');
@@ -2904,7 +2951,7 @@ function closeEditScenesModal() {
 function openEditTabsModal() {
   el.editTabsCheckboxList.innerHTML = '';
 
-  state.scenes.forEach((scene) => {
+  state.scenes.slice().reverse().forEach((scene) => {
     const isVisible = !state.hiddenSceneTabs.has(scene.sceneName);
 
     const row = document.createElement('div');
