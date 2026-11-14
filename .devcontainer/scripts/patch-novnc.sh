@@ -8,8 +8,9 @@ if [ ! -f "$UI_JS" ]; then
 fi
 
 echo "[noVNC Patch] Applying seamless clipboard sync patch to $UI_JS..."
-node -e '
+node --experimental-vm-modules -e '
 const fs = require("fs");
+const vm = require("vm");
 const file = process.argv[1];
 let code = fs.readFileSync(file, "utf8");
 
@@ -23,20 +24,33 @@ if (!code.includes("/* PATCHED_SEAMLESS_CLIPBOARD_RECEIVE */")) {
   );
 }
 
-if (!code.includes("/* PATCHED_SEAMLESS_CLIPBOARD_SEND */")) {
-  code = code.replace(
-    /addClipboardHandlers\(\)\s*\{/,
-    `addClipboardHandlers() { /* PATCHED_SEAMLESS_CLIPBOARD_SEND */
+// Clean and safe replacement for addClipboardHandlers
+const newClipboardHandlers = `addClipboardHandlers() { /* PATCHED_SEAMLESS_CLIPBOARD_SEND */
         window.addEventListener("paste", (e) => {
             if (e.target && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")) return;
             const text = (e.clipboardData || window.clipboardData)?.getData("text");
             if (text && UI.rfb) {
                 UI.rfb.clipboardPasteFrom(text);
             }
-        });`
-  );
+        });
+        document.getElementById("noVNC_clipboard_button")
+            .addEventListener(\x27click\x27, UI.toggleClipboardPanel);
+        document.getElementById("noVNC_clipboard_text")
+            .addEventListener(\x27change\x27, UI.clipboardSend);
+        document.getElementById("noVNC_clipboard_clear_button")
+            .addEventListener(\x27click\x27, UI.clipboardClear);
+    },`;
+
+code = code.replace(/addClipboardHandlers\(\)\s*\{[\s\S]*?addSettingChangeHandler/, newClipboardHandlers + "\n\n    addSettingChangeHandler");
+
+// Verify syntax
+try {
+  new vm.SourceTextModule(code);
+} catch (err) {
+  console.error("[noVNC Patch] Syntax verification error:", err.message);
+  process.exit(1);
 }
 
 fs.writeFileSync(file, code);
-console.log("[noVNC Patch] Successfully patched " + file);
+console.log("[noVNC Patch] Successfully verified and patched " + file);
 ' "$UI_JS"
