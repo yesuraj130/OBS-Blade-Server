@@ -1,0 +1,24 @@
+{
+  "name": "OBS Blade & OBS Studio 29 Desktop",
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
+  "forwardPorts": [3000, 4455, 5901, 6080],
+  "portsAttributes": {
+    "3000": {
+      "label": "OBS Blade Web & File Browser",
+      "onAutoForward": "openBrowser"
+    },
+    "6080": {
+      "label": "noVNC Remote Desktop",
+      "onAutoForward": "silent"
+    },
+    "4455": {
+      "label": "OBS WebSocket v5",
+      "onAutoForward": "silent"
+    },
+    "5901": {
+      "label": "TigerVNC Server",
+      "onAutoForward": "silent"
+    }
+  }
+}
