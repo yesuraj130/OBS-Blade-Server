@@ -8,10 +8,22 @@ This folder is **completely detached from OBS Studio**. It runs independently on
 
 ## What This Service Does
 
-1. **Media Uploads (`POST /api/upload`)**: Saves video, audio, and image files to `./uploads` and returns the exact absolute disk path needed by OBS Studio sources.
-2. **Filesystem Browsing (`GET /api/fs/browse`)**: Allows remote web clients to browse folders on the host machine.
-3. **Media Library (`GET /api/media`)**: Lists and previews all uploaded files.
-4. **Standalone Web Manager**: Provides an independent drag-and-drop web UI at `http://<this-machine-ip>:3000`.
+1. **Media Uploads (`POST /api/upload`)**: Streams video, audio, and image files directly to `./uploads` (low RAM usage) and returns the exact absolute disk path needed by OBS Studio sources.
+2. **Filesystem & All-Drives Browsing (`GET /api/fs/browse`)**: Allows remote web clients to browse folders and all mounted Windows drives (`C:\`, `D:\`, etc.) on the host machine.
+3. **Low-Memory Media Preview (`GET /api/fs/preview`)**: Streams images, audio, and video via HTTP Range requests (`206 Partial Content`) without buffering files into memory.
+4. **Locked Delete Protection (`DELETE /api/fs/file`, `DELETE /api/media/:filename`)**: Disabled until explicitly unlocked in the UI, and restricted to `./uploads` by default unless `ALLOW_SYSTEM_DELETE=true`.
+5. **Standalone Web Manager**: Provides an independent drag-and-drop web UI at `http://<this-machine-ip>:3000`.
+
+---
+
+## Configuration (Environment Variables)
+
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `PORT` | `3000` | HTTP port to listen on |
+| `FILE_SERVER_PASSWORD` (or `OBS_PASSWORD`) | *(empty)* | Enforces password authentication across all upload, browse, preview, and delete endpoints |
+| `MAX_UPLOAD_MB` | `2048` | Maximum single upload file size in MB (default 2 GB) |
+| `ALLOW_SYSTEM_DELETE` | `false` | Set `true` to allow deleting files outside `./uploads` when unlocked |
 
 ---
 
@@ -20,22 +32,16 @@ This folder is **completely detached from OBS Studio**. It runs independently on
 ### 1. Copy This Folder
 Copy the entire `file-browser` folder to the target machine where media will be stored or where OBS is running.
 
-### 2. Install Dependencies
-Open a command prompt or terminal in this folder:
-```bash
-npm install
-```
-
-### 3. Start the Server
+### 2. Start the Server
 You have three easy ways to start the server:
 
-* **Double-click `StartServer.bat`**: Opens a terminal window and starts the service.
-* **Double-click `StartServer.vbs`**: Starts the service **silently in the background** without keeping a command prompt open.
+* **Double-click `StartServer.bat`**: Installs production dependencies on first run, opens a terminal window, and starts the service.
+* **Double-click `StartServer.vbs`**: Silently verifies Node.js, installs dependencies on first run if missing, starts the service in the background with `server.log` rotation, and confirms startup.
 * **Or run via command line**:
   ```bash
+  npm install --omit=dev
   npm start
   ```
-*(Runs by default on port `3000`. You can change the port with `PORT=3000`)*
 
 ---
 
@@ -45,4 +51,4 @@ In your OBS Blade Web Dashboard (running on IIS or another device):
 * In the **OBS Connection dialog**, enter your OBS IP/Port/Password.
 * Enter the **File Browser Server URL** (e.g. `http://<this-machine-ip>:3000`).
 * Keep **"Same password as OBS"** checked (or specify a custom password).
-* When you connect, the dashboard automatically verifies the file service in the background!
+* When you connect, the dashboard automatically verifies the file service in the background.

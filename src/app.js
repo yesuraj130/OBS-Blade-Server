@@ -158,6 +158,10 @@ const el = {
   hostBrowserEntries: document.getElementById('host-browser-entries'),
   hostBrowserFooter: document.getElementById('host-browser-footer'),
   btnSelectCurrentFolder: document.getElementById('btn-select-current-folder'),
+  modalLargeUploadConfirm: document.getElementById('modal-large-upload-confirm'),
+  largeUploadConfirmBody: document.getElementById('large-upload-confirm-body'),
+  btnCancelLargeUpload: document.getElementById('btn-cancel-large-upload'),
+  btnConfirmLargeUpload: document.getElementById('btn-confirm-large-upload'),
 
   // Context Menu
   contextMenuPopover: document.getElementById('context-menu-popover'),
@@ -294,6 +298,8 @@ const el = {
 // Wake lock sentinel instance
 let wakeLockSentinel = null;
 
+let fileServerMaxUploadMb = 2048;
+
 // Helper to resolve the File Browser microservice URL (defaults to port 3000 on current host)
 function getFileServerApiUrl(endpoint) {
   try {
@@ -303,8 +309,8 @@ function getFileServerApiUrl(endpoint) {
     }
   } catch (_) {}
 
-  // If dashboard is served from IIS or another port (e.g. port 80/443), connect to port 3000
-  if (location.port && location.port !== '3000') {
+  // If dashboard is served from IIS or another port (e.g. port 80/443 where location.port is ""), connect to port 3000
+  if (location.port !== '3000') {
     return `${location.protocol}//${location.hostname}:3000${endpoint}`;
   }
   return endpoint;
@@ -350,6 +356,9 @@ async function checkFileBrowserStatus(customUrl, password) {
     }
 
     const data = await res.json();
+    if (typeof data.maxUploadMb === 'number' && data.maxUploadMb > 0) {
+      fileServerMaxUploadMb = data.maxUploadMb;
+    }
     if (data.authValid === false) {
       showGlobalNotice(`⚠️ Connected to OBS, but File Browser password did not match.`, true);
     } else {
@@ -1398,7 +1407,7 @@ function setupEventListeners() {
     });
   }
 
-  // Local File Input Change Handler (uploads to host and updates field)
+  // Local File Input Change Handler (uploads to host with >100 MB prompt & progress)
   if (el.propLocalFileInput) {
     el.propLocalFileInput.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
@@ -1407,31 +1416,41 @@ function setupEventListeners() {
       const isEditMediaOpen = el.modalEditMedia && el.modalEditMedia.classList.contains('open');
       const showBanner = isEditMediaOpen ? showEditMediaBanner : showPropertiesBanner;
 
-      showBanner(`Uploading "${file.name}" to OBS host...`, false);
+      const maxBytes = fileServerMaxUploadMb * 1024 * 1024;
+      if (file.size > maxBytes) {
+        showBanner(
+          `File "${file.name}" (${formatFileSize(file.size)}) exceeds server limit of ${fileServerMaxUploadMb} MB.`,
+          true
+        );
+        el.propLocalFileInput.value = '';
+        return;
+      }
+
+      if (file.size > 100 * 1024 * 1024) {
+        const proceed = await confirmLargeFileUpload(file, fileServerMaxUploadMb);
+        if (!proceed) {
+          el.propLocalFileInput.value = '';
+          showBanner('Large file upload cancelled.', false);
+          return;
+        }
+      }
+
+      showBanner(`Uploading "${file.name}" to OBS host (0%)...`, false);
       const formData = new FormData();
       formData.append('media', file);
 
       try {
         const uploadUrl = getFileServerApiUrl('/api/upload');
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-
         const filePw = getFileServerPassword();
-        const headers = filePw ? { 'X-OBS-Password': filePw } : {};
 
-        const response = await fetch(uploadUrl, {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal,
-          headers,
+        const data = await uploadFileWithProgress(uploadUrl, formData, filePw, (loaded, total) => {
+          const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+          showBanner(
+            `Uploading "${file.name}"... ${pct}% (${formatFileSize(loaded)} / ${formatFileSize(total)})`,
+            false
+          );
         });
-        clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          throw new Error(`Upload failed (${response.status})`);
-        }
-
-        const data = await response.json();
         showBanner(`✓ Uploaded "${file.name}" to host!`, false);
 
         if (activeLocalUploadCallback) {
@@ -1440,7 +1459,13 @@ function setupEventListeners() {
         }
       } catch (err) {
         console.error('[Upload Error]', err);
-        showBanner('Not possible now since file browser server not connected', true);
+        if (err && err.httpStatus) {
+          showBanner(err.message, true);
+        } else {
+          showBanner('Not possible now since file browser server not connected', true);
+        }
+      } finally {
+        el.propLocalFileInput.value = '';
       }
     });
   }
@@ -4716,6 +4741,76 @@ async function resetPropertiesDefaults() {
   showPropertiesBanner('Reset to default values. Click "Apply Changes" to save to OBS.', false);
 }
 
+// Confirmation modal helper for >100 MB uploads
+function confirmLargeFileUpload(file, maxMb) {
+  return new Promise((resolve) => {
+    if (!el.modalLargeUploadConfirm || !el.largeUploadConfirmBody) {
+      resolve(true);
+      return;
+    }
+
+    el.largeUploadConfirmBody.innerHTML = `
+      <p><strong>${escapeHtml(file.name)}</strong> is <strong>${escapeHtml(formatFileSize(file.size))}</strong>.</p>
+      <ul style="margin: 8px 0 0 18px; color: var(--obs-text-gray); font-size: 12.5px;">
+        <li>Uploading files larger than 100 MB over Wi-Fi may take several minutes.</li>
+        <li>Server max upload size: <strong>${escapeHtml(String(maxMb))} MB</strong>.</li>
+        <li>Keep this browser tab open until the upload completes.</li>
+      </ul>
+    `;
+    el.modalLargeUploadConfirm.classList.add('open');
+
+    const cleanup = (accepted) => {
+      el.modalLargeUploadConfirm.classList.remove('open');
+      el.btnConfirmLargeUpload.removeEventListener('click', onConfirm);
+      el.btnCancelLargeUpload.removeEventListener('click', onCancel);
+      resolve(accepted);
+    };
+    const onConfirm = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+
+    el.btnConfirmLargeUpload.addEventListener('click', onConfirm);
+    el.btnCancelLargeUpload.addEventListener('click', onCancel);
+  });
+}
+
+// Progress-tracked XHR upload (no artificial 12s timeout; streams directly from browser)
+function uploadFileWithProgress(uploadUrl, formData, password, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', uploadUrl);
+    if (password) {
+      xhr.setRequestHeader('X-OBS-Password', password);
+    }
+
+    xhr.upload.onprogress = (evt) => {
+      if (evt.lengthComputable && typeof onProgress === 'function') {
+        onProgress(evt.loaded, evt.total);
+      }
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch (_) {}
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        const err = new Error(data.error || `Upload failed (HTTP ${xhr.status})`);
+        err.httpStatus = xhr.status;
+        reject(err);
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network connection error'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
 // Local Device File Picker / Upload Helper
 function openLocalFileBrowser({ propKey, accept, onUploaded }) {
   activeLocalUploadCallback = onUploaded;
@@ -4740,7 +4835,7 @@ async function openHostFileBrowser({ propKey, currentPath, pathType, accept, onS
     const parts = currentPath.split(/[\\/]/);
     if (isFile && parts.length > 1) {
       parts.pop();
-      startDir = parts.join('/');
+      startDir = parts.length === 1 && /^[a-zA-Z]:$/.test(parts[0]) ? `${parts[0]}\\` : parts.join('/');
     } else {
       startDir = currentPath;
     }
@@ -4779,7 +4874,8 @@ async function loadHostDirectory(dir) {
     currentHostDir = data.currentDir;
     currentHostParentDir = data.parentDir;
 
-    el.hostBrowserBreadcrumb.textContent = data.currentDir;
+    el.hostBrowserBreadcrumb.textContent =
+      data.currentDir === '__DRIVES__' ? 'All Drives' : data.currentDir;
 
     if (data.parentDir) {
       el.btnHostNavUp.style.display = 'flex';
@@ -4830,7 +4926,7 @@ function renderHostEntries(entries) {
     const row = document.createElement('div');
     row.className = 'host-entry-item';
 
-    const icon = entry.isDirectory ? '📁' : getFileIcon(entry.ext);
+    const icon = entry.isDrive ? '💾' : entry.isDirectory ? '📁' : getFileIcon(entry.ext);
     const sizeStr = entry.isDirectory ? '' : formatFileSize(entry.size);
 
     row.innerHTML = `
@@ -4898,7 +4994,8 @@ function formatFileSize(bytes) {
   if (!bytes || bytes === 0) return '';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 // Three-Dots Anchored Dropdown Menu

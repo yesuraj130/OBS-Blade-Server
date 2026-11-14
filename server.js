@@ -233,6 +233,7 @@ async function startServer() {
       nodeVersion: process.version,
       port: PORT,
       uploadsDir: uploadsDir,
+      maxUploadMb: 100,
       simulatorAttached: true,
       authRequired: Boolean(configuredPass),
       authValid: authValid,
@@ -321,11 +322,37 @@ async function startServer() {
    */
   app.get('/api/fs/browse', (req, res) => {
     try {
-      let requestedDir = req.query.dir ? String(req.query.dir) : '';
+      let requestedDir = req.query.dir ? String(req.query.dir).trim() : '';
+      const isWindows = process.platform === 'win32';
+
+      if (requestedDir === '__DRIVES__') {
+        if (isWindows) {
+          const drives = [];
+          for (let code = 65; code <= 90; code++) {
+            const driveRoot = `${String.fromCharCode(code)}:\\`;
+            try {
+              if (fs.statSync(driveRoot).isDirectory()) {
+                drives.push({ name: driveRoot, path: driveRoot, isDirectory: true, isDrive: true, size: 0, ext: '' });
+              }
+            } catch (_) {}
+          }
+          return res.json({
+            currentDir: '__DRIVES__',
+            parentDir: null,
+            uploadsDir: uploadsDir,
+            projectDir: __dirname,
+            entries: drives,
+          });
+        }
+        requestedDir = '/';
+      }
+
       if (!requestedDir || requestedDir === '__UPLOADS__') {
         requestedDir = uploadsDir;
       } else if (requestedDir === '__PROJECT__') {
         requestedDir = __dirname;
+      } else if (isWindows && /^[a-zA-Z]:$/.test(requestedDir)) {
+        requestedDir = `${requestedDir}\\`;
       }
 
       const targetDir = fs.existsSync(requestedDir) && fs.statSync(requestedDir).isDirectory()
@@ -365,7 +392,7 @@ async function startServer() {
 
       res.json({
         currentDir: targetDir,
-        parentDir: parentDir !== targetDir ? parentDir : null,
+        parentDir: parentDir !== targetDir ? parentDir : (isWindows ? '__DRIVES__' : null),
         uploadsDir: uploadsDir,
         projectDir: __dirname,
         entries: items,

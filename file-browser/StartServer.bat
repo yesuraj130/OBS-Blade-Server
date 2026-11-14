@@ -2,6 +2,8 @@
 title OBS Host File Browser
 cd /d "%~dp0"
 
+if "%PORT%"=="" set PORT=3000
+
 echo ===================================================
 echo   OBS Host File Browser Microservice
 echo ===================================================
@@ -17,13 +19,18 @@ if %ERRORLEVEL% neq 0 (
 )
 
 if not exist "node_modules" (
-    echo [INFO] First time run detected. Installing dependencies...
-    call npm install
+    echo [INFO] First time run detected. Installing production dependencies...
+    call npm install --omit=dev --no-audit --no-fund
+    if %ERRORLEVEL% neq 0 (
+        echo [ERROR] npm install failed!
+        pause
+        exit /b 1
+    )
     echo.
 )
 
-echo Starting File Browser server on port 3000...
-echo Access standalone file manager at: http://localhost:3000/
+echo Starting File Browser server on port %PORT%...
+echo Access standalone file manager at: http://localhost:%PORT%/
 echo.
 node server.js
 

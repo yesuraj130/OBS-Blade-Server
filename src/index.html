@@ -508,6 +508,7 @@
         <!-- Quick location chips -->
         <div class="host-quick-locations">
           <button type="button" class="btn-quick-loc" data-dir="__UPLOADS__">📂 Uploads</button>
+          <button type="button" class="btn-quick-loc" data-dir="__DRIVES__">💾 Drives</button>
           <button type="button" class="btn-quick-loc" data-dir="__PROJECT__">📁 Workspace</button>
           <button type="button" class="btn-quick-loc" data-dir="/">💻 Root</button>
         </div>
@@ -1136,6 +1137,20 @@
             <button id="btn-submit-save-ptz-preset" type="submit" class="btn-blue-primary">Save Filter</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- 15. Large File Upload Confirmation Modal (>100 MB) -->
+    <div id="modal-large-upload-confirm" class="blade-dialog-overlay">
+      <div class="blade-dialog-content blade-dialog-compact">
+        <div class="dialog-header-blade">
+          <span class="dialog-title-blade">⚠️ Large File Upload (&gt; 100 MB)</span>
+        </div>
+        <div id="large-upload-confirm-body" style="margin-top: 10px; font-size: 13px; line-height: 1.5; color: var(--obs-text-white);"></div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+          <button id="btn-cancel-large-upload" type="button" class="btn-gray-secondary">Cancel</button>
+          <button id="btn-confirm-large-upload" type="button" class="btn-blue-primary">Start Upload</button>
+        </div>
       </div>
     </div>
 
