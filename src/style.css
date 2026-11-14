@@ -46,7 +46,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  gap: 8px;
+  padding: 0 12px 0 16px;
+  padding-top: var(--safe-top);
   position: sticky;
   top: 0;
   z-index: 50;
@@ -61,6 +63,7 @@ body {
   font-weight: 500;
   cursor: pointer;
   padding: 6px 4px;
+  flex-shrink: 0;
 }
 
 .nav-link-btn:active {
@@ -72,6 +75,78 @@ body {
   font-weight: 700;
   color: #fff;
   letter-spacing: -0.2px;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.nav-pwa-install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(33, 150, 243, 0.45);
+  background: rgba(33, 150, 243, 0.16);
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.nav-pwa-install-btn[hidden] {
+  display: none !important;
+}
+
+.nav-pwa-install-btn:hover {
+  background: rgba(33, 150, 243, 0.28);
+  border-color: var(--obs-blue);
+  color: #ffffff;
+}
+
+.nav-pwa-install-btn:active {
+  transform: scale(0.96);
+}
+
+.nav-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.nav-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.nav-icon-btn.active-fullscreen {
+  border-color: rgba(33, 150, 243, 0.55);
+  background: rgba(33, 150, 243, 0.18);
+  color: #60a5fa;
+}
+
+.nav-icon-btn:active {
+  transform: scale(0.94);
 }
 
 .nav-dots-btn {
@@ -82,11 +157,20 @@ body {
   font-weight: 900;
   cursor: pointer;
   letter-spacing: 2px;
-  padding: 4px 8px;
+  padding: 4px 6px;
 }
 
 .nav-dots-btn:active {
   color: var(--obs-blue);
+}
+
+@media (max-width: 380px) {
+  .nav-install-label {
+    display: none;
+  }
+  .nav-pwa-install-btn {
+    padding: 0 8px;
+  }
 }
 
 /* 2. Top Scene Buttons Grid */
@@ -640,6 +724,10 @@ body {
   cursor: pointer;
   width: 100%;
   transition: background 0.1s;
+}
+
+.dropdown-menu-item[hidden] {
+  display: none !important;
 }
 
 .dropdown-menu-item:active {

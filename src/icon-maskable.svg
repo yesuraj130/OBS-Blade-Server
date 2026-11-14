@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#060911"/>
+    </linearGradient>
+    <linearGradient id="bladeBlueM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#2196f3"/>
+    </linearGradient>
+    <linearGradient id="bladeCoralM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b81"/>
+      <stop offset="100%" stop-color="#ff4766"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed background for Android adaptive maskable safe zone -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#bgGradM)"/>
+
+  <!-- Centered artwork inside 70% safe zone (15% padding on each side) -->
+  <g transform="translate(256 256) scale(0.72) translate(-256 -256)">
+    <circle cx="256" cy="256" r="168" fill="#0b1120" stroke="#1e293b" stroke-width="10"/>
+    <path d="M256 118 A138 138 0 0 1 380 198 L294 238 A54 54 0 0 0 256 202 Z" fill="url(#bladeBlueM)"/>
+    <path d="M388 218 A138 138 0 0 1 268 394 L276 300 A54 54 0 0 0 310 254 Z" fill="url(#bladeCoralM)"/>
+    <path d="M244 394 A138 138 0 0 1 124 218 L202 254 A54 54 0 0 0 236 300 Z" fill="#e2e8f0"/>
+    <circle cx="256" cy="256" r="56" fill="#090e17" stroke="#334155" stroke-width="8"/>
+    <circle cx="256" cy="256" r="24" fill="#ff4766"/>
+    <circle cx="248" cy="248" r="7" fill="#ffffff" opacity="0.8"/>
+  </g>
+</svg>
