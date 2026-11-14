@@ -309,8 +309,8 @@ function getFileServerApiUrl(endpoint) {
     }
   } catch (_) {}
 
-  // If dashboard is served from IIS or another port (e.g. port 80/443 where location.port is ""), connect to port 3000
-  if (location.port !== '3000') {
+  // If dashboard is served over HTTP from IIS or another port (e.g. port 80), connect to port 3000
+  if (location.protocol === 'http:' && location.port !== '3000') {
     return `${location.protocol}//${location.hostname}:3000${endpoint}`;
   }
   return endpoint;
@@ -331,7 +331,7 @@ function getFileServerPassword() {
 
 // Non-blocking asynchronous verification of File Browser server upon OBS connection
 async function checkFileBrowserStatus(customUrl, password) {
-  const fileUrl = customUrl || localStorage.getItem('obs_blade_file_server_url') || (location.port !== '3000' ? `${location.protocol}//${location.hostname}:3000` : '');
+  const fileUrl = customUrl || localStorage.getItem('obs_blade_file_server_url') || (location.protocol === 'http:' && location.port !== '3000' ? `${location.protocol}//${location.hostname}:3000` : location.origin);
   if (!fileUrl) return;
 
   const targetUrl = fileUrl.replace(/\/+$/, '') + '/api/status';

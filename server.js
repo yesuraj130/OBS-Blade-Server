@@ -59,7 +59,7 @@ async function startServer() {
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-OBS-Password');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-OBS-Password, X-Delete-Unlocked');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
     }
@@ -69,12 +69,8 @@ async function startServer() {
   // Serve uploaded media files publicly for browser preview
   app.use('/uploads', express.static(uploadsDir));
 
-  // Serve standalone File Browser UI
+  // File Browser directory path (mounted cleanly in frontend routes below)
   const fileBrowserDir = path.resolve(__dirname, 'file-browser');
-  if (fs.existsSync(fileBrowserDir)) {
-    app.use('/file-browser', express.static(fileBrowserDir));
-    app.use('/files', express.static(fileBrowserDir));
-  }
 
   // Initialize and attach OBS WebSocket Simulator only if simulator folder exists (for dev)
   const simulatorModulePath = path.resolve(__dirname, '.obs-websocket-simulator/simulator.js');
@@ -372,12 +368,17 @@ async function startServer() {
             const st = fs.statSync(fullPath);
             size = st.size;
           }
+          const isInsideUploads = (() => {
+            const rel = path.relative(path.resolve(uploadsDir), path.resolve(fullPath));
+            return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+          })();
           items.push({
             name: entry.name,
             path: fullPath,
             isDirectory: isDir,
             size: size,
-            ext: path.extname(entry.name).toLowerCase(),
+            ext: isDir ? '' : path.extname(entry.name).toLowerCase(),
+            deletable: !isDir && isInsideUploads,
           });
         } catch (_) {}
       }
@@ -402,14 +403,210 @@ async function startServer() {
     }
   });
 
-  // --- Frontend Serving (Pure Express Static Serving - Zero Bundlers) ---
+  // Streaming Media Preview API for File Browser tab in AI Studio preview
+  const PREVIEWABLE_EXTS = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico',
+    '.mp4', '.mov', '.mkv', '.webm', '.m4v', '.avi',
+    '.mp3', '.wav', '.aac', '.flac', '.ogg', '.m4a',
+    '.txt', '.log', '.json', '.srt', '.vtt',
+  ]);
+
+  app.get('/api/fs/preview', (req, res) => {
+    const rawPath = req.query.path ? String(req.query.path) : '';
+    if (!rawPath) return res.status(400).json({ error: 'Missing file path' });
+    const resolvedPath = path.resolve(rawPath);
+    if (!PREVIEWABLE_EXTS.has(path.extname(resolvedPath).toLowerCase())) {
+      return res.status(415).json({ error: 'Preview is not supported for this file type' });
+    }
+    try {
+      if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+      res.sendFile(resolvedPath, {
+        dotfiles: 'allow',
+        headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to preview file', details: err.message });
+    }
+  });
+
+  // Locked Delete API for File Browser tab in AI Studio preview (uploadsDir only)
+  app.delete('/api/fs/file', (req, res) => {
+    if (req.headers['x-delete-unlocked'] !== 'true') {
+      return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
+    }
+    const rawPath = req.query.path ? String(req.query.path) : '';
+    if (!rawPath) return res.status(400).json({ error: 'Missing file path' });
+    const targetPath = path.resolve(rawPath);
+    const rel = path.relative(path.resolve(uploadsDir), targetPath);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+      return res.status(403).json({ error: 'Delete is restricted to the uploads folder.' });
+    }
+    try {
+      if (!fs.existsSync(targetPath) || !fs.statSync(targetPath).isFile()) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+      fs.unlinkSync(targetPath);
+      res.json({ success: true, path: targetPath });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete file', details: err.message });
+    }
+  });
+
+  // --- Frontend Serving (AI Studio Zero-Reload Dual-Tab Preview — No Nested Iframes) ---
   const staticRoot = isProduction && fs.existsSync(path.resolve(__dirname, 'dist'))
     ? path.resolve(__dirname, 'dist')
     : path.resolve(__dirname, 'src');
 
+  function buildDualTabObsHtml(obsRawHtml) {
+    const fbHtmlPath = path.resolve(fileBrowserDir, 'index.html');
+    let fbStyle = '';
+    let fbBody = '<div style="padding:24px;color:#94a3b8;">File browser UI not found.</div>';
+    let fbScript = '';
+
+    if (fs.existsSync(fbHtmlPath)) {
+      const fbRaw = fs.readFileSync(fbHtmlPath, 'utf8');
+      const styleMatch = fbRaw.match(/<style>([\s\S]*?)<\/style>/i);
+      const bodyMatch = fbRaw.match(/<body>([\s\S]*?)<script>/i);
+      const scriptMatch = fbRaw.match(/<script>([\s\S]*?)<\/script>/i);
+      if (styleMatch) {
+        fbStyle = styleMatch[1]
+          .replace(/:root\s*\{/g, ':host {')
+          .replace(/(^|\s)body\s*\{/gm, '$1.fb-root {');
+      }
+      if (bodyMatch) {
+        fbBody = bodyMatch[1];
+      }
+      if (scriptMatch) {
+        fbScript = scriptMatch[1].replace(/<\/script>/gi, '<\\/script>');
+      }
+    }
+
+    const previewInjection = `
+<style>
+  body .top-nav-bar { top: 38px !important; }
+  body .blade-dialog-overlay { top: 38px !important; }
+  #aistudio-preview-tabbar {
+    position: sticky; top: 0; height: 38px; min-height: 38px; flex-shrink: 0;
+    background: #0f1624; border-bottom: 1px solid #1e293b;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px; gap: 8px; z-index: 50001;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  #aistudio-preview-tabbar .ai-tab-group { display: flex; align-items: center; gap: 6px; }
+  #aistudio-preview-tabbar .ai-tab-btn {
+    border: 1px solid transparent; background: transparent; color: #94a3b8;
+    padding: 5px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  #aistudio-preview-tabbar .ai-tab-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
+  #aistudio-preview-tabbar .ai-tab-btn.active { background: #1e293b; color: #ffffff; border-color: #3b82f6; }
+  #aistudio-preview-tabbar .ai-open-link {
+    font-size: 12px; color: #93c5fd; text-decoration: none; padding: 4px 10px;
+    border-radius: 6px; border: 1px solid #1e293b; background: #131c2e; white-space: nowrap;
+  }
+  #aistudio-preview-tabbar .ai-open-link:hover { background: #1d2a42; color: #fff; }
+  #aistudio-fb-panel {
+    display: none; position: fixed; top: 38px; left: 0; right: 0; bottom: 0;
+    z-index: 50000; overflow: auto; background: #12141a;
+  }
+  #aistudio-fb-panel.active { display: block; }
+</style>
+<div id="aistudio-preview-tabbar">
+  <div class="ai-tab-group">
+    <button type="button" id="aistudio-tab-obs" class="ai-tab-btn active">🎛️ OBS Blade</button>
+    <button type="button" id="aistudio-tab-files" class="ai-tab-btn">📁 File Browser</button>
+  </div>
+  <a id="aistudio-open-tab" class="ai-open-link" href="/obs/" target="_blank" rel="noopener">Open Tab ↗</a>
+</div>
+<div id="aistudio-fb-panel"></div>
+<script>
+(function () {
+  var btnObs = document.getElementById('aistudio-tab-obs');
+  var btnFiles = document.getElementById('aistudio-tab-files');
+  var fbPanel = document.getElementById('aistudio-fb-panel');
+  var openLink = document.getElementById('aistudio-open-tab');
+  var fbInitialized = false;
+
+  var fbStyleText = ${JSON.stringify(fbStyle)};
+  var fbBodyHtml = ${JSON.stringify(fbBody)};
+  var fbScriptCode = ${JSON.stringify(fbScript)};
+
+  function initFileBrowserTab() {
+    if (fbInitialized || !fbPanel) return;
+    fbInitialized = true;
+    var shadow = fbPanel.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<style>:host{display:block;min-height:100%;}' + fbStyleText + '</style><div class="fb-root">' + fbBodyHtml + '</div>';
+    var fbDoc = {
+      getElementById: function (id) { return shadow.getElementById(id); },
+      createElement: function (tag) { return document.createElement(tag); },
+      createDocumentFragment: function () { return document.createDocumentFragment(); },
+      execCommand: function (cmd) { return document.execCommand(cmd); },
+      body: document.body
+    };
+    try {
+      var runner = new Function('document', fbScriptCode);
+      runner(fbDoc);
+    } catch (err) {
+      shadow.innerHTML = '<div style="padding:24px;color:#f87171;font-family:sans-serif;">Failed to initialize File Browser tab: ' + err.message + '</div>';
+    }
+  }
+
+  function switchPreviewTab(tab) {
+    var isObs = tab === 'obs';
+    btnObs.classList.toggle('active', isObs);
+    btnFiles.classList.toggle('active', !isObs);
+    fbPanel.classList.toggle('active', !isObs);
+    if (openLink) openLink.href = isObs ? '/obs/' : '/file-browser/';
+    if (!isObs) initFileBrowserTab();
+  }
+
+  if (btnObs) btnObs.addEventListener('click', function () { switchPreviewTab('obs'); });
+  if (btnFiles) btnFiles.addEventListener('click', function () { switchPreviewTab('files'); });
+})();
+</script>`;
+
+    return obsRawHtml.replace(/<body([^>]*)>/i, `<body$1>${previewInjection}`);
+  }
+
+  const obsIndexPath = path.resolve(staticRoot, 'index.html');
+  const fbIndexPath = path.resolve(fileBrowserDir, 'index.html');
+
+  function sendObsWithTabSwitcher(res) {
+    try {
+      const rawHtml = fs.readFileSync(obsIndexPath, 'utf8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.type('html').send(buildDualTabObsHtml(rawHtml));
+    } catch (err) {
+      res.status(500).send(`Failed to load UI: ${err.message}`);
+    }
+  }
+
+  // Root / serves OBS Blade + zero-reload Shadow DOM File Browser tab switcher
+  app.get('/', (_req, res) => {
+    sendObsWithTabSwitcher(res);
+  });
+
+  // Direct standalone routes (/obs/ and /file-browser/) for "Open Tab ↗"
+  app.get('/obs', (_req, res) => res.redirect(302, '/obs/'));
+  app.use('/obs', express.static(staticRoot));
+  app.get('/obs/*', (_req, res) => {
+    res.sendFile(obsIndexPath);
+  });
+
+  if (fs.existsSync(fileBrowserDir)) {
+    app.get(['/file-browser', '/files'], (req, res) => res.redirect(302, `${req.path}/`));
+    app.use('/file-browser', express.static(fileBrowserDir));
+    app.use('/files', express.static(fileBrowserDir));
+    app.get('/file-browser/*', (_req, res) => {
+      res.sendFile(fbIndexPath);
+    });
+  }
+
   app.use(express.static(staticRoot));
   app.get('*', (_req, res) => {
-    res.sendFile(path.resolve(staticRoot, 'index.html'));
+    sendObsWithTabSwitcher(res);
   });
 
   server.listen(PORT, '0.0.0.0', () => {
