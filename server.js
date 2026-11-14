@@ -26,6 +26,14 @@ const NOVNC_PORT = 6080;
 const VNC_PASSWORD = process.env.VNC_PASSWORD || 'vncpassword';
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Guard process against unhandled errors/socket resets to prevent dev server bounce
+process.on('uncaughtException', (err) => {
+  console.warn('[Server] Uncaught exception caught safely:', err?.message || err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Server] Unhandled rejection caught safely:', reason?.message || reason);
+});
+
 // Ensure uploads directory exists
 const uploadsDir = path.resolve(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
