@@ -28,6 +28,9 @@ firebase-blueprint.json
 # User Uploaded Media Files
 uploads/
 
+# Ephemeral Runtime Tunnel Cache
+.devcontainer/.vnc_tunnel_cache.json
+
 # IDE and Editors
 .vscode/
 .idea/

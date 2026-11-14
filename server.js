@@ -196,8 +196,8 @@ async function startServer() {
   });
 
   // --- OBS 29 + Move Transition + TigerVNC + noVNC + Pinggy Tunnel Manager ---
-  const launcherScript = path.resolve(__dirname, '.aistudio/scripts/setup-and-start-obs.sh');
-  const tunnelCacheFile = path.resolve(__dirname, '.aistudio/.vnc_tunnel_cache.json');
+  const launcherScript = path.resolve(__dirname, '.devcontainer/scripts/setup-and-start-obs.sh');
+  const tunnelCacheFile = path.resolve(__dirname, '.devcontainer/.vnc_tunnel_cache.json');
   const obsSetupLogs = [];
   let isSettingUp = false;
   let isRestarting = false;
