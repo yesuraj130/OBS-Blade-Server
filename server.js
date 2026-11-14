@@ -492,6 +492,32 @@ async function startServer() {
     });
   });
 
+  let cachedObsInstalled = true;
+  let cachedObsVersion = '29.0.2';
+  let cachedMoveTransitionInstalled = true;
+
+  function refreshStaticObsInfo() {
+    exec(
+      `echo "OBS_BIN=$(which obs >/dev/null 2>&1 && echo 1 || echo 0)"; ` +
+      `echo "OBS_VER=$(obs --version 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -n1 || true)"; ` +
+      `echo "MOVE_OK=$(if [ -f /usr/lib/x86_64-linux-gnu/obs-plugins/move-transition.so ] || [ -f /root/.config/obs-studio/plugins/move-transition/bin/64bit/move-transition.so ]; then echo 1; else echo 0; fi)"`,
+      (_err, stdout = '') => {
+        const lines = stdout.split('\n');
+        for (const l of lines) {
+          const idx = l.indexOf('=');
+          if (idx > 0) {
+            const k = l.slice(0, idx).trim();
+            const v = l.slice(idx + 1).trim();
+            if (k === 'OBS_BIN') cachedObsInstalled = (v === '1');
+            if (k === 'OBS_VER' && v) cachedObsVersion = v;
+            if (k === 'MOVE_OK') cachedMoveTransitionInstalled = (v === '1');
+          }
+        }
+      }
+    );
+  }
+  refreshStaticObsInfo();
+
   /**
    * VNC / OBS Desktop Status, Logs, Resolution & Pinggy APIs
    */
@@ -502,57 +528,43 @@ async function startServer() {
       checkLocalPort(4455, '127.0.0.1'),
     ]);
 
-    exec(
-      `echo "OBS_BIN=$(which obs >/dev/null 2>&1 && echo 1 || echo 0)"; ` +
-      `echo "OBS_VER=$(obs --version 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -n1 || true)"; ` +
-      `echo "MOVE_OK=$(if [ -f /usr/lib/x86_64-linux-gnu/obs-plugins/move-transition.so ] || [ -f /root/.config/obs-studio/plugins/move-transition/bin/64bit/move-transition.so ]; then echo 1; else echo 0; fi)"; ` +
-      `echo "OBS_RUN=$(pgrep -x obs >/dev/null 2>&1 && echo 1 || echo 0)"; ` +
-      `echo "PROCS_START"; ` +
-      `ps -eo pid,etime,args --sort=-etime | grep -E "apt-get|dpkg|gcc|curl|tar|obs|Xtigervnc|websockify|openbox|ssh.*pinggy|setup-and-start-obs" | grep -v "grep" | head -n 12`,
-      (_err, stdout = '') => {
-        const lines = stdout.split('\n');
-        const kv = {};
-        const procs = [];
-        let inProcs = false;
-        for (const l of lines) {
-          if (l === 'PROCS_START') {
-            inProcs = true;
-            continue;
-          }
-          if (!inProcs) {
-            const idx = l.indexOf('=');
-            if (idx > 0) kv[l.slice(0, idx)] = l.slice(idx + 1).trim();
-          } else if (l.trim()) {
-            procs.push(l.trim());
-          }
-        }
+    const needProcs = isSettingUp || isRestarting;
+    const fetchProcs = needProcs
+      ? new Promise((resolve) => {
+          exec(
+            'ps -eo pid,etime,args --sort=-etime | grep -E "apt-get|dpkg|gcc|curl|tar|obs|Xtigervnc|websockify|openbox|ssh.*pinggy|setup-and-start-obs" | grep -v "grep" | head -n 12',
+            (_e, out = '') => {
+              resolve(out.split('\n').map((s) => s.trim()).filter(Boolean));
+            }
+          );
+        })
+      : Promise.resolve([]);
 
-        const rawProto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https');
-        const proto = rawProto.split(',')[0].trim() || 'https';
-        const host = req.get('host');
-        const resizeParam = currentResolutionMode === 'auto' ? 'remote' : 'scale';
-        const publicWebVncUrl = `${proto}://${host}/obs-vnc/vnc.html?autoconnect=true&resize=${resizeParam}&password=${encodeURIComponent(VNC_PASSWORD)}`;
+    const procs = await fetchProcs;
+    const rawProto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https');
+    const proto = rawProto.split(',')[0].trim() || 'https';
+    const host = req.get('host');
+    const resizeParam = currentResolutionMode === 'auto' ? 'remote' : 'scale';
+    const publicWebVncUrl = `${proto}://${host}/obs-vnc/vnc.html?autoconnect=true&resize=${resizeParam}&password=${encodeURIComponent(VNC_PASSWORD)}`;
 
-        res.json({
-          obsInstalled: kv.OBS_BIN === '1',
-          obsVersion: kv.OBS_VER || '29.0.2',
-          moveTransitionInstalled: kv.MOVE_OK === '1',
-          obsRunning: kv.OBS_RUN === '1',
-          obsWsOnline,
-          vncOnline,
-          novncOnline,
-          isSettingUp,
-          isRestarting,
-          currentCommand,
-          runningProcesses: procs,
-          logs: obsSetupLogs.slice(-150),
-          publicWebVncUrl,
-          tcpTunnel: tcpTunnelInfo,
-          resolutionMode: currentResolutionMode,
-          vncPassword: VNC_PASSWORD,
-        });
-      }
-    );
+    res.json({
+      obsInstalled: cachedObsInstalled,
+      obsVersion: cachedObsVersion,
+      moveTransitionInstalled: cachedMoveTransitionInstalled,
+      obsRunning: obsWsOnline || vncOnline,
+      obsWsOnline,
+      vncOnline,
+      novncOnline,
+      isSettingUp,
+      isRestarting,
+      currentCommand,
+      runningProcesses: procs,
+      logs: obsSetupLogs.slice(-150),
+      publicWebVncUrl,
+      tcpTunnel: tcpTunnelInfo,
+      resolutionMode: currentResolutionMode,
+      vncPassword: VNC_PASSWORD,
+    });
   });
 
   app.post('/api/vnc/start', (_req, res) => {
@@ -1044,8 +1056,7 @@ async function startServer() {
       '.obs-btn.warn:hover { background:#78350f; }',
       '.obs-btn:disabled { opacity:.5; cursor:not-allowed; }',
       '.obs-stage { position:relative; flex:1; width:100%; min-height:0; background:#000; overflow:hidden; }',
-      '#obs-vnc-screen { width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#050811; }',
-      '#obs-vnc-screen canvas { max-width:100%; max-height:100%; outline:none; }',
+      '#obs-vnc-frame { width:100%; height:100%; border:0; position:absolute; inset:0; background:#050811; }',
       '#obs-startup-console { position:absolute; inset:0; z-index:20; background:#020617; display:flex; flex-direction:column; padding:14px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }',
       '#obs-startup-console.hidden { display:none; }',
       '.con-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; background:#0f172a; border:1px solid #1e293b; padding:10px 14px; border-radius:8px 8px 0 0; }',
@@ -1086,7 +1097,7 @@ async function startServer() {
       '    </div>',
       '  </div>',
       '  <div class="obs-stage">',
-      '    <div id="obs-vnc-screen"></div>',
+      '    <iframe id="obs-vnc-frame" src="/obs-vnc/vnc.html?autoconnect=true&resize=remote&password=vncpassword" allow="fullscreen; clipboard-read; clipboard-write"></iframe>',
       '    <div id="obs-startup-console">',
       '      <div class="con-head">',
       '        <div class="con-title"><span class="con-spin"></span><span id="obs-con-heading">OBS Studio 29 & VNC Desktop Starting — Live Command Console</span></div>',
@@ -1124,7 +1135,7 @@ async function startServer() {
     var btnRestartPc = $('obs-btn-restart-pc');
     var btnNewTab = $('obs-btn-newtab');
     var btnHideLogs = $('obs-btn-hide-logs');
-    var vncScreen = $('obs-vnc-screen');
+    var vncFrame = $('obs-vnc-frame');
     var consoleEl = $('obs-startup-console');
     var conCmd = $('obs-con-cmd');
     var conProcs = $('obs-con-procs');
@@ -1132,13 +1143,19 @@ async function startServer() {
 
     var currentWebUrl = location.origin + '/obs-vnc/vnc.html?autoconnect=true&resize=remote&password=vncpassword';
     var currentTcpAddr = '';
-    var rfbClient = null;
-    var rfbConnecting = false;
-    var rfbConnected = false;
     var forceShowLogs = false;
     var latestReady = false;
     var savedRes = localStorage.getItem('obs_vnc_res_mode') || 'auto';
     resSelect.value = savedRes;
+
+    function getVncSrc(resVal) {
+      var resizeParam = (resVal === 'auto') ? 'remote' : 'scale';
+      return '/obs-vnc/vnc.html?autoconnect=true&resize=' + resizeParam + '&password=vncpassword';
+    }
+
+    if (savedRes !== 'auto' && vncFrame) {
+      vncFrame.src = getVncSrc(savedRes);
+    }
 
     function copyText(text, labelEl, restoreText) {
       if (!text) return;
@@ -1174,70 +1191,26 @@ async function startServer() {
       if (currentTcpAddr) copyText(currentTcpAddr, pinggyText, currentTcpAddr);
     });
 
-    function connectRfb() {
-      if (rfbConnecting || rfbConnected || !latestReady) return;
-      rfbConnecting = true;
-      vncScreen.innerHTML = '';
-      import('/obs-vnc/core/rfb.js').then(function (mod) {
-        var RFB = mod.default;
-        var wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-        var wsUrl = wsProto + location.host + '/obs-vnc/websockify';
-        var rfb = new RFB(vncScreen, wsUrl, {
-          credentials: { password: 'vncpassword' }
-        });
-        rfb.scaleViewport = true;
-        rfb.resizeSession = (resSelect.value === 'auto');
-        rfb.clipViewport = false;
-        rfb.addEventListener('connect', function () {
-          rfbConnecting = false;
-          rfbConnected = true;
-        });
-        rfb.addEventListener('disconnect', function () {
-          rfbConnecting = false;
-          rfbConnected = false;
-          rfbClient = null;
-        });
-        rfb.addEventListener('credentialsrequired', function () {
-          rfb.sendCredentials({ password: 'vncpassword' });
-        });
-        rfb.addEventListener('clipboard', function (e) {
-          if (navigator.clipboard && navigator.clipboard.writeText && e.detail && e.detail.text) {
-            navigator.clipboard.writeText(e.detail.text).catch(function () {});
-          }
-        });
-        rfbClient = rfb;
-      }).catch(function () {
-        rfbConnecting = false;
-      });
-    }
-
-    function disconnectRfb() {
-      if (rfbClient) {
-        try { rfbClient.disconnect(); } catch (_) {}
-        rfbClient = null;
-      }
-      rfbConnected = false;
-      rfbConnecting = false;
-    }
-
     resSelect.addEventListener('change', function () {
       var val = resSelect.value;
       localStorage.setItem('obs_vnc_res_mode', val);
+      if (vncFrame) {
+        var newSrc = getVncSrc(val);
+        if (vncFrame.src !== newSrc) vncFrame.src = newSrc;
+      }
       fetch('/api/vnc/resolution', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolution: val })
-      }).then(function () {
-        if (rfbClient) {
-          rfbClient.resizeSession = (val === 'auto');
-          rfbClient.scaleViewport = true;
-        }
       }).catch(function () {});
     });
 
     btnReconnect.addEventListener('click', function () {
-      disconnectRfb();
-      connectRfb();
+      if (vncFrame) {
+        var cur = vncFrame.src;
+        vncFrame.src = 'about:blank';
+        setTimeout(function () { vncFrame.src = cur; }, 80);
+      }
     });
 
     btnRestartObs.addEventListener('click', function () {
@@ -1250,7 +1223,6 @@ async function startServer() {
     });
 
     btnRestartPc.addEventListener('click', function () {
-      disconnectRfb();
       forceShowLogs = false;
       btnRestartPc.disabled = true;
       consoleEl.classList.remove('hidden');
@@ -1280,16 +1252,10 @@ async function startServer() {
       if (latestReady) consoleEl.classList.add('hidden');
     });
 
-    window.addEventListener('focus', function () {
-      if (rfbClient && rfbConnected && activeTab === 'desktop' && navigator.clipboard && navigator.clipboard.readText) {
-        navigator.clipboard.readText().then(function (t) {
-          if (t && rfbClient) rfbClient.clipboardPasteFrom(t);
-        }).catch(function () {});
-      }
-    });
-
+    var pollTimer = null;
     function pollVncStatus() {
       fetch('/api/vnc/status').then(function (r) { return r.json(); }).then(function (d) {
+        var prevReady = latestReady;
         latestReady = Boolean(d.vncOnline && d.novncOnline && !d.isSettingUp && !d.isRestarting);
         if (obsTabDot) {
           obsTabDot.className = latestReady ? 'ready' : ((d.isSettingUp || d.isRestarting) ? '' : 'offline');
@@ -1334,13 +1300,15 @@ async function startServer() {
           consoleEl.classList.remove('hidden');
         } else {
           consoleEl.classList.add('hidden');
-          connectRfb();
+          if (!prevReady && vncFrame) {
+            vncFrame.src = getVncSrc(resSelect.value);
+          }
         }
       }).catch(function () {});
     }
 
     pollVncStatus();
-    setInterval(pollVncStatus, 1800);
+    pollTimer = setInterval(pollVncStatus, 3000);
   }
 
   // Keep Tab 3 status dot synced even before user clicks Tab 3

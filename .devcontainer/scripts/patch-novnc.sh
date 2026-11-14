@@ -27,15 +27,6 @@ if (!code.includes("/* PATCHED_SEAMLESS_CLIPBOARD_SEND */")) {
   code = code.replace(
     /addClipboardHandlers\(\)\s*\{/,
     `addClipboardHandlers() { /* PATCHED_SEAMLESS_CLIPBOARD_SEND */
-        window.addEventListener("focus", () => {
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                navigator.clipboard.readText().then((text) => {
-                    if (text && UI.rfb) {
-                        UI.rfb.clipboardPasteFrom(text);
-                    }
-                }).catch(() => {});
-            }
-        });
         window.addEventListener("paste", (e) => {
             if (e.target && (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT")) return;
             const text = (e.clipboardData || window.clipboardData)?.getData("text");
