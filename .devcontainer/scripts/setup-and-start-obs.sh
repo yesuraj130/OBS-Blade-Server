@@ -124,14 +124,42 @@ else
   echo "[Move Transition] Move Transition plugin already installed."
 fi
 
-# Configure initial OBS settings & scenes if not yet initialized
-if [ -d "$REPO_OBS_CFG" ] && [ ! -f /root/.config/obs-studio/global.ini ]; then
-  echo "[OBS Config] Applying initial OBS 29 settings, WebSocket v5 (port 4455), and starter scene..."
-  mkdir -p /root/.config/obs-studio
-  cp -rf "$REPO_OBS_CFG"/* /root/.config/obs-studio/ 2>/dev/null || true
-elif [ ! -f /root/.config/obs-studio/plugin_config/obs-websocket/config.json ]; then
-  mkdir -p /root/.config/obs-studio/plugin_config/obs-websocket
-  cp -f "$REPO_OBS_CFG/plugin_config/obs-websocket/config.json" /root/.config/obs-studio/plugin_config/obs-websocket/config.json 2>/dev/null || true
+# Configure initial OBS settings, scenes, and assets
+mkdir -p /root/.config/obs-studio/basic/scenes \
+         /root/.config/obs-studio/basic/profiles/Untitled \
+         /root/.config/obs-studio/plugin_config/obs-websocket \
+         /root/.config/obs-studio/assets
+
+if [ -d "$REPO_OBS_CFG" ]; then
+  echo "[OBS Config] Syncing 640x360 profile, multi-scene setup, WebSocket v5, and animated GIF assets..."
+  # Always ensure assets are available
+  if [ -d "$REPO_OBS_CFG/assets" ]; then
+    cp -rf "$REPO_OBS_CFG/assets"/* /root/.config/obs-studio/assets/ 2>/dev/null || true
+  fi
+
+  # If fresh setup, copy all default configs
+  if [ ! -f /root/.config/obs-studio/global.ini ]; then
+    cp -rf "$REPO_OBS_CFG"/* /root/.config/obs-studio/ 2>/dev/null || true
+  fi
+
+  # Always enforce WebSocket config (port 4455, no auth)
+  if [ -f "$REPO_OBS_CFG/plugin_config/obs-websocket/config.json" ]; then
+    cp -f "$REPO_OBS_CFG/plugin_config/obs-websocket/config.json" /root/.config/obs-studio/plugin_config/obs-websocket/config.json 2>/dev/null || true
+  fi
+
+  # Ensure default profile is 640x360
+  if [ -f "$REPO_OBS_CFG/basic/profiles/Untitled/basic.ini" ]; then
+    if [ ! -f /root/.config/obs-studio/basic/profiles/Untitled/basic.ini ] || grep -q "BaseCX=1280" /root/.config/obs-studio/basic/profiles/Untitled/basic.ini 2>/dev/null; then
+      cp -f "$REPO_OBS_CFG/basic/profiles/Untitled/basic.ini" /root/.config/obs-studio/basic/profiles/Untitled/basic.ini 2>/dev/null || true
+    fi
+  fi
+
+  # Ensure multi-scene starter is present
+  if [ -f "$REPO_OBS_CFG/basic/scenes/Untitled.json" ]; then
+    if [ ! -f /root/.config/obs-studio/basic/scenes/Untitled.json ] || ! grep -q "Live Stream" /root/.config/obs-studio/basic/scenes/Untitled.json 2>/dev/null; then
+      cp -f "$REPO_OBS_CFG/basic/scenes/Untitled.json" /root/.config/obs-studio/basic/scenes/Untitled.json 2>/dev/null || true
+    fi
+  fi
 fi
 
 # Configure VNC password & lightweight Openbox xstartup

@@ -24,8 +24,8 @@
     "monitoring_type": 0,
     "private_settings": {}
   },
-  "current_program_scene": "Scene",
-  "current_scene": "Scene",
+  "current_program_scene": "Live Stream",
+  "current_scene": "Live Stream",
   "current_transition": "Fade",
   "groups": [],
   "modules": {},
@@ -54,43 +54,132 @@
   "scaling_off_y": 0.0,
   "scene_order": [
     {
-      "name": "Scene"
+      "name": "Live Stream"
+    },
+    {
+      "name": "Be Right Back"
+    },
+    {
+      "name": "Intermission"
+    },
+    {
+      "name": "Stream Offline"
     }
   ],
   "sources": [
     {
       "prev_ver": 486539266,
-      "name": "Scene",
+      "name": "Live Stream",
       "uuid": "22222222-2222-4222-8222-222222222201",
       "id": "scene",
       "versioned_id": "scene",
       "settings": {
         "custom_size": false,
-        "id_counter": 1,
+        "id_counter": 4,
         "items": [
           {
-            "name": "Background",
+            "name": "Live Stream BG",
             "source_uuid": "33333333-3333-4333-8333-333333333301",
             "visible": true,
-            "locked": false,
+            "locked": true,
             "rot": 0.0,
-            "pos": { "x": 0.0, "y": 0.0 },
-            "scale": { "x": 1.0, "y": 1.0 },
-            "bounds": { "x": 0.0, "y": 0.0 },
+            "pos": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
             "bounds_type": 0,
             "bounds_align": 0,
             "crop_left": 0,
             "crop_top": 0,
             "crop_right": 0,
             "crop_bottom": 0,
-            "id": 1,
-            "group_item_backup": false,
-            "scale_filter": "disable",
-            "blend_method": "default",
-            "blend_type": "normal",
-            "show_transition": { "duration": 0 },
-            "hide_transition": { "duration": 0 },
-            "private_settings": {}
+            "id": 1
+          },
+          {
+            "name": "Wave Loop GIF",
+            "source_uuid": "33333333-3333-4333-8333-333333333302",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 90.0
+            },
+            "scale": {
+              "x": 2.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 2
+          },
+          {
+            "name": "Lower Banner Bar",
+            "source_uuid": "33333333-3333-4333-8333-333333333303",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 324.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 3
+          },
+          {
+            "name": "Live Badge",
+            "source_uuid": "33333333-3333-4333-8333-333333333304",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 16.0,
+              "y": 16.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 4
           }
         ]
       },
@@ -109,14 +198,584 @@
     },
     {
       "prev_ver": 486539266,
-      "name": "Background",
+      "name": "Be Right Back",
+      "uuid": "22222222-2222-4222-8222-222222222202",
+      "id": "scene",
+      "versioned_id": "scene",
+      "settings": {
+        "custom_size": false,
+        "id_counter": 3,
+        "items": [
+          {
+            "name": "BRB Background",
+            "source_uuid": "44444444-4444-4444-8444-444444444401",
+            "visible": true,
+            "locked": true,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 1
+          },
+          {
+            "name": "Spinner Pulse GIF",
+            "source_uuid": "44444444-4444-4444-8444-444444444402",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 200.0,
+              "y": 60.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 2
+          },
+          {
+            "name": "BRB Accent Line",
+            "source_uuid": "44444444-4444-4444-8444-444444444403",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 3
+          }
+        ]
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Intermission",
+      "uuid": "22222222-2222-4222-8222-222222222203",
+      "id": "scene",
+      "versioned_id": "scene",
+      "settings": {
+        "custom_size": false,
+        "id_counter": 3,
+        "items": [
+          {
+            "name": "Intermission BG",
+            "source_uuid": "55555555-5555-4555-8555-555555555501",
+            "visible": true,
+            "locked": true,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 1
+          },
+          {
+            "name": "Drifting Particles GIF",
+            "source_uuid": "55555555-5555-4555-8555-555555555502",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 90.0
+            },
+            "scale": {
+              "x": 2.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 2
+          },
+          {
+            "name": "Intermission Accent Bar",
+            "source_uuid": "55555555-5555-4555-8555-555555555503",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 348.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 3
+          }
+        ]
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Stream Offline",
+      "uuid": "22222222-2222-4222-8222-222222222204",
+      "id": "scene",
+      "versioned_id": "scene",
+      "settings": {
+        "custom_size": false,
+        "id_counter": 3,
+        "items": [
+          {
+            "name": "Offline BG",
+            "source_uuid": "66666666-6666-4666-8666-666666666601",
+            "visible": true,
+            "locked": true,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 1
+          },
+          {
+            "name": "Wave Loop GIF",
+            "source_uuid": "33333333-3333-4333-8333-333333333302",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 90.0
+            },
+            "scale": {
+              "x": 2.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 2
+          },
+          {
+            "name": "Offline Red Line",
+            "source_uuid": "66666666-6666-4666-8666-666666666603",
+            "visible": true,
+            "locked": false,
+            "rot": 0.0,
+            "pos": {
+              "x": 0.0,
+              "y": 354.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "bounds": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "bounds_type": 0,
+            "bounds_align": 0,
+            "crop_left": 0,
+            "crop_top": 0,
+            "crop_right": 0,
+            "crop_bottom": 0,
+            "id": 3
+          }
+        ]
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Live Stream BG",
       "uuid": "33333333-3333-4333-8333-333333333301",
       "id": "color_source",
       "versioned_id": "color_source_v3",
       "settings": {
-        "color": 4281542929,
-        "width": 1280,
-        "height": 720
+        "color": 4280295444,
+        "width": 640,
+        "height": 360
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Wave Loop GIF",
+      "uuid": "33333333-3333-4333-8333-333333333302",
+      "id": "image_source",
+      "versioned_id": "image_source",
+      "settings": {
+        "file": "/root/.config/obs-studio/assets/wave_loop.gif",
+        "unload": false
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Lower Banner Bar",
+      "uuid": "33333333-3333-4333-8333-333333333303",
+      "id": "color_source",
+      "versioned_id": "color_source_v3",
+      "settings": {
+        "color": 4284769443,
+        "width": 640,
+        "height": 36
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Live Badge",
+      "uuid": "33333333-3333-4333-8333-333333333304",
+      "id": "color_source",
+      "versioned_id": "color_source_v3",
+      "settings": {
+        "color": 4279374100,
+        "width": 80,
+        "height": 24
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "BRB Background",
+      "uuid": "44444444-4444-4444-8444-444444444401",
+      "id": "color_source",
+      "versioned_id": "color_source_v3",
+      "settings": {
+        "color": 4279244059,
+        "width": 640,
+        "height": 360
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Spinner Pulse GIF",
+      "uuid": "44444444-4444-4444-8444-444444444402",
+      "id": "image_source",
+      "versioned_id": "image_source",
+      "settings": {
+        "file": "/root/.config/obs-studio/assets/pulse_spinner.gif",
+        "unload": false
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "BRB Accent Line",
+      "uuid": "44444444-4444-4444-8444-444444444403",
+      "id": "color_source",
+      "versioned_id": "color_source_v3",
+      "settings": {
+        "color": 4280068478,
+        "width": 640,
+        "height": 8
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Intermission BG",
+      "uuid": "55555555-5555-4555-8555-555555555501",
+      "id": "color_source",
+      "versioned_id": "color_source_v3",
+      "settings": {
+        "color": 4280032280,
+        "width": 640,
+        "height": 360
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Drifting Particles GIF",
+      "uuid": "55555555-5555-4555-8555-555555555502",
+      "id": "image_source",
+      "versioned_id": "image_source",
+      "settings": {
+        "file": "/root/.config/obs-studio/assets/particles_loop.gif",
+        "unload": false
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Intermission Accent Bar",
+      "uuid": "55555555-5555-4555-8555-555555555503",
+      "id": "color_source",
+      "versioned_id": "color_source_v3",
+      "settings": {
+        "color": 4278234869,
+        "width": 640,
+        "height": 12
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Offline BG",
+      "uuid": "66666666-6666-4666-8666-666666666601",
+      "id": "color_source",
+      "versioned_id": "color_source_v3",
+      "settings": {
+        "color": 4278190080,
+        "width": 640,
+        "height": 360
+      },
+      "mixers": 0,
+      "flags": 0,
+      "volume": 1.0,
+      "balance": 0.5,
+      "enabled": true,
+      "muted": false,
+      "sync": 0,
+      "hotkeys": {},
+      "deinterlace_mode": 0,
+      "deinterlace_field_order": 0,
+      "monitoring_type": 0,
+      "private_settings": {}
+    },
+    {
+      "prev_ver": 486539266,
+      "name": "Offline Red Line",
+      "uuid": "66666666-6666-4666-8666-666666666603",
+      "id": "color_source",
+      "versioned_id": "color_source_v3",
+      "settings": {
+        "color": 4278190319,
+        "width": 640,
+        "height": 6
       },
       "mixers": 0,
       "flags": 0,
