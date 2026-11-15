@@ -87,11 +87,54 @@ function getWindowsDrives() {
   return drives;
 }
 
-// Multer disk storage streams uploads directly to disk (low memory footprint)
+function copyRecursiveSync(src, dest) {
+  const st = fs.statSync(src);
+  if (st.isDirectory()) {
+    if (isPathInside(dest, src) || path.resolve(src) === path.resolve(dest)) {
+      throw new Error('Cannot copy a folder into itself');
+    }
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src)) {
+      copyRecursiveSync(path.join(src, entry), path.join(dest, entry));
+    }
+  } else {
+    fs.copyFileSync(src, dest);
+  }
+}
+
+function moveEntrySync(src, dest) {
+  try {
+    fs.renameSync(src, dest);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      copyRecursiveSync(src, dest);
+      fs.rmSync(src, { recursive: true, force: true });
+    } else {
+      throw err;
+    }
+  }
+}
+
+// Multer disk storage streams uploads directly to target dir (or ./uploads default)
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (_req, file, cb) => {
-    const safeName = (file.originalname || 'upload.bin').replace(/[^a-zA-Z0-9._-]/g, '_');
+  destination: (req, _file, cb) => {
+    const rawDir = req.query?.dir ? String(req.query.dir).trim() : '';
+    if (rawDir && rawDir !== '__UPLOADS__' && rawDir !== '__DRIVES__') {
+      try {
+        const resolved = path.resolve(rawDir);
+        if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+          return cb(null, resolved);
+        }
+      } catch (_) {}
+    }
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const keepOriginal = req.query?.keepName === 'true';
+    const safeName = path.basename(file.originalname || 'upload.bin').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
+    if (keepOriginal) {
+      return cb(null, safeName);
+    }
     const uniquePrefix = `${Date.now()}-${Math.round(Math.random() * 1e4)}`;
     cb(null, `${uniquePrefix}_${safeName}`);
   },
@@ -153,6 +196,22 @@ app.get('/api/status', (req, res) => {
     authRequired: Boolean(configuredPass),
     authValid,
     time: new Date().toISOString(),
+  });
+});
+
+/**
+ * Dedicated Login Verification API
+ */
+app.post('/api/auth/login', (req, res) => {
+  const configuredPass = getConfiguredPassword();
+  const provided = typeof req.body?.password === 'string' ? req.body.password : extractRequestPassword(req);
+  if (!isPasswordValid(provided, configuredPass)) {
+    return res.status(401).json({ success: false, error: 'Invalid password' });
+  }
+  res.json({
+    success: true,
+    authRequired: Boolean(configuredPass),
+    authValid: true,
   });
 });
 
@@ -401,23 +460,17 @@ app.get('/api/fs/browse', requireAuth, (req, res) => {
       if (entry.name.startsWith('.')) continue;
       try {
         const fullPath = path.join(targetDir, entry.name);
-        let isDir = entry.isDirectory();
-        if (!isDir && entry.isSymbolicLink()) {
-          isDir = fs.statSync(fullPath).isDirectory();
-        }
-        let size = 0;
-        if (!isDir) {
-          const st = fs.statSync(fullPath);
-          if (!st.isFile()) continue;
-          size = st.size;
-        }
+        const st = fs.statSync(fullPath);
+        const isDir = st.isDirectory();
+        if (!isDir && !st.isFile()) continue;
         items.push({
           name: entry.name,
           path: fullPath,
           isDirectory: isDir,
-          size,
+          size: isDir ? 0 : st.size,
+          mtime: st.mtime ? st.mtime.toISOString() : null,
           ext: isDir ? '' : path.extname(entry.name).toLowerCase(),
-          deletable: !isDir && (ALLOW_SYSTEM_DELETE || isPathInside(fullPath, uploadsDir)),
+          deletable: ALLOW_SYSTEM_DELETE || isPathInside(fullPath, uploadsDir),
         });
       } catch (_) {}
     }
@@ -443,6 +496,232 @@ app.get('/api/fs/browse', requireAuth, (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to browse directory', details: err.message });
+  }
+});
+
+/**
+ * Direct File Download API
+ */
+app.get('/api/fs/download', requireAuth, (req, res) => {
+  const rawPath = req.query.path ? String(req.query.path) : '';
+  if (!rawPath) return res.status(400).json({ error: 'Missing file path' });
+  const resolvedPath = path.resolve(rawPath);
+  try {
+    if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    res.download(resolvedPath, path.basename(resolvedPath));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to download file', details: err.message });
+  }
+});
+
+/**
+ * Create New Folder
+ */
+app.post('/api/fs/mkdir', requireAuth, (req, res) => {
+  const parentDir = req.body?.dir ? String(req.body.dir).trim() : '';
+  const name = req.body?.name ? String(req.body.name).trim() : '';
+  if (!name || /[<>:"/\\|?*\x00-\x1F]/.test(name) || name === '.' || name === '..') {
+    return res.status(400).json({ error: 'Invalid folder name' });
+  }
+  const baseDir = !parentDir || parentDir === '__UPLOADS__' ? uploadsDir : path.resolve(parentDir);
+  const targetPath = path.join(baseDir, name);
+  try {
+    if (fs.existsSync(targetPath)) {
+      return res.status(409).json({ error: 'A file or folder with that name already exists' });
+    }
+    fs.mkdirSync(targetPath, { recursive: true });
+    res.json({ success: true, path: targetPath, name });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create folder', details: err.message });
+  }
+});
+
+/**
+ * Create New Text File
+ */
+app.post('/api/fs/mkfile', requireAuth, (req, res) => {
+  const parentDir = req.body?.dir ? String(req.body.dir).trim() : '';
+  const name = req.body?.name ? String(req.body.name).trim() : '';
+  const content = typeof req.body?.content === 'string' ? req.body.content : '';
+  if (!name || /[<>:"/\\|?*\x00-\x1F]/.test(name) || name === '.' || name === '..') {
+    return res.status(400).json({ error: 'Invalid file name' });
+  }
+  const baseDir = !parentDir || parentDir === '__UPLOADS__' ? uploadsDir : path.resolve(parentDir);
+  const targetPath = path.join(baseDir, name);
+  try {
+    if (fs.existsSync(targetPath)) {
+      return res.status(409).json({ error: 'A file or folder with that name already exists' });
+    }
+    fs.writeFileSync(targetPath, content, 'utf8');
+    res.json({ success: true, path: targetPath, name });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create file', details: err.message });
+  }
+});
+
+/**
+ * Rename File or Folder
+ */
+app.post('/api/fs/rename', requireAuth, (req, res) => {
+  const rawPath = req.body?.path ? String(req.body.path).trim() : '';
+  const newName = req.body?.newName ? String(req.body.newName).trim() : '';
+  if (!rawPath || !newName || /[<>:"/\\|?*\x00-\x1F]/.test(newName) || newName === '.' || newName === '..') {
+    return res.status(400).json({ error: 'Invalid file path or new name' });
+  }
+  const sourcePath = path.resolve(rawPath);
+  const destPath = path.join(path.dirname(sourcePath), newName);
+  try {
+    if (!fs.existsSync(sourcePath)) {
+      return res.status(404).json({ error: 'Source item not found' });
+    }
+    if (sourcePath !== destPath && fs.existsSync(destPath)) {
+      return res.status(409).json({ error: 'Target name already exists in this folder' });
+    }
+    fs.renameSync(sourcePath, destPath);
+    res.json({ success: true, oldPath: sourcePath, path: destPath, name: newName });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to rename item', details: err.message });
+  }
+});
+
+/**
+ * Copy File(s) or Folder(s)
+ */
+app.post('/api/fs/copy', requireAuth, (req, res) => {
+  const sources = Array.isArray(req.body?.sources)
+    ? req.body.sources
+    : req.body?.sourcePath ? [req.body.sourcePath] : [];
+  const rawDestDir = req.body?.destDir ? String(req.body.destDir).trim() : '';
+  if (!sources.length || !rawDestDir) {
+    return res.status(400).json({ error: 'Missing source items or destination directory' });
+  }
+  const destDir = rawDestDir === '__UPLOADS__' ? uploadsDir : path.resolve(rawDestDir);
+  try {
+    if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+      return res.status(404).json({ error: 'Destination directory does not exist' });
+    }
+    const copied = [];
+    for (const rawSrc of sources) {
+      const srcPath = path.resolve(String(rawSrc));
+      if (!fs.existsSync(srcPath)) continue;
+      const baseName = path.basename(srcPath);
+      let targetPath = path.join(destDir, baseName);
+      if (path.resolve(srcPath) === path.resolve(targetPath)) {
+        const ext = path.extname(baseName);
+        const stem = baseName.slice(0, baseName.length - ext.length);
+        targetPath = path.join(destDir, `${stem}_copy_${Date.now().toString().slice(-4)}${ext}`);
+      }
+      copyRecursiveSync(srcPath, targetPath);
+      copied.push(targetPath);
+    }
+    res.json({ success: true, copied });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to copy items', details: err.message });
+  }
+});
+
+/**
+ * Move File(s) or Folder(s)
+ */
+app.post('/api/fs/move', requireAuth, (req, res) => {
+  const sources = Array.isArray(req.body?.sources)
+    ? req.body.sources
+    : req.body?.sourcePath ? [req.body.sourcePath] : [];
+  const rawDestDir = req.body?.destDir ? String(req.body.destDir).trim() : '';
+  if (!sources.length || !rawDestDir) {
+    return res.status(400).json({ error: 'Missing source items or destination directory' });
+  }
+  const destDir = rawDestDir === '__UPLOADS__' ? uploadsDir : path.resolve(rawDestDir);
+  try {
+    if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+      return res.status(404).json({ error: 'Destination directory does not exist' });
+    }
+    const moved = [];
+    for (const rawSrc of sources) {
+      const srcPath = path.resolve(String(rawSrc));
+      if (!fs.existsSync(srcPath)) continue;
+      const targetPath = path.join(destDir, path.basename(srcPath));
+      if (path.resolve(srcPath) === path.resolve(targetPath)) continue;
+      moveEntrySync(srcPath, targetPath);
+      moved.push(targetPath);
+    }
+    res.json({ success: true, moved });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to move items', details: err.message });
+  }
+});
+
+/**
+ * Delete Multiple Files or Folders
+ */
+app.post('/api/fs/delete', requireAuth, (req, res) => {
+  if (req.headers['x-delete-unlocked'] !== 'true') {
+    return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
+  }
+  const paths = Array.isArray(req.body?.paths)
+    ? req.body.paths
+    : req.body?.path ? [req.body.path] : [];
+  if (!paths.length) {
+    return res.status(400).json({ error: 'No paths provided to delete' });
+  }
+  try {
+    const deleted = [];
+    for (const raw of paths) {
+      const targetPath = path.resolve(String(raw));
+      if (!ALLOW_SYSTEM_DELETE && !isPathInside(targetPath, uploadsDir)) {
+        return res.status(403).json({
+          error: 'Delete is restricted to the uploads folder (set ALLOW_SYSTEM_DELETE=true to override).',
+        });
+      }
+      if (fs.existsSync(targetPath)) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+        deleted.push(targetPath);
+      }
+    }
+    res.json({ success: true, deleted });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete items', details: err.message });
+  }
+});
+
+/**
+ * Read & Save Text File Content (In-Browser Text Editor)
+ */
+app.get('/api/fs/content', requireAuth, (req, res) => {
+  const rawPath = req.query.path ? String(req.query.path) : '';
+  if (!rawPath) return res.status(400).json({ error: 'Missing file path' });
+  const resolvedPath = path.resolve(rawPath);
+  try {
+    if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    const st = fs.statSync(resolvedPath);
+    if (st.size > 5 * 1024 * 1024) {
+      return res.status(413).json({ error: 'File is too large for the text editor (> 5 MB)' });
+    }
+    const content = fs.readFileSync(resolvedPath, 'utf8');
+    res.json({ path: resolvedPath, name: path.basename(resolvedPath), size: st.size, content });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read file content', details: err.message });
+  }
+});
+
+app.put('/api/fs/content', requireAuth, (req, res) => {
+  const rawPath = req.body?.path ? String(req.body.path) : '';
+  const content = typeof req.body?.content === 'string' ? req.body.content : '';
+  if (!rawPath) return res.status(400).json({ error: 'Missing file path' });
+  const resolvedPath = path.resolve(rawPath);
+  try {
+    if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    fs.writeFileSync(resolvedPath, content, 'utf8');
+    const st = fs.statSync(resolvedPath);
+    res.json({ success: true, path: resolvedPath, size: st.size });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save file content', details: err.message });
   }
 });
 

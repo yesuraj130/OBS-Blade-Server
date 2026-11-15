@@ -3,20 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OBS Host File Browser</title>
+  <title>FileBrowser — OBS Host File Manager</title>
   <style>
     :root {
-      --bg-dark: #12141a;
-      --card-bg: #1a1d26;
-      --card-border: #292e3d;
-      --primary: #3b82f6;
-      --primary-hover: #2563eb;
-      --text: #e2e8f0;
-      --text-muted: #94a3b8;
-      --danger: #ef4444;
-      --danger-bg: rgba(239, 68, 68, 0.14);
-      --warning: #f59e0b;
-      --success: #22c55e;
+      --bg-base: #0d1117;
+      --bg-surface: #161b22;
+      --bg-elevated: #1f2633;
+      --bg-hover: rgba(56, 139, 253, 0.1);
+      --bg-selected: rgba(47, 129, 247, 0.18);
+      --border: #262e3d;
+      --border-focus: #388bfd;
+      --primary: #2f81f7;
+      --primary-hover: #1f6feb;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --danger: #f85149;
+      --danger-bg: rgba(248, 81, 73, 0.14);
+      --warning: #d29922;
+      --success: #3fb950;
       --radius: 8px;
     }
 
@@ -28,70 +32,334 @@
     }
 
     body {
-      background-color: var(--bg-dark);
+      background-color: var(--bg-base);
       color: var(--text);
       min-height: 100vh;
+      height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
 
-    header {
-      background: var(--card-bg);
-      border-bottom: 1px solid var(--card-border);
-      padding: 14px 20px;
+    /* Fullscreen Login Screen on Startup */
+    .login-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: radial-gradient(circle at top, #172237 0%, #0d1117 70%);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-screen.active {
+      display: flex;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px 28px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .login-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 10px;
+    }
+
+    .login-logo-badge {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      background: rgba(47, 129, 247, 0.16);
+      border: 1px solid rgba(47, 129, 247, 0.4);
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
+      justify-content: center;
+      font-size: 28px;
     }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .login-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
     }
 
-    .brand-icon {
-      font-size: 24px;
-    }
-
-    .brand-title {
-      font-size: 18px;
-      font-weight: 600;
-    }
-
-    .brand-subtitle {
-      font-size: 12px;
+    .login-subtitle {
+      font-size: 13px;
       color: var(--text-muted);
     }
 
-    .header-actions {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
+    .login-error {
+      background: var(--danger-bg);
+      border: 1px solid rgba(248, 81, 73, 0.4);
+      color: #ffa198;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      display: none;
     }
 
-    .btn {
-      padding: 8px 14px;
-      border-radius: var(--radius);
-      border: 1px solid var(--card-border);
-      background: var(--card-bg);
+    /* Main FileBrowser Shell */
+    .fb-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    /* Top Bar */
+    .fb-topbar {
+      height: 56px;
+      min-height: 56px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      gap: 12px;
+    }
+
+    .fb-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 190px;
+    }
+
+    .fb-brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: rgba(47, 129, 247, 0.16);
+      border: 1px solid rgba(47, 129, 247, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .fb-brand-name {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+
+    .fb-brand-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .fb-search-wrap {
+      flex: 1;
+      max-width: 440px;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .fb-search-input {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 32px 8px 34px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .fb-search-input:focus {
+      border-color: var(--border-focus);
+    }
+
+    .fb-search-icon {
+      position: absolute;
+      left: 11px;
+      font-size: 13px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .fb-toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* Body Workspace: Sidebar + Content */
+    .fb-workspace {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .fb-sidebar {
+      width: 230px;
+      min-width: 230px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 14px 10px;
+      overflow-y: auto;
+      gap: 16px;
+    }
+
+    .fb-side-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .fb-side-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      padding: 4px 10px;
+    }
+
+    .fb-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 7px;
+      border: 1px solid transparent;
+      background: transparent;
       color: var(--text);
       font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition: background 0.12s, border-color 0.12s;
+    }
+
+    .fb-nav-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .fb-nav-item.active {
+      background: var(--bg-selected);
+      border-color: rgba(47, 129, 247, 0.4);
+      color: #fff;
+    }
+
+    /* Main Content Column */
+    .fb-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      background: var(--bg-base);
+    }
+
+    /* Sub-header: Breadcrumbs + Contextual Selection Toolbar */
+    .fb-subbar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      min-height: 46px;
+    }
+
+    .fb-breadcrumbs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      white-space: nowrap;
+      font-size: 13px;
+      flex: 1;
+      min-width: 180px;
+    }
+
+    .fb-crumb {
+      padding: 4px 8px;
+      border-radius: 5px;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12.5px;
+      border: none;
+      background: transparent;
+    }
+
+    .fb-crumb:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+    }
+
+    .fb-crumb.current {
+      color: #fff;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .fb-crumb-sep {
+      color: #484f58;
+      font-size: 12px;
+      user-select: none;
+    }
+
+    .fb-context-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 6px 11px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text);
+      font-size: 12.5px;
       font-weight: 500;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 6px;
       text-decoration: none;
-      transition: all 0.15s ease;
+      transition: all 0.12s ease;
+      white-space: nowrap;
     }
 
-    .btn:hover {
-      background: #252a38;
-      border-color: #3e465b;
+    .btn:hover:not(:disabled) {
+      background: #293242;
+      border-color: #424f66;
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
 
     .btn-primary {
@@ -100,80 +368,36 @@
       color: #fff;
     }
 
-    .btn-primary:hover {
+    .btn-primary:hover:not(:disabled) {
       background: var(--primary-hover);
       border-color: var(--primary-hover);
     }
 
     .btn-danger {
       background: var(--danger-bg);
-      border-color: rgba(239, 68, 68, 0.45);
-      color: #fca5a5;
+      border-color: rgba(248, 81, 73, 0.45);
+      color: #ffa198;
     }
 
-    .btn-danger:hover {
-      background: rgba(239, 68, 68, 0.25);
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(248, 81, 73, 0.25);
       border-color: var(--danger);
       color: #fff;
     }
 
     .btn-lock-unlocked {
-      background: rgba(245, 158, 11, 0.15);
-      border-color: rgba(245, 158, 11, 0.55);
-      color: #fcd34d;
+      background: rgba(210, 153, 34, 0.18);
+      border-color: rgba(210, 153, 34, 0.55);
+      color: #e3b341;
     }
 
-    main {
-      flex: 1;
-      padding: 20px;
-      max-width: 1200px;
-      width: 100%;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    /* Upload Zone */
-    .upload-zone {
-      border: 2px dashed var(--card-border);
-      border-radius: var(--radius);
-      padding: 22px;
-      text-align: center;
-      background: rgba(26, 29, 38, 0.5);
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .upload-zone:hover, .upload-zone.dragover {
-      border-color: var(--primary);
-      background: rgba(59, 130, 246, 0.06);
-    }
-
-    .upload-icon {
-      font-size: 30px;
-      margin-bottom: 6px;
-    }
-
-    .upload-text {
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 4px;
-    }
-
-    .upload-hint {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    /* Upload Progress Bar */
+    /* Upload Progress Banner */
     .upload-progress-box {
       display: none;
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius);
-      padding: 12px 16px;
-      gap: 10px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      gap: 8px;
       flex-direction: column;
     }
 
@@ -186,15 +410,15 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      font-size: 13px;
+      font-size: 12.5px;
     }
 
     .progress-track {
-      height: 8px;
-      background: #0f1218;
+      height: 7px;
+      background: #090d13;
       border-radius: 999px;
       overflow: hidden;
-      border: 1px solid var(--card-border);
+      border: 1px solid var(--border);
     }
 
     .progress-fill {
@@ -204,104 +428,211 @@
       transition: width 0.12s linear;
     }
 
-    /* Navigation & Quick Locations */
-    .nav-bar {
+    /* File Stage (Drag & Drop Area + Scrollable List/Grid) */
+    .fb-stage {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      position: relative;
+      user-select: none;
+    }
+
+    .fb-stage.dragover::after {
+      content: "Drop files anywhere to upload to this folder";
+      position: fixed;
+      inset: 60px 16px 16px 246px;
+      background: rgba(13, 17, 23, 0.86);
+      border: 2px dashed var(--primary);
+      border-radius: 12px;
       display: flex;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius);
-      padding: 10px 14px;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+      z-index: 50;
+      pointer-events: none;
     }
 
-    .breadcrumb {
-      flex: 1;
-      min-width: 180px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 13px;
-      color: var(--text);
-      overflow-x: auto;
-      white-space: nowrap;
+    /* List Table View */
+    .fb-list-header {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 110px 165px 210px;
+      gap: 12px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--text-muted);
+      background: var(--bg-surface);
+      border-radius: 8px 8px 0 0;
+      border: 1px solid var(--border);
     }
 
-    /* Entries List */
-    .entries-container {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius);
+    .fb-sort-col {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .fb-sort-col:hover {
+      color: #fff;
+    }
+
+    .fb-entries-list {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 8px 8px;
       overflow: hidden;
     }
 
-    .entry-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    .fb-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 110px 165px 210px;
       gap: 12px;
-      padding: 11px 16px;
-      border-bottom: 1px solid rgba(41, 46, 61, 0.6);
-      transition: background 0.15s ease;
+      align-items: center;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(38, 46, 61, 0.65);
       cursor: pointer;
+      transition: background 0.1s;
+      font-size: 13.5px;
     }
 
-    .entry-row:last-child {
+    .fb-row:last-child {
       border-bottom: none;
     }
 
-    .entry-row:hover {
-      background: rgba(255, 255, 255, 0.03);
+    .fb-row:hover {
+      background: var(--bg-hover);
     }
 
-    .entry-left {
+    .fb-row.selected {
+      background: var(--bg-selected);
+    }
+
+    .fb-cell-name {
       display: flex;
       align-items: center;
-      gap: 12px;
-      flex: 1;
+      gap: 10px;
       min-width: 0;
     }
 
-    .entry-icon {
+    .fb-item-icon {
       font-size: 20px;
       flex-shrink: 0;
     }
 
-    .entry-name {
-      font-size: 14px;
+    .fb-item-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       font-weight: 500;
+    }
+
+    .fb-cell-meta {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .fb-cell-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 5px;
+    }
+
+    /* Grid / Mosaic View */
+    .fb-entries-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+      gap: 12px;
+    }
+
+    .fb-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      cursor: pointer;
+      transition: transform 0.12s, border-color 0.12s, background 0.12s;
+      position: relative;
+    }
+
+    .fb-card:hover {
+      border-color: #3b465c;
+      background: var(--bg-hover);
+    }
+
+    .fb-card.selected {
+      border-color: var(--primary);
+      background: var(--bg-selected);
+    }
+
+    .fb-card-thumb {
+      height: 76px;
+      border-radius: 6px;
+      background: #0d1117;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      overflow: hidden;
+    }
+
+    .fb-card-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .fb-card-name {
+      font-size: 13px;
+      font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .entry-meta {
-      font-size: 12px;
+    .fb-card-sub {
+      font-size: 11.5px;
       color: var(--text-muted);
-      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
     }
 
-    .entry-actions {
+    /* Status Footer */
+    .fb-statusbar {
+      height: 32px;
+      min-height: 32px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      padding: 0 16px;
       display: flex;
       align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
-    }
-
-    .btn-sm {
-      padding: 5px 10px;
+      justify-content: space-between;
       font-size: 12px;
+      color: var(--text-muted);
     }
 
     /* Modals */
     .modal-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(8, 10, 15, 0.8);
+      background: rgba(6, 9, 14, 0.8);
       display: none;
       align-items: center;
       justify-content: center;
       padding: 16px;
-      z-index: 900;
+      z-index: 1500;
     }
 
     .modal-overlay.open {
@@ -309,22 +640,24 @@
     }
 
     .modal-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
       border-radius: 10px;
       width: 100%;
-      max-width: 520px;
+      max-width: 500px;
       overflow: hidden;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
     }
 
     .modal-card.modal-wide {
-      max-width: 860px;
+      max-width: 900px;
     }
 
     .modal-head {
       padding: 14px 18px;
-      border-bottom: 1px solid var(--card-border);
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -348,33 +681,53 @@
 
     .modal-foot {
       padding: 12px 18px;
-      border-top: 1px solid var(--card-border);
+      border-top: 1px solid var(--border);
       display: flex;
       justify-content: flex-end;
-      gap: 10px;
+      gap: 8px;
     }
 
     .input-field {
       width: 100%;
-      margin-top: 10px;
+      margin-top: 8px;
       padding: 10px 12px;
       border-radius: var(--radius);
-      border: 1px solid var(--card-border);
-      background: #0f1218;
+      border: 1px solid var(--border);
+      background: var(--bg-base);
       color: var(--text);
       font-size: 14px;
+      outline: none;
+    }
+
+    .input-field:focus {
+      border-color: var(--border-focus);
+    }
+
+    .editor-textarea {
+      width: 100%;
+      height: 62vh;
+      background: #090c10;
+      color: #e6edf3;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      resize: vertical;
+      outline: none;
     }
 
     .preview-stage {
-      background: #0a0c10;
+      background: #080a0f;
       border-radius: var(--radius);
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 180px;
+      min-height: 220px;
       max-height: 70vh;
       overflow: auto;
-      padding: 8px;
+      padding: 10px;
     }
 
     .preview-stage img,
@@ -389,113 +742,208 @@
       max-width: 520px;
     }
 
-    .preview-stage pre {
-      width: 100%;
-      max-height: 64vh;
-      overflow: auto;
-      padding: 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      color: #cbd5e1;
-    }
-
-    /* Toast Notification */
     #toast {
       position: fixed;
       bottom: 24px;
       right: 24px;
-      background: #1e293b;
+      background: #1f2633;
       color: #fff;
-      padding: 12px 18px;
+      padding: 11px 16px;
       border-radius: var(--radius);
-      border: 1px solid #334155;
+      border: 1px solid #384459;
       font-size: 13px;
       display: none;
-      max-width: min(90vw, 480px);
+      max-width: min(90vw, 460px);
       word-break: break-word;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.35);
-      z-index: 1000;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+      z-index: 2500;
     }
 
     #toast.success { border-color: var(--success); }
     #toast.error { border-color: var(--danger); }
+
+    @media (max-width: 820px) {
+      .fb-sidebar {
+        width: 180px;
+        min-width: 180px;
+      }
+      .fb-list-header,
+      .fb-row {
+        grid-template-columns: minmax(160px, 1fr) 85px 150px;
+      }
+      .fb-hide-mobile {
+        display: none !important;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .fb-workspace {
+        flex-direction: column;
+      }
+      .fb-sidebar {
+        width: 100%;
+        min-width: 0;
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 8px 12px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .fb-side-group {
+        flex-direction: row;
+        align-items: center;
+      }
+      .fb-side-label {
+        display: none;
+      }
+      .fb-nav-item {
+        width: auto;
+        padding: 6px 10px;
+      }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <span class="brand-icon">📁</span>
-      <div>
-        <div class="brand-title">OBS Host File Browser</div>
-        <div class="brand-subtitle" id="server-subtitle">Standalone Media &amp; Disk File Management</div>
+  <!-- 1. Fullscreen Startup Login Screen (Persisted in localStorage) -->
+  <div class="login-screen" id="login-screen">
+    <form class="login-card" id="form-login">
+      <div class="login-logo">
+        <div class="login-logo-badge">📁</div>
+        <div class="login-title">FileBrowser</div>
+        <div class="login-subtitle" id="login-subtitle">Sign in to access OBS Host File Manager</div>
       </div>
-    </div>
-    <div class="header-actions">
-      <button class="btn" id="btn-delete-lock" title="Delete operations are locked for safety">🔒 Delete Locked</button>
-      <button class="btn" id="btn-auth-modal" style="display: none;" title="Change server password">🔑 Password</button>
-      <button class="btn" id="btn-refresh" title="Refresh files">🔄 Refresh</button>
-      <a href="#" class="btn btn-primary" id="btn-dashboard-link" style="display: none;">← OBS Blade Dashboard</a>
-    </div>
-  </header>
+      <div class="login-error" id="login-error"></div>
+      <div>
+        <label style="font-size: 12.5px; color: var(--text-muted);" for="input-login-password">Password</label>
+        <input type="password" id="input-login-password" class="input-field" placeholder="Enter File Browser password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="justify-content: center; padding: 10px; font-size: 14px;">
+        Sign In
+      </button>
+    </form>
+  </div>
 
-  <main>
-    <!-- Drag and Drop Upload -->
-    <div class="upload-zone" id="drop-zone">
-      <div class="upload-icon">📤</div>
-      <div class="upload-text">Drag &amp; drop media files here, or click to upload to OBS host</div>
-      <div class="upload-hint" id="upload-hint-text">Videos, Images, Audio • Files over 100 MB will ask for confirmation</div>
-      <input type="file" id="file-input" style="display: none;" multiple>
-    </div>
+  <!-- 2. Main FileBrowser Application Shell -->
+  <div class="fb-shell">
+    <!-- Top Header Bar -->
+    <header class="fb-topbar">
+      <div class="fb-brand">
+        <div class="fb-brand-icon">📁</div>
+        <div>
+          <div class="fb-brand-name">FileBrowser</div>
+          <div class="fb-brand-sub" id="server-subtitle">OBS Host File Manager</div>
+        </div>
+      </div>
 
-    <!-- Upload Progress -->
+      <div class="fb-search-wrap">
+        <span class="fb-search-icon">🔍</span>
+        <input type="text" id="input-search" class="fb-search-input" placeholder="Filter files &amp; folders in current directory...">
+      </div>
+
+      <div class="fb-toolbar-actions">
+        <button type="button" class="btn btn-primary" id="btn-top-upload" title="Upload files to current folder">📤 Upload</button>
+        <input type="file" id="file-input" style="display: none;" multiple>
+        <button type="button" class="btn" id="btn-new-folder" title="Create new folder">📁+ New Folder</button>
+        <button type="button" class="btn" id="btn-new-file" title="Create new text file">📄+ New File</button>
+        <button type="button" class="btn" id="btn-view-toggle" title="Switch between List and Grid view">🔲 Grid</button>
+        <button type="button" class="btn" id="btn-refresh" title="Refresh directory">🔄</button>
+        <a href="#" class="btn btn-primary" id="btn-dashboard-link" style="display: none;">← OBS Blade</a>
+      </div>
+    </header>
+
+    <!-- Upload Progress Bar -->
     <div class="upload-progress-box" id="upload-progress-box">
       <div class="upload-progress-head">
         <span id="upload-progress-label">Uploading...</span>
-        <button type="button" class="btn btn-sm btn-danger" id="btn-cancel-upload">Cancel</button>
+        <button type="button" class="btn btn-danger" id="btn-cancel-upload">Cancel</button>
       </div>
       <div class="progress-track">
         <div class="progress-fill" id="upload-progress-fill"></div>
       </div>
     </div>
 
-    <!-- Navigation Breadcrumb -->
-    <div class="nav-bar">
-      <button class="btn btn-sm" id="btn-nav-up" style="display: none;">⬆ Up</button>
-      <button class="btn btn-sm" id="btn-nav-uploads">📂 Uploads</button>
-      <button class="btn btn-sm" id="btn-nav-drives">💾 Drives</button>
-      <div class="breadcrumb" id="breadcrumb-text">Loading...</div>
-    </div>
+    <!-- Workspace: Left Sidebar + Main File Explorer -->
+    <div class="fb-workspace">
+      <aside class="fb-sidebar">
+        <div class="fb-side-group">
+          <div class="fb-side-label">Locations</div>
+          <button type="button" class="fb-nav-item active" id="btn-nav-uploads">📂 Uploads Library</button>
+          <button type="button" class="fb-nav-item" id="btn-nav-project">📦 Project Folder</button>
+          <button type="button" class="fb-nav-item" id="btn-nav-drives">💾 System Drives</button>
+        </div>
 
-    <!-- Entries -->
-    <div class="entries-container" id="entries-list">
-      <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 13px;">
-        Loading directories...
-      </div>
-    </div>
-  </main>
+        <div class="fb-side-group">
+          <div class="fb-side-label">Security &amp; Session</div>
+          <button type="button" class="fb-nav-item" id="btn-delete-lock" title="Unlock to allow deleting files/folders">🔒 Delete Locked</button>
+          <button type="button" class="fb-nav-item" id="btn-logout" style="display: none; color: #ffa198;">🚪 Log Out</button>
+        </div>
+      </aside>
 
-  <!-- Password Modal -->
-  <div class="modal-overlay" id="modal-password">
+      <section class="fb-main">
+        <!-- Sub-bar: Interactive Breadcrumbs + Contextual Selection Toolbar -->
+        <div class="fb-subbar">
+          <div class="fb-breadcrumbs" id="breadcrumb-bar">
+            <button type="button" class="fb-crumb" id="btn-nav-up" title="Up one level">⬆ Up</button>
+            <span class="fb-crumb-sep">/</span>
+            <span id="breadcrumb-segments">Loading...</span>
+          </div>
+
+          <div class="fb-context-actions" id="context-toolbar">
+            <button type="button" class="btn" id="btn-act-paste" style="display: none;" title="Paste clipboard items here">📋 Paste Here</button>
+            <button type="button" class="btn" id="btn-act-copy-path" disabled title="Copy absolute disk path for OBS">🔗 Copy Path</button>
+            <button type="button" class="btn" id="btn-act-open-edit" disabled title="Preview or edit selected file">👁️ Open / Edit</button>
+            <button type="button" class="btn" id="btn-act-rename" disabled title="Rename selected item">✏️ Rename</button>
+            <button type="button" class="btn" id="btn-act-copy" disabled title="Copy to clipboard">📄 Copy</button>
+            <button type="button" class="btn" id="btn-act-cut" disabled title="Cut / Move to clipboard">✂️ Cut</button>
+            <button type="button" class="btn" id="btn-act-download" disabled title="Download file">⬇️ Download</button>
+            <button type="button" class="btn btn-danger" id="btn-act-delete" disabled title="Delete selected item(s)">🗑️ Delete</button>
+          </div>
+        </div>
+
+        <!-- Main File Stage -->
+        <div class="fb-stage" id="fb-stage">
+          <div class="fb-list-header" id="list-header">
+            <div class="fb-sort-col" data-sort="name">Name <span id="sort-ind-name">▲</span></div>
+            <div class="fb-sort-col" data-sort="size">Size <span id="sort-ind-size"></span></div>
+            <div class="fb-sort-col fb-hide-mobile" data-sort="mtime">Modified <span id="sort-ind-mtime"></span></div>
+            <div style="text-align: right;">Quick Actions</div>
+          </div>
+          <div id="entries-list" class="fb-entries-list">
+            <div style="padding: 36px; text-align: center; color: var(--text-muted); font-size: 13.5px;">
+              Loading directory...
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Status Bar -->
+        <footer class="fb-statusbar">
+          <span id="status-counts">0 items</span>
+          <span id="upload-hint-text">Drag &amp; drop files anywhere to upload to the active folder</span>
+        </footer>
+      </section>
+    </div>
+  </div>
+
+  <!-- 3. Prompt Modal (New Folder / New File / Rename) -->
+  <div class="modal-overlay" id="modal-prompt">
     <div class="modal-card">
       <div class="modal-head">
-        <span class="modal-title">🔑 Server Authentication Required</span>
+        <span class="modal-title" id="prompt-title">Input</span>
       </div>
-      <form id="form-password">
+      <form id="form-prompt">
         <div class="modal-body">
-          <div id="password-error" style="color: #fca5a5; font-size: 12.5px; margin-bottom: 8px; display: none;"></div>
-          <div>Enter the File Browser / OBS server password to browse and manage host files.</div>
-          <input type="password" id="input-server-password" class="input-field" placeholder="Server password" autocomplete="current-password" required>
+          <div id="prompt-label" style="font-size: 13px; color: var(--text-muted);">Enter name:</div>
+          <input type="text" id="input-prompt-value" class="input-field" required>
         </div>
         <div class="modal-foot">
-          <button type="submit" class="btn btn-primary">Unlock Access</button>
+          <button type="button" class="btn" id="btn-prompt-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-prompt-ok">Save</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Confirm Modal (Large Uploads & Delete Safety) -->
+  <!-- 4. Confirm Modal (Large Uploads & Delete Safety) -->
   <div class="modal-overlay" id="modal-confirm">
     <div class="modal-card">
       <div class="modal-head">
@@ -509,12 +957,32 @@
     </div>
   </div>
 
-  <!-- Media Preview Modal -->
+  <!-- 5. In-Browser Text / Code Editor Modal -->
+  <div class="modal-overlay" id="modal-editor">
+    <div class="modal-card modal-wide">
+      <div class="modal-head">
+        <span class="modal-title" id="editor-title">Edit File</span>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn" id="btn-editor-close">Cancel</button>
+          <button type="button" class="btn btn-primary" id="btn-editor-save">💾 Save Changes</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <textarea id="editor-textarea" class="editor-textarea" spellcheck="false"></textarea>
+        <div id="editor-meta" style="margin-top: 8px; font-size: 12px; color: var(--text-muted); font-family: monospace;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Media Lightbox Preview Modal -->
   <div class="modal-overlay" id="modal-preview">
     <div class="modal-card modal-wide">
       <div class="modal-head">
         <span class="modal-title" id="preview-title">Media Preview</span>
-        <button type="button" class="btn btn-sm" id="btn-close-preview">Close</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn" id="btn-preview-download">⬇️ Download</button>
+          <button type="button" class="btn" id="btn-close-preview">Close</button>
+        </div>
       </div>
       <div class="modal-body">
         <div class="preview-stage" id="preview-stage"></div>
@@ -524,66 +992,127 @@
   </div>
 
   <div id="toast"></div>
-
   <script>
-    const LARGE_FILE_WARN_BYTES = 100 * 1024 * 1024; // 100 MB
+    const LARGE_FILE_WARN_BYTES = 100 * 1024 * 1024;
+    const STORAGE_PW_KEY = 'obs_file_browser_pw';
+    const STORAGE_VIEW_KEY = 'obs_file_browser_view';
+
     const PREVIEW_EXTS = {
       image: new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico']),
       video: new Set(['.mp4', '.mov', '.mkv', '.webm', '.m4v', '.avi']),
       audio: new Set(['.mp3', '.wav', '.aac', '.flac', '.ogg', '.m4a']),
-      text: new Set(['.txt', '.log', '.json', '.srt', '.vtt']),
+      text: new Set([
+        '.txt', '.log', '.json', '.srt', '.vtt', '.md', '.csv', '.xml', '.yml', '.yaml',
+        '.ini', '.conf', '.cfg', '.js', '.ts', '.css', '.html', '.htm', '.bat', '.vbs', '.sh', '.py'
+      ]),
     };
 
     let currentDir = '__UPLOADS__';
     let parentDir = null;
+    let uploadsDirPath = '';
+    let allEntries = [];
+    let selectedPaths = new Set();
+    let clipboardState = { mode: null, paths: [] }; // mode: 'copy' | 'cut'
+    let viewMode = 'list'; // 'list' | 'grid'
+    let sortField = 'name'; // 'name' | 'size' | 'mtime'
+    let sortAsc = true;
+    let searchQuery = '';
     let maxUploadBytes = 2048 * 1024 * 1024;
     let maxUploadMb = 2048;
     let deleteUnlocked = false;
+    let authRequired = false;
     let browseAbortController = null;
     let activeUploadXhr = null;
     let activeUploadCancelled = false;
+    let activeEditingPath = '';
+    let activePreviewItem = null;
     let serverPassword = '';
 
     try {
-      serverPassword = sessionStorage.getItem('obs_file_browser_pw') || '';
+      serverPassword = localStorage.getItem(STORAGE_PW_KEY) || '';
+      viewMode = localStorage.getItem(STORAGE_VIEW_KEY) === 'grid' ? 'grid' : 'list';
     } catch (_) {}
 
     const el = {
+      loginScreen: document.getElementById('login-screen'),
+      formLogin: document.getElementById('form-login'),
+      loginSubtitle: document.getElementById('login-subtitle'),
+      loginError: document.getElementById('login-error'),
+      inputLoginPassword: document.getElementById('input-login-password'),
+
       serverSubtitle: document.getElementById('server-subtitle'),
       uploadHintText: document.getElementById('upload-hint-text'),
-      breadcrumbText: document.getElementById('breadcrumb-text'),
-      entriesList: document.getElementById('entries-list'),
-      btnNavUp: document.getElementById('btn-nav-up'),
-      btnNavUploads: document.getElementById('btn-nav-uploads'),
-      btnNavDrives: document.getElementById('btn-nav-drives'),
-      btnRefresh: document.getElementById('btn-refresh'),
-      btnDeleteLock: document.getElementById('btn-delete-lock'),
-      btnAuthModal: document.getElementById('btn-auth-modal'),
-      btnDashboardLink: document.getElementById('btn-dashboard-link'),
-      dropZone: document.getElementById('drop-zone'),
+      inputSearch: document.getElementById('input-search'),
+      btnTopUpload: document.getElementById('btn-top-upload'),
       fileInput: document.getElementById('file-input'),
+      btnNewFolder: document.getElementById('btn-new-folder'),
+      btnNewFile: document.getElementById('btn-new-file'),
+      btnViewToggle: document.getElementById('btn-view-toggle'),
+      btnRefresh: document.getElementById('btn-refresh'),
+      btnDashboardLink: document.getElementById('btn-dashboard-link'),
+
+      btnNavUploads: document.getElementById('btn-nav-uploads'),
+      btnNavProject: document.getElementById('btn-nav-project'),
+      btnNavDrives: document.getElementById('btn-nav-drives'),
+      btnDeleteLock: document.getElementById('btn-delete-lock'),
+      btnLogout: document.getElementById('btn-logout'),
+
+      btnNavUp: document.getElementById('btn-nav-up'),
+      breadcrumbSegments: document.getElementById('breadcrumb-segments'),
+
+      btnActPaste: document.getElementById('btn-act-paste'),
+      btnActCopyPath: document.getElementById('btn-act-copy-path'),
+      btnActOpenEdit: document.getElementById('btn-act-open-edit'),
+      btnActRename: document.getElementById('btn-act-rename'),
+      btnActCopy: document.getElementById('btn-act-copy'),
+      btnActCut: document.getElementById('btn-act-cut'),
+      btnActDownload: document.getElementById('btn-act-download'),
+      btnActDelete: document.getElementById('btn-act-delete'),
+
+      fbStage: document.getElementById('fb-stage'),
+      listHeader: document.getElementById('list-header'),
+      entriesList: document.getElementById('entries-list'),
+      statusCounts: document.getElementById('status-counts'),
+      sortIndName: document.getElementById('sort-ind-name'),
+      sortIndSize: document.getElementById('sort-ind-size'),
+      sortIndMtime: document.getElementById('sort-ind-mtime'),
+
       uploadProgressBox: document.getElementById('upload-progress-box'),
       uploadProgressLabel: document.getElementById('upload-progress-label'),
       uploadProgressFill: document.getElementById('upload-progress-fill'),
       btnCancelUpload: document.getElementById('btn-cancel-upload'),
-      modalPassword: document.getElementById('modal-password'),
-      formPassword: document.getElementById('form-password'),
-      inputServerPassword: document.getElementById('input-server-password'),
-      passwordError: document.getElementById('password-error'),
+
+      modalPrompt: document.getElementById('modal-prompt'),
+      formPrompt: document.getElementById('form-prompt'),
+      promptTitle: document.getElementById('prompt-title'),
+      promptLabel: document.getElementById('prompt-label'),
+      inputPromptValue: document.getElementById('input-prompt-value'),
+      btnPromptCancel: document.getElementById('btn-prompt-cancel'),
+      btnPromptOk: document.getElementById('btn-prompt-ok'),
+
       modalConfirm: document.getElementById('modal-confirm'),
       confirmTitle: document.getElementById('confirm-title'),
       confirmMessage: document.getElementById('confirm-message'),
       btnConfirmCancel: document.getElementById('btn-confirm-cancel'),
       btnConfirmOk: document.getElementById('btn-confirm-ok'),
+
+      modalEditor: document.getElementById('modal-editor'),
+      editorTitle: document.getElementById('editor-title'),
+      editorTextarea: document.getElementById('editor-textarea'),
+      editorMeta: document.getElementById('editor-meta'),
+      btnEditorClose: document.getElementById('btn-editor-close'),
+      btnEditorSave: document.getElementById('btn-editor-save'),
+
       modalPreview: document.getElementById('modal-preview'),
       previewTitle: document.getElementById('preview-title'),
       previewStage: document.getElementById('preview-stage'),
       previewMeta: document.getElementById('preview-meta'),
+      btnPreviewDownload: document.getElementById('btn-preview-download'),
       btnClosePreview: document.getElementById('btn-close-preview'),
+
       toast: document.getElementById('toast'),
     };
 
-    // Show dashboard link ONLY when an explicit http/https ?dashboard= URL was provided
     (function setupDashboardLink() {
       try {
         const params = new URLSearchParams(window.location.search);
@@ -617,6 +1146,35 @@
       return headers;
     }
 
+    function showPromptDialog({ title, label, initialValue = '', okText = 'Save' }) {
+      return new Promise((resolve) => {
+        el.promptTitle.textContent = title;
+        el.promptLabel.textContent = label;
+        el.inputPromptValue.value = initialValue;
+        el.btnPromptOk.textContent = okText;
+        el.modalPrompt.classList.add('open');
+        setTimeout(() => {
+          el.inputPromptValue.focus();
+          el.inputPromptValue.select();
+        }, 40);
+
+        const cleanup = (val) => {
+          el.modalPrompt.classList.remove('open');
+          el.formPrompt.removeEventListener('submit', onSubmit);
+          el.btnPromptCancel.removeEventListener('click', onCancel);
+          resolve(val);
+        };
+        const onSubmit = (e) => {
+          e.preventDefault();
+          cleanup(el.inputPromptValue.value.trim());
+        };
+        const onCancel = () => cleanup(null);
+
+        el.formPrompt.addEventListener('submit', onSubmit);
+        el.btnPromptCancel.addEventListener('click', onCancel);
+      });
+    }
+
     function showConfirmDialog({ title, messageHtml, confirmText = 'Continue', danger = false }) {
       return new Promise((resolve) => {
         el.confirmTitle.textContent = title;
@@ -639,46 +1197,106 @@
       });
     }
 
+    function showLoginScreen(errorMsg = '') {
+      el.loginError.textContent = errorMsg;
+      el.loginError.style.display = errorMsg ? 'block' : 'none';
+      el.inputLoginPassword.value = '';
+      el.loginScreen.classList.add('active');
+      setTimeout(() => el.inputLoginPassword.focus(), 50);
+    }
+
+    function hideLoginScreen() {
+      el.loginScreen.classList.remove('active');
+    }
+
+    el.formLogin.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const candidate = el.inputLoginPassword.value;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${candidate}`,
+          },
+          body: JSON.stringify({ password: candidate }),
+        });
+        if (!res.ok) {
+          showLoginScreen('Invalid password. Please try again.');
+          return;
+        }
+        serverPassword = candidate;
+        try {
+          localStorage.setItem(STORAGE_PW_KEY, serverPassword);
+        } catch (_) {}
+        hideLoginScreen();
+        el.btnLogout.style.display = 'flex';
+        loadDirectory(currentDir || '__UPLOADS__');
+      } catch (err) {
+        showLoginScreen(`Connection error: ${err.message}`);
+      }
+    });
+
+    el.btnLogout.addEventListener('click', () => {
+      serverPassword = '';
+      try {
+        localStorage.removeItem(STORAGE_PW_KEY);
+      } catch (_) {}
+      showLoginScreen();
+    });
+
     function updateDeleteLockUi() {
       if (deleteUnlocked) {
         el.btnDeleteLock.textContent = '🔓 Delete Unlocked';
-        el.btnDeleteLock.className = 'btn btn-lock-unlocked';
-        el.btnDeleteLock.title = 'Click to lock delete buttons';
+        el.btnDeleteLock.className = 'fb-nav-item btn-lock-unlocked';
       } else {
         el.btnDeleteLock.textContent = '🔒 Delete Locked';
-        el.btnDeleteLock.className = 'btn';
-        el.btnDeleteLock.title = 'Delete operations are locked for safety';
+        el.btnDeleteLock.className = 'fb-nav-item';
       }
+      updateContextToolbar();
+      renderEntries();
     }
 
     el.btnDeleteLock.addEventListener('click', async () => {
       if (deleteUnlocked) {
         deleteUnlocked = false;
         updateDeleteLockUi();
-        loadDirectory(currentDir);
         showToast('Delete mode locked.', 'info');
         return;
       }
-
       const ok = await showConfirmDialog({
         title: '🔓 Unlock Delete Mode?',
         messageHtml: `
-          <p>Deleting media files permanently removes them from disk and can break active OBS scenes.</p>
-          <p style="margin-top: 8px; color: var(--text-muted);">Are you sure you want to unlock delete buttons for this session?</p>
+          <p>Deleting files or folders permanently removes them from disk and can affect active OBS scenes.</p>
+          <p style="margin-top: 8px; color: var(--text-muted);">Unlock delete operations for this session?</p>
         `,
         confirmText: 'Unlock Delete',
         danger: true,
       });
-
       if (ok) {
         deleteUnlocked = true;
         updateDeleteLockUi();
-        loadDirectory(currentDir);
-        showToast('Delete mode unlocked. Lock it again when done.', 'info');
+        showToast('Delete mode unlocked.', 'info');
       }
     });
 
+    function updateViewToggleUi() {
+      el.btnViewToggle.textContent = viewMode === 'grid' ? '☰ List' : '🔲 Grid';
+      el.listHeader.style.display = viewMode === 'list' ? 'grid' : 'none';
+      el.entriesList.className = viewMode === 'grid' ? 'fb-entries-grid' : 'fb-entries-list';
+    }
+
+    el.btnViewToggle.addEventListener('click', () => {
+      viewMode = viewMode === 'list' ? 'grid' : 'list';
+      try {
+        localStorage.setItem(STORAGE_VIEW_KEY, viewMode);
+      } catch (_) {}
+      updateViewToggleUi();
+      renderEntries();
+    });
+
     async function checkStatusAndInit() {
+      updateViewToggleUi();
       try {
         const res = await fetch('/api/status', { headers: getAuthHeaders() });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -686,73 +1304,94 @@
 
         if (status.maxUploadBytes) maxUploadBytes = status.maxUploadBytes;
         if (status.maxUploadMb) maxUploadMb = status.maxUploadMb;
+        if (status.uploadsDir) uploadsDirPath = status.uploadsDir;
 
         el.uploadHintText.textContent =
-          `Max ${maxUploadMb} MB per file • Files over 100 MB ask for confirmation before uploading`;
+          `Max ${maxUploadMb} MB per file • Drag & drop files anywhere to upload to the current folder`;
         el.serverSubtitle.textContent =
-          `Standalone Media & Disk File Management (${status.platform || 'host'})`;
+          `OBS Host File Manager (${status.platform || 'host'})`;
 
-        if (status.authRequired) {
-          el.btnAuthModal.style.display = 'inline-flex';
-          if (!status.authValid) {
-            openPasswordModal();
-            return;
-          }
+        authRequired = Boolean(status.authRequired);
+        el.btnLogout.style.display = authRequired ? 'flex' : 'none';
+
+        if (authRequired && !status.authValid) {
+          showLoginScreen();
+          return;
         }
+        hideLoginScreen();
         loadDirectory('__UPLOADS__');
       } catch (err) {
         el.entriesList.innerHTML = `
-          <div style="padding: 32px; text-align: center; color: var(--danger); font-size: 13.5px;">
+          <div style="padding: 36px; text-align: center; color: var(--danger); font-size: 13.5px;">
             Failed to reach File Browser server: ${escapeHtml(err.message)}
           </div>
         `;
       }
     }
 
-    function openPasswordModal(errorMsg = '') {
-      el.passwordError.textContent = errorMsg;
-      el.passwordError.style.display = errorMsg ? 'block' : 'none';
-      el.inputServerPassword.value = '';
-      el.modalPassword.classList.add('open');
-      setTimeout(() => el.inputServerPassword.focus(), 50);
+    function updateSidebarActive(dirTarget) {
+      const isDrives = dirTarget === '__DRIVES__';
+      const isUploads =
+        dirTarget === '__UPLOADS__' ||
+        (uploadsDirPath && dirTarget && dirTarget.toLowerCase() === uploadsDirPath.toLowerCase());
+      el.btnNavUploads.classList.toggle('active', Boolean(isUploads));
+      el.btnNavDrives.classList.toggle('active', Boolean(isDrives));
+      el.btnNavProject.classList.toggle('active', !isUploads && !isDrives);
     }
 
-    el.btnAuthModal.addEventListener('click', () => openPasswordModal());
-
-    el.formPassword.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const candidate = el.inputServerPassword.value;
-      try {
-        const res = await fetch('/api/status', {
-          headers: { Authorization: `Bearer ${candidate}` },
-        });
-        const data = await res.json();
-        if (data.authRequired && !data.authValid) {
-          openPasswordModal('Incorrect password. Please try again.');
-          return;
-        }
-        serverPassword = candidate;
-        try {
-          sessionStorage.setItem('obs_file_browser_pw', serverPassword);
-        } catch (_) {}
-        el.modalPassword.classList.remove('open');
-        loadDirectory(currentDir || '__UPLOADS__');
-      } catch (err) {
-        openPasswordModal(`Connection error: ${err.message}`);
+    function renderBreadcrumbs(dirStr) {
+      el.breadcrumbSegments.innerHTML = '';
+      if (dirStr === '__DRIVES__') {
+        const span = document.createElement('span');
+        span.className = 'fb-crumb current';
+        span.textContent = 'System Drives';
+        el.breadcrumbSegments.appendChild(span);
+        return;
       }
-    });
+
+      const isWin = /^[a-zA-Z]:\\/.test(dirStr);
+      const sep = isWin ? '\\' : '/';
+      const parts = dirStr.split(/[\\/]+/).filter(Boolean);
+
+      if (!isWin) {
+        const rootBtn = document.createElement('button');
+        rootBtn.type = 'button';
+        rootBtn.className = 'fb-crumb';
+        rootBtn.textContent = '/';
+        rootBtn.addEventListener('click', () => loadDirectory('/'));
+        el.breadcrumbSegments.appendChild(rootBtn);
+      }
+
+      let accum = '';
+      parts.forEach((part, idx) => {
+        if (idx === 0 && isWin) {
+          accum = part + '\\';
+        } else {
+          accum = accum ? (accum.endsWith(sep) ? accum + part : accum + sep + part) : (isWin ? part : '/' + part);
+        }
+        const targetPath = accum;
+
+        if (idx > 0 || !isWin) {
+          const s = document.createElement('span');
+          s.className = 'fb-crumb-sep';
+          s.textContent = '›';
+          el.breadcrumbSegments.appendChild(s);
+        }
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = idx === parts.length - 1 ? 'fb-crumb current' : 'fb-crumb';
+        btn.textContent = part;
+        btn.addEventListener('click', () => loadDirectory(targetPath));
+        el.breadcrumbSegments.appendChild(btn);
+      });
+    }
 
     async function loadDirectory(dir) {
       if (browseAbortController) {
         browseAbortController.abort();
       }
       browseAbortController = new AbortController();
-
-      el.entriesList.innerHTML = `
-        <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 13px;">
-          Reading files...
-        </div>
-      `;
 
       try {
         const res = await fetch(`/api/fs/browse?dir=${encodeURIComponent(dir || '')}`, {
@@ -761,7 +1400,7 @@
         });
 
         if (res.status === 401) {
-          openPasswordModal('Session expired or invalid password.');
+          showLoginScreen('Session expired or password required.');
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -769,19 +1408,52 @@
 
         currentDir = data.currentDir;
         parentDir = data.parentDir;
+        if (data.uploadsDir) uploadsDirPath = data.uploadsDir;
+        allEntries = Array.isArray(data.entries) ? data.entries : [];
+        selectedPaths.clear();
 
-        el.breadcrumbText.textContent = data.currentDir === '__DRIVES__' ? 'All Drives' : data.currentDir;
-        el.btnNavUp.style.display = data.parentDir ? 'inline-flex' : 'none';
-
-        renderEntries(data.entries || []);
+        el.btnNavUp.disabled = !parentDir;
+        updateSidebarActive(currentDir);
+        renderBreadcrumbs(currentDir);
+        updateContextToolbar();
+        renderEntries();
       } catch (err) {
         if (err.name === 'AbortError') return;
         el.entriesList.innerHTML = `
-          <div style="padding: 32px; text-align: center; color: var(--danger); font-size: 13.5px;">
-            Failed to connect to file service: ${escapeHtml(err.message)}
+          <div style="padding: 36px; text-align: center; color: var(--danger); font-size: 13.5px;">
+            Failed to load directory: ${escapeHtml(err.message)}
           </div>
         `;
       }
+    }
+
+    function getSelectedEntries() {
+      return allEntries.filter((e) => selectedPaths.has(e.path));
+    }
+
+    function updateContextToolbar() {
+      const selected = getSelectedEntries();
+      const count = selected.length;
+      const single = count === 1 ? selected[0] : null;
+      const inDrives = currentDir === '__DRIVES__';
+
+      el.btnTopUpload.disabled = inDrives;
+      el.btnNewFolder.disabled = inDrives;
+      el.btnNewFile.disabled = inDrives;
+
+      el.btnActPaste.style.display = clipboardState.paths.length > 0 && !inDrives ? 'inline-flex' : 'none';
+      if (clipboardState.paths.length > 0) {
+        el.btnActPaste.textContent = `📋 Paste (${clipboardState.paths.length})`;
+      }
+
+      el.btnActCopyPath.disabled = count !== 1;
+      el.btnActOpenEdit.disabled = !single;
+      el.btnActRename.disabled = !single || Boolean(single.isDrive);
+      el.btnActCopy.disabled = count === 0 || inDrives;
+      el.btnActCut.disabled = count === 0 || inDrives;
+      el.btnActDownload.disabled = !single || single.isDirectory;
+      el.btnActDelete.disabled =
+        !deleteUnlocked || count === 0 || selected.some((item) => !item.deletable);
     }
 
     function getPreviewType(ext) {
@@ -792,12 +1464,96 @@
       return null;
     }
 
-    function renderEntries(entries) {
+    function getSortedFilteredEntries() {
+      const q = searchQuery.trim().toLowerCase();
+      const filtered = q
+        ? allEntries.filter((item) => item.name.toLowerCase().includes(q))
+        : allEntries.slice();
+
+      filtered.sort((a, b) => {
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        let cmp = 0;
+        if (sortField === 'size') {
+          cmp = (a.size || 0) - (b.size || 0);
+        } else if (sortField === 'mtime') {
+          cmp = new Date(a.mtime || 0).getTime() - new Date(b.mtime || 0).getTime();
+        } else {
+          cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        return sortAsc ? cmp : -cmp;
+      });
+      return filtered;
+    }
+
+    function updateSortIndicators() {
+      const arrow = sortAsc ? '▲' : '▼';
+      el.sortIndName.textContent = sortField === 'name' ? arrow : '';
+      el.sortIndSize.textContent = sortField === 'size' ? arrow : '';
+      el.sortIndMtime.textContent = sortField === 'mtime' ? arrow : '';
+    }
+
+    document.querySelectorAll('.fb-sort-col').forEach((col) => {
+      col.addEventListener('click', () => {
+        const field = col.getAttribute('data-sort');
+        if (!field) return;
+        if (sortField === field) {
+          sortAsc = !sortAsc;
+        } else {
+          sortField = field;
+          sortAsc = true;
+        }
+        updateSortIndicators();
+        renderEntries();
+      });
+    });
+
+    el.inputSearch.addEventListener('input', () => {
+      searchQuery = el.inputSearch.value;
+      renderEntries();
+    });
+
+    function toggleSelectItem(item, multiKey) {
+      if (!multiKey) {
+        const alreadyOnly = selectedPaths.size === 1 && selectedPaths.has(item.path);
+        selectedPaths.clear();
+        if (!alreadyOnly) selectedPaths.add(item.path);
+      } else {
+        if (selectedPaths.has(item.path)) selectedPaths.delete(item.path);
+        else selectedPaths.add(item.path);
+      }
+      updateContextToolbar();
+      renderEntries();
+    }
+
+    function openItemPrimaryAction(item) {
+      if (item.isDirectory) {
+        loadDirectory(item.path);
+        return;
+      }
+      const pType = getPreviewType(item.ext);
+      if (pType === 'text') {
+        openTextEditor(item);
+      } else if (pType) {
+        openPreviewModal(item, pType);
+      } else {
+        copyToClipboard(item.path);
+      }
+    }
+
+    function renderEntries() {
+      const items = getSortedFilteredEntries();
+      const dirCount = items.filter((e) => e.isDirectory).length;
+      const fileCount = items.length - dirCount;
+      el.statusCounts.textContent =
+        `${dirCount} folder(s), ${fileCount} file(s)` +
+        (selectedPaths.size > 0 ? ` • ${selectedPaths.size} selected` : '');
+
       el.entriesList.innerHTML = '';
-      if (!entries.length) {
+      if (!items.length) {
         el.entriesList.innerHTML = `
-          <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 13px;">
-            This folder is empty.
+          <div style="padding: 40px; text-align: center; color: var(--text-muted); font-size: 13.5px;">
+            ${searchQuery ? 'No matching files or folders.' : 'This folder is empty. Drag & drop files here or click New Folder / New File.'}
           </div>
         `;
         return;
@@ -805,78 +1561,334 @@
 
       const frag = document.createDocumentFragment();
 
-      entries.forEach((item) => {
-        const row = document.createElement('div');
-        row.className = 'entry-row';
-
+      items.forEach((item) => {
+        const isSelected = selectedPaths.has(item.path);
         const icon = item.isDrive ? '💾' : item.isDirectory ? '📁' : getFileIcon(item.ext);
-        const sizeStr = item.isDirectory ? '' : formatBytes(item.size);
-        const previewType = !item.isDirectory ? getPreviewType(item.ext) : null;
-        const canDelete = deleteUnlocked && !item.isDirectory && item.deletable;
+        const sizeStr = item.isDirectory ? '—' : formatBytes(item.size);
+        const dateStr = item.mtime ? formatDate(item.mtime) : '—';
+        const pType = !item.isDirectory ? getPreviewType(item.ext) : null;
 
-        row.innerHTML = `
-          <div class="entry-left">
-            <span class="entry-icon">${icon}</span>
-            <span class="entry-name">${escapeHtml(item.name)}</span>
-            ${sizeStr ? `<span class="entry-meta">${sizeStr}</span>` : ''}
-          </div>
-          <div class="entry-actions">
-            ${previewType ? `<button type="button" class="btn btn-sm btn-preview" title="Preview file">👁️ Preview</button>` : ''}
-            ${!item.isDirectory ? `<button type="button" class="btn btn-sm btn-copy-path" title="Copy absolute path for OBS">📋 Copy Path</button>` : ''}
-            ${canDelete ? `<button type="button" class="btn btn-sm btn-danger btn-delete-item" title="Delete file">🗑️ Delete</button>` : ''}
-            <button type="button" class="btn btn-sm btn-open">${item.isDirectory ? 'Open' : 'Select'}</button>
-          </div>
-        `;
+        if (viewMode === 'grid') {
+          const card = document.createElement('div');
+          card.className = `fb-card${isSelected ? ' selected' : ''}`;
+          const isImg = pType === 'image';
+          const thumbContent = isImg
+            ? `<img src="${buildPreviewUrl(item.path)}" alt="${escapeHtml(item.name)}" loading="lazy">`
+            : `<span>${icon}</span>`;
 
-        row.querySelector('.btn-open').addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (item.isDirectory) {
-            loadDirectory(item.path);
-          } else {
+          card.innerHTML = `
+            <div class="fb-card-thumb">${thumbContent}</div>
+            <div class="fb-card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+            <div class="fb-card-sub">
+              <span>${item.isDirectory ? 'Folder' : sizeStr}</span>
+              <span>${item.ext ? escapeHtml(item.ext.slice(1).toUpperCase()) : ''}</span>
+            </div>
+          `;
+
+          card.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleSelectItem(item, e.ctrlKey || e.metaKey || e.shiftKey);
+          });
+          card.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            openItemPrimaryAction(item);
+          });
+
+          frag.appendChild(card);
+        } else {
+          const row = document.createElement('div');
+          row.className = `fb-row${isSelected ? ' selected' : ''}`;
+
+          row.innerHTML = `
+            <div class="fb-cell-name">
+              <span class="fb-item-icon">${icon}</span>
+              <span class="fb-item-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+            </div>
+            <div class="fb-cell-meta">${sizeStr}</div>
+            <div class="fb-cell-meta fb-hide-mobile">${dateStr}</div>
+            <div class="fb-cell-actions">
+              ${pType === 'text' ? `<button type="button" class="btn btn-row-edit" title="Edit text file">✏️ Edit</button>` : ''}
+              ${pType && pType !== 'text' ? `<button type="button" class="btn btn-row-preview" title="Preview media">👁️</button>` : ''}
+              <button type="button" class="btn btn-row-copy" title="Copy OBS Path">🔗 Path</button>
+              <button type="button" class="btn btn-row-open">${item.isDirectory ? 'Open' : 'Select'}</button>
+            </div>
+          `;
+
+          row.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            toggleSelectItem(item, e.ctrlKey || e.metaKey || e.shiftKey);
+          });
+          row.addEventListener('dblclick', (e) => {
+            if (e.target.closest('button')) return;
+            openItemPrimaryAction(item);
+          });
+
+          row.querySelector('.btn-row-open').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (item.isDirectory) loadDirectory(item.path);
+            else copyToClipboard(item.path);
+          });
+
+          row.querySelector('.btn-row-copy').addEventListener('click', (e) => {
+            e.stopPropagation();
             copyToClipboard(item.path);
+          });
+
+          const editBtn = row.querySelector('.btn-row-edit');
+          if (editBtn) {
+            editBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              openTextEditor(item);
+            });
           }
-        });
 
-        const copyBtn = row.querySelector('.btn-copy-path');
-        if (copyBtn) {
-          copyBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            copyToClipboard(item.path);
-          });
-        }
-
-        const previewBtn = row.querySelector('.btn-preview');
-        if (previewBtn) {
-          previewBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            openPreviewModal(item, previewType);
-          });
-        }
-
-        const deleteBtn = row.querySelector('.btn-delete-item');
-        if (deleteBtn) {
-          deleteBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            await handleDeleteFile(item);
-          });
-        }
-
-        row.addEventListener('click', () => {
-          if (item.isDirectory) {
-            loadDirectory(item.path);
-          } else if (previewType) {
-            openPreviewModal(item, previewType);
-          } else {
-            copyToClipboard(item.path);
+          const prevBtn = row.querySelector('.btn-row-preview');
+          if (prevBtn) {
+            prevBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              openPreviewModal(item, pType);
+            });
           }
-        });
 
-        frag.appendChild(row);
+          frag.appendChild(row);
+        }
       });
 
       el.entriesList.appendChild(frag);
     }
 
+    // Create New Folder
+    el.btnNewFolder.addEventListener('click', async () => {
+      if (currentDir === '__DRIVES__') return;
+      const folderName = await showPromptDialog({
+        title: '📁 Create New Folder',
+        label: `Create inside ${currentDir}:`,
+        okText: 'Create Folder',
+      });
+      if (!folderName) return;
+
+      try {
+        const res = await fetch('/api/fs/mkdir', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ dir: currentDir, name: folderName }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        showToast(`✓ Created folder "${folderName}"`, 'success');
+        loadDirectory(currentDir);
+      } catch (err) {
+        showToast(`Failed to create folder: ${err.message}`, 'error');
+      }
+    });
+
+    // Create New Text File
+    el.btnNewFile.addEventListener('click', async () => {
+      if (currentDir === '__DRIVES__') return;
+      const fileName = await showPromptDialog({
+        title: '📄 Create New Text File',
+        label: `File name (e.g. notes.txt, lower-third.txt, config.json):`,
+        initialValue: 'untitled.txt',
+        okText: 'Create & Edit',
+      });
+      if (!fileName) return;
+
+      try {
+        const res = await fetch('/api/fs/mkfile', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ dir: currentDir, name: fileName, content: '' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        showToast(`✓ Created "${fileName}"`, 'success');
+        await loadDirectory(currentDir);
+        openTextEditor({ name: fileName, path: data.path, size: 0 });
+      } catch (err) {
+        showToast(`Failed to create file: ${err.message}`, 'error');
+      }
+    });
+
+    // Contextual Toolbar Actions
+    el.btnActCopyPath.addEventListener('click', () => {
+      const sel = getSelectedEntries();
+      if (sel.length === 1) copyToClipboard(sel[0].path);
+    });
+
+    el.btnActOpenEdit.addEventListener('click', () => {
+      const sel = getSelectedEntries();
+      if (sel.length === 1) openItemPrimaryAction(sel[0]);
+    });
+
+    el.btnActRename.addEventListener('click', async () => {
+      const sel = getSelectedEntries();
+      if (sel.length !== 1) return;
+      const item = sel[0];
+      const newName = await showPromptDialog({
+        title: '✏️ Rename Item',
+        label: `Enter new name for "${item.name}":`,
+        initialValue: item.name,
+        okText: 'Rename',
+      });
+      if (!newName || newName === item.name) return;
+
+      try {
+        const res = await fetch('/api/fs/rename', {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ path: item.path, newName }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        showToast(`✓ Renamed to "${newName}"`, 'success');
+        loadDirectory(currentDir);
+      } catch (err) {
+        showToast(`Rename failed: ${err.message}`, 'error');
+      }
+    });
+
+    el.btnActCopy.addEventListener('click', () => {
+      const sel = getSelectedEntries();
+      if (!sel.length) return;
+      clipboardState = { mode: 'copy', paths: sel.map((e) => e.path) };
+      updateContextToolbar();
+      showToast(`Copied ${sel.length} item(s) to clipboard. Navigate to target folder and click Paste.`, 'info');
+    });
+
+    el.btnActCut.addEventListener('click', () => {
+      const sel = getSelectedEntries();
+      if (!sel.length) return;
+      clipboardState = { mode: 'cut', paths: sel.map((e) => e.path) };
+      updateContextToolbar();
+      showToast(`Cut ${sel.length} item(s) to clipboard. Navigate to target folder and click Paste.`, 'info');
+    });
+
+    el.btnActPaste.addEventListener('click', async () => {
+      if (!clipboardState.paths.length || currentDir === '__DRIVES__') return;
+      const endpoint = clipboardState.mode === 'cut' ? '/api/fs/move' : '/api/fs/copy';
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ sources: clipboardState.paths, destDir: currentDir }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        const actionWord = clipboardState.mode === 'cut' ? 'Moved' : 'Copied';
+        showToast(`✓ ${actionWord} ${clipboardState.paths.length} item(s) here`, 'success');
+        if (clipboardState.mode === 'cut') {
+          clipboardState = { mode: null, paths: [] };
+        }
+        updateContextToolbar();
+        loadDirectory(currentDir);
+      } catch (err) {
+        showToast(`Paste failed: ${err.message}`, 'error');
+      }
+    });
+
+    function triggerFileDownload(filePath) {
+      let url = `/api/fs/download?path=${encodeURIComponent(filePath)}`;
+      if (serverPassword) {
+        url += `&password=${encodeURIComponent(serverPassword)}`;
+      }
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    el.btnActDownload.addEventListener('click', () => {
+      const sel = getSelectedEntries();
+      if (sel.length === 1 && !sel[0].isDirectory) {
+        triggerFileDownload(sel[0].path);
+      }
+    });
+
+    el.btnActDelete.addEventListener('click', async () => {
+      if (!deleteUnlocked) return;
+      const sel = getSelectedEntries();
+      if (!sel.length) return;
+      const ok = await showConfirmDialog({
+        title: `🗑️ Delete ${sel.length} Item(s)?`,
+        messageHtml: `
+          <p>Permanently delete <strong>${sel.length} selected item(s)</strong> from disk?</p>
+          <p style="margin-top: 8px; font-family: monospace; font-size: 12px; color: var(--text-muted); word-break: break-all;">
+            ${escapeHtml(sel.map((x) => x.name).join(', '))}
+          </p>
+        `,
+        confirmText: 'Delete Permanently',
+        danger: true,
+      });
+      if (!ok) return;
+
+      try {
+        const res = await fetch('/api/fs/delete', {
+          method: 'POST',
+          headers: getAuthHeaders({
+            'Content-Type': 'application/json',
+            'X-Delete-Unlocked': 'true',
+          }),
+          body: JSON.stringify({ paths: sel.map((x) => x.path) }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        showToast(`✓ Deleted ${sel.length} item(s)`, 'success');
+        loadDirectory(currentDir);
+      } catch (err) {
+        showToast(`Delete failed: ${err.message}`, 'error');
+      }
+    });
+
+    // In-Browser Text Editor
+    async function openTextEditor(item) {
+      activeEditingPath = item.path;
+      el.editorTitle.textContent = `Editing: ${item.name}`;
+      el.editorMeta.textContent = item.path;
+      el.editorTextarea.value = 'Loading file content...';
+      el.editorTextarea.disabled = true;
+      el.modalEditor.classList.add('open');
+
+      try {
+        const res = await fetch(`/api/fs/content?path=${encodeURIComponent(item.path)}`, {
+          headers: getAuthHeaders(),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        el.editorTextarea.value = data.content || '';
+        el.editorTextarea.disabled = false;
+        el.editorTextarea.focus();
+      } catch (err) {
+        el.modalEditor.classList.remove('open');
+        showToast(`Cannot open in editor: ${err.message}`, 'error');
+      }
+    }
+
+    el.btnEditorClose.addEventListener('click', () => {
+      el.modalEditor.classList.remove('open');
+      activeEditingPath = '';
+    });
+
+    el.btnEditorSave.addEventListener('click', async () => {
+      if (!activeEditingPath) return;
+      try {
+        const res = await fetch('/api/fs/content', {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ path: activeEditingPath, content: el.editorTextarea.value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        el.modalEditor.classList.remove('open');
+        showToast('✓ File saved!', 'success');
+        loadDirectory(currentDir);
+      } catch (err) {
+        showToast(`Save failed: ${err.message}`, 'error');
+      }
+    });
+
+    // Media Lightbox Preview
     function buildPreviewUrl(filePath) {
       let url = `/api/fs/preview?path=${encodeURIComponent(filePath)}`;
       if (serverPassword) {
@@ -887,6 +1899,7 @@
 
     async function openPreviewModal(item, type) {
       cleanupPreviewMedia();
+      activePreviewItem = item;
       el.previewTitle.textContent = item.name;
       el.previewMeta.textContent = `${item.path}${item.size ? ` • ${formatBytes(item.size)}` : ''}`;
 
@@ -895,7 +1908,7 @@
           title: '🎬 Large Video Preview',
           messageHtml: `
             <p><strong>${escapeHtml(item.name)}</strong> is <strong>${formatBytes(item.size)}</strong>.</p>
-            <p style="margin-top: 8px; color: var(--text-muted);">Video streams directly from disk, but scrubbing over Wi-Fi may use extra bandwidth on mobile devices.</p>
+            <p style="margin-top: 8px; color: var(--text-muted);">Video streams directly via HTTP 206 range requests.</p>
           `,
           confirmText: 'Stream Preview',
         });
@@ -909,9 +1922,6 @@
         const img = document.createElement('img');
         img.alt = item.name;
         img.src = previewUrl;
-        img.onerror = () => {
-          el.previewStage.innerHTML = `<div style="color: var(--danger); padding: 24px;">Failed to load image preview.</div>`;
-        };
         el.previewStage.appendChild(img);
       } else if (type === 'video') {
         const video = document.createElement('video');
@@ -919,35 +1929,13 @@
         video.preload = 'metadata';
         video.playsInline = true;
         video.src = previewUrl;
-        video.onerror = () => {
-          el.previewStage.innerHTML = `<div style="color: var(--danger); padding: 24px;">Browser cannot decode this video format directly, but OBS can play it from disk.</div>`;
-        };
         el.previewStage.appendChild(video);
       } else if (type === 'audio') {
         const audio = document.createElement('audio');
         audio.controls = true;
         audio.preload = 'metadata';
         audio.src = previewUrl;
-        audio.onerror = () => {
-          el.previewStage.innerHTML = `<div style="color: var(--danger); padding: 24px;">Browser cannot play this audio format directly.</div>`;
-        };
         el.previewStage.appendChild(audio);
-      } else if (type === 'text') {
-        el.previewStage.innerHTML = `<div style="color: var(--text-muted); padding: 24px;">Loading text...</div>`;
-        try {
-          const res = await fetch(`/api/fs/preview?path=${encodeURIComponent(item.path)}`, {
-            headers: getAuthHeaders(),
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const text = await res.text();
-          const pre = document.createElement('pre');
-          // Cap rendered characters so huge log files don't freeze browser memory
-          pre.textContent = text.length > 200000 ? text.slice(0, 200000) + '\n\n... (truncated at 200 KB for low memory)' : text;
-          el.previewStage.innerHTML = '';
-          el.previewStage.appendChild(pre);
-        } catch (err) {
-          el.previewStage.innerHTML = `<div style="color: var(--danger); padding: 24px;">Failed to load preview: ${escapeHtml(err.message)}</div>`;
-        }
       }
     }
 
@@ -966,44 +1954,21 @@
     function closePreviewModal() {
       cleanupPreviewMedia();
       el.modalPreview.classList.remove('open');
+      activePreviewItem = null;
     }
 
     el.btnClosePreview.addEventListener('click', closePreviewModal);
+    el.btnPreviewDownload.addEventListener('click', () => {
+      if (activePreviewItem) triggerFileDownload(activePreviewItem.path);
+    });
     el.modalPreview.addEventListener('click', (e) => {
       if (e.target === el.modalPreview) closePreviewModal();
     });
 
-    async function handleDeleteFile(item) {
-      if (!deleteUnlocked) return;
-      const ok = await showConfirmDialog({
-        title: '🗑️ Permanently Delete File?',
-        messageHtml: `
-          <p>Delete <strong>${escapeHtml(item.name)}</strong> (${formatBytes(item.size) || 'file'})?</p>
-          <p style="margin-top: 8px; font-family: monospace; font-size: 12px; color: var(--text-muted); word-break: break-all;">${escapeHtml(item.path)}</p>
-        `,
-        confirmText: 'Delete Permanently',
-        danger: true,
-      });
-      if (!ok) return;
-
-      try {
-        const res = await fetch(`/api/fs/file?path=${encodeURIComponent(item.path)}`, {
-          method: 'DELETE',
-          headers: getAuthHeaders({ 'X-Delete-Unlocked': 'true' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        showToast(`Deleted "${item.name}"`, 'success');
-        loadDirectory(currentDir);
-      } catch (err) {
-        showToast(`Delete failed: ${err.message}`, 'error');
-      }
-    }
-
     function copyToClipboard(text) {
       if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(() => {
-          showToast(`✓ Copied path: ${text}`, 'success');
+          showToast(`✓ Copied OBS path: ${text}`, 'success');
         }).catch(() => fallbackCopyText(text));
         return;
       }
@@ -1020,7 +1985,7 @@
       ta.select();
       try {
         document.execCommand('copy');
-        showToast(`✓ Copied path: ${text}`, 'success');
+        showToast(`✓ Copied OBS path: ${text}`, 'success');
       } catch (_) {
         showToast(`Path: ${text}`, 'info');
       }
@@ -1029,19 +1994,31 @@
 
     function getFileIcon(ext) {
       switch (ext) {
-        case '.png': case '.jpg': case '.jpeg': case '.gif': case '.webp': case '.bmp': return '🖼️';
+        case '.png': case '.jpg': case '.jpeg': case '.gif': case '.webp': case '.bmp': case '.svg': return '🖼️';
         case '.mp4': case '.mov': case '.mkv': case '.webm': case '.avi': case '.m4v': return '🎬';
         case '.mp3': case '.wav': case '.aac': case '.flac': case '.ogg': case '.m4a': return '🎵';
+        case '.json': case '.yml': case '.yaml': case '.xml': case '.ini': return '⚙️';
+        case '.txt': case '.md': case '.log': case '.srt': case '.vtt': return '📝';
         default: return '📄';
       }
     }
 
     function formatBytes(bytes) {
-      if (!bytes) return '';
+      if (!bytes) return '0 B';
       if (bytes < 1024) return `${bytes} B`;
       if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
       if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
       return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+
+    function formatDate(isoStr) {
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) +
+          ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      } catch (_) {
+        return '—';
+      }
     }
 
     function escapeHtml(str) {
@@ -1061,7 +2038,12 @@
         const formData = new FormData();
         formData.append('media', file);
 
-        xhr.open('POST', '/api/upload');
+        const targetQuery =
+          currentDir && currentDir !== '__DRIVES__'
+            ? `?dir=${encodeURIComponent(currentDir)}&keepName=true`
+            : '';
+
+        xhr.open('POST', `/api/upload${targetQuery}`);
         if (serverPassword) {
           xhr.setRequestHeader('Authorization', `Bearer ${serverPassword}`);
         }
@@ -1100,6 +2082,10 @@
     }
 
     async function uploadFiles(fileList) {
+      if (currentDir === '__DRIVES__') {
+        showToast('Open a drive or folder first before uploading.', 'error');
+        return;
+      }
       const files = Array.from(fileList || []);
       if (!files.length) return;
 
@@ -1119,12 +2105,7 @@
         const confirmed = await showConfirmDialog({
           title: '⚠️ Large File Upload (> 100 MB)',
           messageHtml: `
-            <p>You are about to upload <strong>${files.length} file(s)</strong> totaling <strong>${formatBytes(totalSize)}</strong>.</p>
-            <ul style="margin: 10px 0 10px 18px; color: var(--text-muted); font-size: 13px;">
-              <li>Transfers over 100 MB may take several minutes over Wi-Fi.</li>
-              <li>Server limit: <strong>${maxUploadMb} MB</strong> per file.</li>
-              <li>Keep this tab open until the upload finishes.</li>
-            </ul>
+            <p>Upload <strong>${files.length} file(s)</strong> totaling <strong>${formatBytes(totalSize)}</strong> to <code>${escapeHtml(currentDir)}</code>?</p>
           `,
           confirmText: 'Start Upload',
         });
@@ -1154,51 +2135,49 @@
       el.fileInput.value = '';
 
       if (uploadedCount > 0) {
-        showToast(`✓ Uploaded ${uploadedCount} file(s) to host!`, 'success');
+        showToast(`✓ Uploaded ${uploadedCount} file(s)!`, 'success');
         loadDirectory(currentDir);
       }
     }
 
     el.btnCancelUpload.addEventListener('click', () => {
       activeUploadCancelled = true;
-      if (activeUploadXhr) {
-        activeUploadXhr.abort();
-      }
+      if (activeUploadXhr) activeUploadXhr.abort();
     });
 
-    el.dropZone.addEventListener('click', () => el.fileInput.click());
+    el.btnTopUpload.addEventListener('click', () => el.fileInput.click());
     el.fileInput.addEventListener('change', (e) => uploadFiles(e.target.files));
 
-    el.dropZone.addEventListener('dragover', (e) => {
+    el.fbStage.addEventListener('dragover', (e) => {
       e.preventDefault();
-      el.dropZone.classList.add('dragover');
+      el.fbStage.classList.add('dragover');
     });
-
-    el.dropZone.addEventListener('dragleave', () => {
-      el.dropZone.classList.remove('dragover');
+    el.fbStage.addEventListener('dragleave', (e) => {
+      if (e.target === el.fbStage) el.fbStage.classList.remove('dragover');
     });
-
-    el.dropZone.addEventListener('drop', (e) => {
+    el.fbStage.addEventListener('drop', (e) => {
       e.preventDefault();
-      el.dropZone.classList.remove('dragover');
+      el.fbStage.classList.remove('dragover');
       uploadFiles(e.dataTransfer.files);
     });
 
+    // Clear selection when clicking empty stage background
+    el.fbStage.addEventListener('click', (e) => {
+      if (e.target === el.fbStage || e.target === el.entriesList) {
+        selectedPaths.clear();
+        updateContextToolbar();
+        renderEntries();
+      }
+    });
+
+    // Sidebar & Navigation handlers
     el.btnNavUp.addEventListener('click', () => {
       if (parentDir) loadDirectory(parentDir);
     });
-
-    el.btnNavUploads.addEventListener('click', () => {
-      loadDirectory('__UPLOADS__');
-    });
-
-    el.btnNavDrives.addEventListener('click', () => {
-      loadDirectory('__DRIVES__');
-    });
-
-    el.btnRefresh.addEventListener('click', () => {
-      loadDirectory(currentDir);
-    });
+    el.btnNavUploads.addEventListener('click', () => loadDirectory('__UPLOADS__'));
+    el.btnNavProject.addEventListener('click', () => loadDirectory('__PROJECT__'));
+    el.btnNavDrives.addEventListener('click', () => loadDirectory('__DRIVES__'));
+    el.btnRefresh.addEventListener('click', () => loadDirectory(currentDir));
 
     updateDeleteLockUi();
     checkStatusAndInit();
