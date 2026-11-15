@@ -22,6 +22,7 @@ bun.lock
 .ai/
 .aistudio/artifacts/
 aistudio/artifacts/
+public/assets/aistudio/
 firebase-applet-config.json
 firebase-blueprint.json
 
