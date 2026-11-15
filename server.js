@@ -1175,6 +1175,7 @@ async function startServer() {
       if (styleMatch) {
         fbStyle = styleMatch[1]
           .replace(/:root\s*\{/g, ':host {')
+          .replace(/html\s*,\s*body\s*\{/g, '.fb-root {')
           .replace(/(^|\s)body\s*\{/gm, '$1.fb-root {');
       }
       if (bodyMatch) {
@@ -1216,7 +1217,7 @@ async function startServer() {
     display: none; position: fixed; top: 38px; left: 0; right: 0; bottom: 0;
     z-index: 50000; overflow: auto; background: #020617;
   }
-  #aistudio-fb-panel { background: #12141a; }
+  #aistudio-fb-panel { background: #000000; overflow: hidden; }
   #aistudio-fb-panel.active, #aistudio-obs-panel.active { display: block; }
 </style>
 <div id="aistudio-preview-tabbar">
@@ -1250,7 +1251,7 @@ async function startServer() {
     if (fbInitialized || !fbPanel) return;
     fbInitialized = true;
     var shadow = fbPanel.attachShadow({ mode: 'open' });
-    shadow.innerHTML = '<style>:host{display:block;min-height:100%;}' + fbStyleText + '</style><div class="fb-root">' + fbBodyHtml + '</div>';
+    shadow.innerHTML = '<style>' + fbStyleText + ':host{display:block;width:100%;height:100%;overflow:hidden;--fb-bottom-offset:0px;}@media(max-width:768px){:host{--fb-bottom-offset:74px;}}.fb-root{width:100%;height:100%;overflow:hidden;background:#000;}</style><div class="fb-root">' + fbBodyHtml + '</div>';
     var fbDoc = {
       getElementById: function (id) { return shadow.getElementById(id); },
       querySelector: function (sel) { return shadow.querySelector(sel); },

@@ -208,7 +208,7 @@ svg { display: block; flex-shrink: 0; }
   overflow-y: auto;
   overflow-x: hidden;
   background: var(--bg);
-  padding-bottom: 88px;
+  padding-bottom: calc(96px + var(--fb-bottom-offset, 0px));
   -webkit-overflow-scrolling: touch;
 }
 
@@ -413,7 +413,7 @@ svg { display: block; flex-shrink: 0; }
 }
 .overflow-menu.bottom-anchor {
   top: auto;
-  bottom: 58px;
+  bottom: calc(58px + var(--fb-bottom-offset, 0px));
   right: 8px;
 }
 .menu-item {
@@ -447,7 +447,7 @@ svg { display: block; flex-shrink: 0; }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: var(--fb-bottom-offset, 0px);
   height: 54px;
   background: #0d0e11;
   border-top: 1px solid #1f2128;
@@ -474,7 +474,7 @@ svg { display: block; flex-shrink: 0; }
   position: absolute;
   left: 12px;
   right: 80px;
-  bottom: 16px;
+  bottom: calc(16px + var(--fb-bottom-offset, 0px));
   background: #1a1c22;
   border: 1px solid #2c303a;
   border-radius: 12px;
@@ -514,7 +514,7 @@ svg { display: block; flex-shrink: 0; }
 .fab-stack {
   position: absolute;
   right: 16px;
-  bottom: 18px;
+  bottom: calc(18px + var(--fb-bottom-offset, 0px));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -589,33 +589,38 @@ svg { display: block; flex-shrink: 0; }
   z-index: 55;
   display: flex;
   flex-direction: column;
+  padding: 10px 0 calc(18px + var(--fb-bottom-offset, 0px));
   overflow-y: auto;
   box-shadow: 8px 0 32px rgba(0, 0, 0, 0.75);
-}
-.drawer-head {
-  padding: 18px 16px 14px;
-  background: linear-gradient(135deg, #0b1626 0%, #15161a 100%);
-  border-bottom: 1px solid #242730;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.drawer-head-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-}
-.drawer-head-sub {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  margin-top: 2px;
 }
 .drawer-sec {
   padding: 12px 16px 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
+}
+.drawer-bm-wrap {
+  display: flex;
+  align-items: center;
+  padding-right: 6px;
+}
+.drawer-bm-wrap:hover { background: rgba(255, 255, 255, 0.05); }
+.drawer-bm-wrap .drawer-item:hover { background: transparent; }
+.drawer-bm-del {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.drawer-bm-del:hover { color: var(--danger); background: rgba(255, 255, 255, 0.08); }
+.drawer-empty {
+  padding: 8px 16px 12px;
+  font-size: 12.5px;
+  color: #6b707a;
 }
 .drawer-item {
   width: 100%;
@@ -663,7 +668,7 @@ svg { display: block; flex-shrink: 0; }
   position: absolute;
   left: 14px;
   right: 84px;
-  bottom: 18px;
+  bottom: calc(18px + var(--fb-bottom-offset, 0px));
   background: #171920;
   border: 1px solid #2b2f3a;
   border-radius: 12px;
@@ -882,7 +887,7 @@ svg { display: block; flex-shrink: 0; }
 .toast {
   position: absolute;
   left: 50%;
-  bottom: 76px;
+  bottom: calc(76px + var(--fb-bottom-offset, 0px));
   transform: translateX(-50%);
   background: #23252d;
   color: #fff;
@@ -979,6 +984,10 @@ svg { display: block; flex-shrink: 0; }
       <span>Sort by</span>
       <span class="menu-sublabel" id="m-sort-label">Name ↑</span>
     </button>
+    <button type="button" class="menu-item" id="m-bookmark">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      <span id="m-bookmark-label">Add to bookmarks</span>
+    </button>
     <button type="button" class="menu-item hidden" id="m-paste">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
       <span id="m-paste-label">Paste here</span>
@@ -1015,6 +1024,10 @@ svg { display: block; flex-shrink: 0; }
     <button type="button" class="menu-item" id="sm-copypath">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
       <span>Copy OBS Path</span>
+    </button>
+    <button type="button" class="menu-item" id="sm-bookmark">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      <span id="sm-bookmark-label">Add to bookmarks</span>
     </button>
     <button type="button" class="menu-item" id="sm-props">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -1088,24 +1101,7 @@ svg { display: block; flex-shrink: 0; }
   <!-- Left Navigation Drawer -->
   <div id="drawer-scrim" class="drawer-scrim hidden"></div>
   <aside id="drawer" class="drawer hidden">
-    <div class="drawer-head">
-      <div>
-        <div class="drawer-head-title" id="drawer-host">Host Storage</div>
-        <div class="drawer-head-sub" id="drawer-plat">Connected</div>
-      </div>
-      <button type="button" id="drawer-close" class="icon-btn" aria-label="Close menu">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-
     <div class="drawer-sec">Storage</div>
-    <button type="button" class="drawer-item" id="nav-uploads">
-      <span class="drawer-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
-      <span class="drawer-item-text">
-        <div class="drawer-item-title">Uploads Library</div>
-        <div class="drawer-item-sub" id="nav-uploads-sub">Default media folder</div>
-      </span>
-    </button>
     <button type="button" class="drawer-item" id="nav-project">
       <span class="drawer-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
       <span class="drawer-item-text">
@@ -1120,13 +1116,9 @@ svg { display: block; flex-shrink: 0; }
         <div class="drawer-item-sub" id="nav-drives-sub">Host filesystem root</div>
       </span>
     </button>
-    <button type="button" class="drawer-item" id="nav-jump">
-      <span class="drawer-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
-      <span class="drawer-item-text">
-        <div class="drawer-item-title">Go to Path...</div>
-        <div class="drawer-item-sub">Open custom folder path</div>
-      </span>
-    </button>
+
+    <div class="drawer-sec">Bookmarks</div>
+    <div id="drawer-bookmarks"></div>
 
     <div class="drawer-sec">Session & Safety</div>
     <button type="button" class="drawer-item" id="nav-lock">
@@ -1252,6 +1244,7 @@ svg { display: block; flex-shrink: 0; }
   var PW_KEY = 'obs_file_browser_pw';
   var VIEW_KEY = 'obs_fb_view_mode';
   var SORT_KEY = 'obs_fb_sort_mode';
+  var BM_KEY = 'obs_fb_bookmarks';
 
   var IMG_EXTS = { '.png':1, '.jpg':1, '.jpeg':1, '.gif':1, '.webp':1, '.svg':1, '.bmp':1, '.ico':1 };
   var VID_EXTS = { '.mp4':1, '.mov':1, '.mkv':1, '.webm':1, '.m4v':1, '.avi':1 };
@@ -1263,11 +1256,18 @@ svg { display: block; flex-shrink: 0; }
     authRequired: false,
     platform: 'linux',
     uploadsDir: '',
-    currentDir: '__UPLOADS__',
+    currentDir: '__PROJECT__',
     parentDir: null,
     entries: [],
     selected: {},
     clipboard: null, // { mode: 'copy'|'cut', items: [...] }
+    bookmarks: (function () {
+      try {
+        var raw = localStorage.getItem(BM_KEY);
+        var arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch (_) { return []; }
+    })(),
     deleteUnlocked: false,
     allowSystemDelete: false,
     viewMode: (function () { try { return localStorage.getItem(VIEW_KEY) || 'list'; } catch (_) { return 'list'; } })(),
@@ -1451,14 +1451,88 @@ svg { display: block; flex-shrink: 0; }
     return list;
   }
 
-  function folderDisplayName() {
-    if (state.currentDir === '__DRIVES__') return 'System Drives';
-    if (!state.currentDir || state.currentDir === state.uploadsDir) return 'Uploads';
-    if (state.currentDir === '/') return '/';
-    var trimmed = state.currentDir.replace(/[\\/]+$/, '');
+  function saveBookmarks() {
+    try { localStorage.setItem(BM_KEY, JSON.stringify(state.bookmarks)); } catch (_) {}
+  }
+
+  function isBookmarked(dirPath) {
+    if (!dirPath || dirPath === '__DRIVES__') return false;
+    return state.bookmarks.some(function (b) { return b.path === dirPath; });
+  }
+
+  function folderNameForPath(dirPath) {
+    if (!dirPath) return '';
+    if (dirPath === '/') return '/';
+    var trimmed = dirPath.replace(/[\\/]+$/, '');
     if (/^[A-Za-z]:$/.test(trimmed)) return trimmed + '\\';
     var parts = trimmed.split(/[\\/]/);
-    return parts[parts.length - 1] || state.currentDir;
+    return parts[parts.length - 1] || dirPath;
+  }
+
+  function toggleBookmark(dirPath, customName) {
+    if (!dirPath || dirPath === '__DRIVES__') return;
+    var idx = -1;
+    for (var i = 0; i < state.bookmarks.length; i++) {
+      if (state.bookmarks[i].path === dirPath) { idx = i; break; }
+    }
+    if (idx !== -1) {
+      state.bookmarks.splice(idx, 1);
+      showToast('Bookmark removed');
+    } else {
+      state.bookmarks.push({ name: customName || folderNameForPath(dirPath), path: dirPath });
+      showToast('Added to bookmarks');
+    }
+    saveBookmarks();
+    renderBookmarks();
+    renderHeader();
+  }
+
+  function renderBookmarks() {
+    var box = $('drawer-bookmarks');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!state.bookmarks.length) {
+      var empty = document.createElement('div');
+      empty.className = 'drawer-empty';
+      empty.textContent = 'No bookmarks yet';
+      box.appendChild(empty);
+      return;
+    }
+    state.bookmarks.forEach(function (bm) {
+      var wrap = document.createElement('div');
+      wrap.className = 'drawer-bm-wrap';
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'drawer-item' + (state.currentDir === bm.path ? ' active' : '');
+      btn.innerHTML =
+        '<span class="drawer-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></span>' +
+        '<span class="drawer-item-text"><div class="drawer-item-title"></div><div class="drawer-item-sub"></div></span>';
+      btn.querySelector('.drawer-item-title').textContent = bm.name || folderNameForPath(bm.path);
+      btn.querySelector('.drawer-item-sub').textContent = bm.path;
+      btn.addEventListener('click', function () { browse(bm.path); });
+
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'drawer-bm-del';
+      delBtn.title = 'Remove bookmark';
+      delBtn.setAttribute('aria-label', 'Remove bookmark');
+      delBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      delBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        toggleBookmark(bm.path);
+      });
+
+      wrap.appendChild(btn);
+      wrap.appendChild(delBtn);
+      box.appendChild(wrap);
+    });
+  }
+
+  function folderDisplayName() {
+    if (state.currentDir === '__DRIVES__') return 'System Drives';
+    if (!state.currentDir) return 'Files';
+    if (state.currentDir === '/') return '/';
+    return folderNameForPath(state.currentDir);
   }
 
   function renderHeader() {
@@ -1482,6 +1556,9 @@ svg { display: block; flex-shrink: 0; }
       $('sm-open').disabled = sel.length !== 1;
       $('sm-download').disabled = sel.length !== 1 || sel[0].isDirectory;
       $('sm-copypath').disabled = sel.length !== 1;
+      var canBmSel = sel.length === 1 && (sel[0].isDirectory || sel[0].isDrive);
+      $('sm-bookmark').disabled = !canBmSel;
+      $('sm-bookmark-label').textContent = (canBmSel && isBookmarked(sel[0].path)) ? 'Remove bookmark' : 'Add to bookmarks';
       $('sm-props').disabled = sel.length !== 1;
     } else {
       titleWrap.classList.toggle('hidden', state.searchOpen);
@@ -1513,6 +1590,9 @@ svg { display: block; flex-shrink: 0; }
     $('m-view-label').textContent = state.viewMode === 'grid' ? 'List view' : 'Grid view';
     var sortNames = { name: 'Name', size: 'Size', date: 'Date' };
     $('m-sort-label').textContent = (sortNames[state.sortBy] || 'Name') + (state.sortAsc ? ' ↑' : ' ↓');
+    var canBmCur = Boolean(state.currentDir && state.currentDir !== '__DRIVES__');
+    $('m-bookmark').disabled = !canBmCur;
+    $('m-bookmark-label').textContent = (canBmCur && isBookmarked(state.currentDir)) ? 'Remove bookmark' : 'Add to bookmarks';
     $('m-paste').classList.toggle('hidden', !state.clipboard || state.currentDir === '__DRIVES__');
     if (state.clipboard) {
       $('m-paste-label').textContent = (state.clipboard.mode === 'cut' ? 'Move ' : 'Paste ') + state.clipboard.items.length + ' item(s)';
@@ -1537,19 +1617,7 @@ svg { display: block; flex-shrink: 0; }
     var dir = state.currentDir || '';
     var segs = [];
 
-    if (state.uploadsDir && (dir === state.uploadsDir || dir.indexOf(state.uploadsDir + '/') === 0 || dir.indexOf(state.uploadsDir + '\\') === 0)) {
-      segs.push({ label: 'UPLOADS', path: state.uploadsDir });
-      var rel = dir.slice(state.uploadsDir.length).replace(/^[\\/]+/, '');
-      if (rel) {
-        var acc = state.uploadsDir;
-        var sep = dir.indexOf('\\') !== -1 ? '\\' : '/';
-        rel.split(/[\\/]+/).forEach(function (part) {
-          if (!part) return;
-          acc = acc.replace(/[\\/]+$/, '') + sep + part;
-          segs.push({ label: part, path: acc });
-        });
-      }
-    } else if (/^[A-Za-z]:/.test(dir)) {
+    if (/^[A-Za-z]:/.test(dir)) {
       var partsW = dir.replace(/[\\/]+$/, '').split('\\');
       var accW = '';
       segs.push({ label: 'DRIVES', path: '__DRIVES__' });
@@ -1726,7 +1794,7 @@ svg { display: block; flex-shrink: 0; }
   }
 
   function browse(dir) {
-    var target = dir || state.currentDir || '__UPLOADS__';
+    var target = dir || state.currentDir || '__PROJECT__';
     state.selected = {};
     closeMenus();
     setDrawerOpen(false);
@@ -1738,14 +1806,13 @@ svg { display: block; flex-shrink: 0; }
         state.parentDir = data.parentDir;
         if (data.uploadsDir) {
           state.uploadsDir = data.uploadsDir;
-          $('nav-uploads-sub').textContent = data.uploadsDir;
         }
         if (data.platform) {
           state.platform = data.platform;
-          $('drawer-plat').textContent = 'Host (' + data.platform + ')';
           $('nav-drives-title').textContent = data.platform === 'win32' ? 'System Drives' : 'Root /';
         }
         state.entries = Array.isArray(data.entries) ? data.entries : [];
+        renderBookmarks();
         renderAll();
       })
       .catch(function (err) {
@@ -2120,7 +2187,7 @@ svg { display: block; flex-shrink: 0; }
         try { localStorage.setItem(PW_KEY, pw); } catch (_) {}
         loginPass.value = '';
         loginOverlay.classList.add('hidden');
-        browse('__UPLOADS__');
+        browse('__PROJECT__');
       })
       .catch(function () {
         loginErr.textContent = 'Connection failed';
@@ -2133,8 +2200,7 @@ svg { display: block; flex-shrink: 0; }
   });
 
   // Event bindings
-  btnMenu.addEventListener('click', function () { setDrawerOpen(true); });
-  $('drawer-close').addEventListener('click', function () { setDrawerOpen(false); });
+  btnMenu.addEventListener('click', function () { renderBookmarks(); setDrawerOpen(true); });
   drawerScrim.addEventListener('click', function () { setDrawerOpen(false); });
 
   btnSelClose.addEventListener('click', clearSelection);
@@ -2210,6 +2276,12 @@ svg { display: block; flex-shrink: 0; }
     try { localStorage.setItem(SORT_KEY, state.sortBy); } catch (_) {}
     renderAll();
   });
+  $('m-bookmark').addEventListener('click', function () {
+    closeMenus();
+    if (state.currentDir && state.currentDir !== '__DRIVES__') {
+      toggleBookmark(state.currentDir, folderDisplayName());
+    }
+  });
   $('m-paste').addEventListener('click', doPaste);
   $('m-lock').addEventListener('click', toggleDeleteLock);
   $('m-refresh').addEventListener('click', function () { closeMenus(); browse(); });
@@ -2259,6 +2331,14 @@ svg { display: block; flex-shrink: 0; }
     var sel = selectedItems();
     if (sel.length === 1) copyToClipboard(sel[0].path);
   });
+  $('sm-bookmark').addEventListener('click', function () {
+    closeMenus();
+    var sel = selectedItems();
+    if (sel.length === 1 && (sel[0].isDirectory || sel[0].isDrive)) {
+      toggleBookmark(sel[0].path, sel[0].name);
+      clearSelection();
+    }
+  });
   $('sm-props').addEventListener('click', function () {
     closeMenus();
     var sel = selectedItems();
@@ -2295,14 +2375,8 @@ svg { display: block; flex-shrink: 0; }
   });
 
   // Drawer Nav
-  $('nav-uploads').addEventListener('click', function () { browse('__UPLOADS__'); });
   $('nav-project').addEventListener('click', function () { browse('__PROJECT__'); });
   $('nav-drives').addEventListener('click', function () { browse('__DRIVES__'); });
-  $('nav-jump').addEventListener('click', function () {
-    setDrawerOpen(false);
-    openDialog({ title: 'Go to Path', prompt: true, defaultValue: state.currentDir === '__DRIVES__' ? '' : state.currentDir, placeholder: 'Enter folder path', okText: 'Open' })
-      .then(function (p) { if (p && p.trim()) browse(p.trim()); });
-  });
   $('nav-lock').addEventListener('click', function () { setDrawerOpen(false); toggleDeleteLock(); });
   $('nav-obs').addEventListener('click', function () { if (state.dashboardUrl) window.location.href = state.dashboardUrl; });
   $('nav-logout').addEventListener('click', doLogout);
@@ -2375,6 +2449,7 @@ svg { display: block; flex-shrink: 0; }
   });
 
   // Startup initialization
+  renderBookmarks();
   fetch('/api/status', { headers: authHeaders() })
     .then(function (r) { return r.json(); })
     .then(function (st) {
@@ -2383,16 +2458,15 @@ svg { display: block; flex-shrink: 0; }
       state.platform = st.platform || state.platform;
       if (st.uploadsDir) {
         state.uploadsDir = st.uploadsDir;
-        $('nav-uploads-sub').textContent = st.uploadsDir;
       }
       if (st.authRequired && !st.authValid) {
         showLogin('');
       } else {
-        browse('__UPLOADS__');
+        browse('__PROJECT__');
       }
     })
     .catch(function () {
-      browse('__UPLOADS__');
+      browse('__PROJECT__');
     });
 })();
 </script>
