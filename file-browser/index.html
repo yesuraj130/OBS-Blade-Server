@@ -612,7 +612,7 @@
     function getAuthHeaders(extra = {}) {
       const headers = { ...extra };
       if (serverPassword) {
-        headers['X-OBS-Password'] = serverPassword;
+        headers['Authorization'] = `Bearer ${serverPassword}`;
       }
       return headers;
     }
@@ -724,7 +724,7 @@
       const candidate = el.inputServerPassword.value;
       try {
         const res = await fetch('/api/status', {
-          headers: { 'X-OBS-Password': candidate },
+          headers: { Authorization: `Bearer ${candidate}` },
         });
         const data = await res.json();
         if (data.authRequired && !data.authValid) {
@@ -1063,7 +1063,7 @@
 
         xhr.open('POST', '/api/upload');
         if (serverPassword) {
-          xhr.setRequestHeader('X-OBS-Password', serverPassword);
+          xhr.setRequestHeader('Authorization', `Bearer ${serverPassword}`);
         }
 
         xhr.upload.onprogress = (evt) => {

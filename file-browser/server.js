@@ -31,10 +31,6 @@ function getConfiguredPassword() {
 }
 
 function extractRequestPassword(req) {
-  const headerPw = req.headers['x-obs-password'];
-  if (typeof headerPw === 'string' && headerPw.length > 0) {
-    return headerPw;
-  }
   const authHeader = req.headers.authorization;
   if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
     return authHeader.slice(7);
@@ -123,7 +119,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-OBS-Password, X-Delete-Unlocked'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Delete-Unlocked'
   );
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);

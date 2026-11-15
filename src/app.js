@@ -77,12 +77,15 @@ const el = {
   btnCloseConnection: document.getElementById('btn-close-connection'),
   formSettingsConn: document.getElementById('form-settings-conn'),
   setIp: document.getElementById('set-ip'),
+  chkOverrideIp: document.getElementById('chk-override-ip'),
   setPort: document.getElementById('set-port'),
+  chkOverridePort: document.getElementById('chk-override-port'),
   setPass: document.getElementById('set-pass'),
+  chkOverridePass: document.getElementById('chk-override-pass'),
   setFileUrl: document.getElementById('set-file-url'),
-  chkFileSamePass: document.getElementById('chk-file-same-pass'),
-  rowFilePass: document.getElementById('row-file-pass'),
+  chkOverrideFileUrl: document.getElementById('chk-override-file-url'),
   setFilePass: document.getElementById('set-file-pass'),
+  chkOverrideFilePass: document.getElementById('chk-override-file-pass'),
   btnUseRealObs: document.getElementById('btn-use-real-obs'),
   btnUseSim: document.getElementById('btn-use-sim'),
 
@@ -300,14 +303,58 @@ let wakeLockSentinel = null;
 
 let fileServerMaxUploadMb = 2048;
 
-// Helper to resolve the File Browser microservice URL (defaults to port 3000 on current host)
-function getFileServerApiUrl(endpoint) {
+function getConfiguredDefaults() {
+  const cfg = window.OBS_BLADE_CONFIG || {};
+  return {
+    obsIp: typeof cfg.obsIp === 'string' ? cfg.obsIp.trim() : '',
+    obsPort:
+      cfg.obsPort !== undefined && cfg.obsPort !== null ? String(cfg.obsPort).trim() : '',
+    obsPassword: typeof cfg.obsPassword === 'string' ? cfg.obsPassword : '',
+    fileServerUrl: typeof cfg.fileServerUrl === 'string' ? cfg.fileServerUrl.trim() : '',
+    fileServerPassword:
+      typeof cfg.fileServerPassword === 'string' ? cfg.fileServerPassword : '',
+  };
+}
+
+function getEffectiveConnectionConfig() {
+  const defaults = getConfiguredDefaults();
+  let overrideIp = null;
+  let overridePort = null;
+  let overridePass = null;
+  let overrideFileUrl = null;
+  let overrideFilePass = null;
+
   try {
-    const customUrl = localStorage.getItem('obs_blade_file_server_url');
-    if (customUrl && customUrl.trim()) {
-      return customUrl.trim().replace(/\/+$/, '') + endpoint;
-    }
+    overrideIp = localStorage.getItem('obs_blade_ip');
+    overridePort = localStorage.getItem('obs_blade_port');
+    overridePass = localStorage.getItem('obs_blade_pw');
+    overrideFileUrl = localStorage.getItem('obs_blade_file_server_url');
+    overrideFilePass = localStorage.getItem('obs_blade_file_pw');
   } catch (_) {}
+
+  return {
+    ip: overrideIp !== null ? overrideIp.trim() : defaults.obsIp,
+    port: (overridePort !== null ? overridePort.trim() : defaults.obsPort) || '4455',
+    password: overridePass !== null ? overridePass : defaults.obsPassword,
+    fileUrl: overrideFileUrl !== null ? overrideFileUrl.trim() : defaults.fileServerUrl,
+    filePassword:
+      overrideFilePass !== null ? overrideFilePass : defaults.fileServerPassword,
+    overrides: {
+      ip: overrideIp,
+      port: overridePort,
+      password: overridePass,
+      fileUrl: overrideFileUrl,
+      filePassword: overrideFilePass,
+    },
+  };
+}
+
+// Helper to resolve the File Browser microservice URL (override -> config.js -> fallback port 3000)
+function getFileServerApiUrl(endpoint) {
+  const effectiveUrl = getEffectiveConnectionConfig().fileUrl;
+  if (effectiveUrl) {
+    return effectiveUrl.replace(/\/+$/, '') + endpoint;
+  }
 
   // If dashboard is served over HTTP from IIS or another port (e.g. port 80), connect to port 3000
   if (location.protocol === 'http:' && location.port !== '3000') {
@@ -316,22 +363,23 @@ function getFileServerApiUrl(endpoint) {
   return endpoint;
 }
 
-// Helper to resolve the active File Browser password
+// Helper to resolve the active File Browser password (override -> config.js)
 function getFileServerPassword() {
-  try {
-    const same = localStorage.getItem('obs_blade_file_same_pass') !== 'false';
-    if (same) {
-      return state.password || localStorage.getItem('obs_blade_pw') || '';
-    }
-    return localStorage.getItem('obs_blade_file_pw') || '';
-  } catch (_) {
-    return '';
-  }
+  return getEffectiveConnectionConfig().filePassword;
 }
 
 // Non-blocking asynchronous verification of File Browser server upon OBS connection
 async function checkFileBrowserStatus(customUrl, password) {
-  const fileUrl = customUrl || localStorage.getItem('obs_blade_file_server_url') || (location.protocol === 'http:' && location.port !== '3000' ? `${location.protocol}//${location.hostname}:3000` : location.origin);
+  let fileUrl = customUrl;
+  if (fileUrl === undefined || fileUrl === null) {
+    fileUrl = getEffectiveConnectionConfig().fileUrl;
+  }
+  if (!fileUrl) {
+    fileUrl =
+      location.protocol === 'http:' && location.port !== '3000'
+        ? `${location.protocol}//${location.hostname}:3000`
+        : location.origin;
+  }
   if (!fileUrl) return;
 
   const targetUrl = fileUrl.replace(/\/+$/, '') + '/api/status';
@@ -339,7 +387,7 @@ async function checkFileBrowserStatus(customUrl, password) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-    const headers = password ? { 'X-OBS-Password': password } : {};
+    const headers = password ? { Authorization: `Bearer ${password}` } : {};
     const res = await fetch(targetUrl, {
       signal: controller.signal,
       headers,
@@ -426,6 +474,10 @@ export function init() {
 
   if (state.url) {
     state.obs.connect(state.url, state.password);
+    const effective = getEffectiveConnectionConfig();
+    if (effective.fileUrl) {
+      checkFileBrowserStatus(effective.fileUrl, effective.filePassword);
+    }
   } else {
     connectToLocalSimulator();
   }
@@ -532,51 +584,88 @@ window.addEventListener('online', () => {
   handleTabActive();
 });
 
+function syncOverrideInputState(checkboxEl, inputEl, overrideValue, overridePlaceholder) {
+  if (!checkboxEl || !inputEl) return;
+  const isOverridden = overrideValue !== null && overrideValue !== undefined;
+  checkboxEl.checked = isOverridden;
+  inputEl.disabled = !isOverridden;
+  inputEl.value = isOverridden ? overrideValue : '';
+  inputEl.placeholder = isOverridden ? overridePlaceholder : 'Using default configuration';
+}
+
+function bindOverrideToggle(checkboxEl, inputEl, storageKey, overridePlaceholder) {
+  if (!checkboxEl || !inputEl) return;
+  checkboxEl.addEventListener('change', () => {
+    const enabled = checkboxEl.checked;
+    inputEl.disabled = !enabled;
+    if (enabled) {
+      let saved = null;
+      try {
+        saved = localStorage.getItem(storageKey);
+      } catch (_) {}
+      inputEl.value = saved !== null ? saved : '';
+      inputEl.placeholder = overridePlaceholder;
+      inputEl.focus();
+    } else {
+      inputEl.value = '';
+      inputEl.placeholder = 'Using default configuration';
+    }
+  });
+}
+
 function loadSavedCredentials() {
   try {
-    const host = localStorage.getItem('obs_blade_ip');
-    const port = localStorage.getItem('obs_blade_port');
-    const pass = localStorage.getItem('obs_blade_pw');
-    const fileUrl = localStorage.getItem('obs_blade_file_server_url') || '';
-    const samePass = localStorage.getItem('obs_blade_file_same_pass') !== 'false';
-    const filePass = localStorage.getItem('obs_blade_file_pw') || '';
+    localStorage.removeItem('obs_blade_file_same_pass');
+  } catch (_) {}
 
-    if (host) {
-      el.setIp.value = host;
-      el.setPort.value = port || '4455';
-      el.setPass.value = pass || '';
-      state.password = pass || '';
+  const effective = getEffectiveConnectionConfig();
+  const { overrides } = effective;
 
+  syncOverrideInputState(el.chkOverrideIp, el.setIp, overrides.ip, '192.168.1.100');
+  syncOverrideInputState(el.chkOverridePort, el.setPort, overrides.port, '4455');
+  syncOverrideInputState(el.chkOverridePass, el.setPass, overrides.password, 'Leave empty if none');
+  syncOverrideInputState(
+    el.chkOverrideFileUrl,
+    el.setFileUrl,
+    overrides.fileUrl,
+    'http://192.168.1.100:3001'
+  );
+  syncOverrideInputState(
+    el.chkOverrideFilePass,
+    el.setFilePass,
+    overrides.filePassword,
+    'Leave empty if none'
+  );
+
+  state.password = effective.password;
+  if (effective.ip) {
+    if (effective.ip.startsWith('ws://') || effective.ip.startsWith('wss://')) {
+      state.url = effective.ip;
+    } else {
       const isSecure = location.protocol === 'https:';
-      const protocol = isSecure && host === location.hostname ? 'wss://' : 'ws://';
-      state.url = `${protocol}${host}:${port || '4455'}`;
+      const protocol = isSecure && effective.ip === location.hostname ? 'wss://' : 'ws://';
+      state.url = `${protocol}${effective.ip}:${effective.port}`;
     }
-
-    if (el.setFileUrl) el.setFileUrl.value = fileUrl;
-    if (el.chkFileSamePass) el.chkFileSamePass.checked = samePass;
-    if (el.setFilePass) el.setFilePass.value = filePass;
-    if (el.rowFilePass) el.rowFilePass.style.display = samePass ? 'none' : 'block';
-  } catch (e) {
-    console.warn(e);
+  } else {
+    state.url = '';
   }
 }
 
-function saveCredentials(host, port, pass, fileUrl = '', samePass = true, filePass = '') {
+function saveCredentials({ ip, port, password, fileUrl, filePassword }) {
   try {
-    localStorage.setItem('obs_blade_ip', host);
-    localStorage.setItem('obs_blade_port', port);
-    localStorage.setItem('obs_blade_pw', pass);
-    if (fileUrl) {
-      localStorage.setItem('obs_blade_file_server_url', fileUrl);
-    } else {
-      localStorage.removeItem('obs_blade_file_server_url');
-    }
-    localStorage.setItem('obs_blade_file_same_pass', String(samePass));
-    if (!samePass && filePass) {
-      localStorage.setItem('obs_blade_file_pw', filePass);
-    } else {
-      localStorage.removeItem('obs_blade_file_pw');
-    }
+    const syncKey = (key, val) => {
+      if (val !== null && val !== undefined) {
+        localStorage.setItem(key, val);
+      } else {
+        localStorage.removeItem(key);
+      }
+    };
+    syncKey('obs_blade_ip', ip);
+    syncKey('obs_blade_port', port);
+    syncKey('obs_blade_pw', password);
+    syncKey('obs_blade_file_server_url', fileUrl);
+    syncKey('obs_blade_file_pw', filePassword);
+    localStorage.removeItem('obs_blade_file_same_pass');
   } catch (e) {}
 }
 
@@ -1006,12 +1095,22 @@ function setupEventListeners() {
     });
   }
 
-  // Toggle custom file server password row
-  if (el.chkFileSamePass && el.rowFilePass) {
-    el.chkFileSamePass.addEventListener('change', (e) => {
-      el.rowFilePass.style.display = e.target.checked ? 'none' : 'block';
-    });
-  }
+  // Per-field Override toggles in OBS Connection modal
+  bindOverrideToggle(el.chkOverrideIp, el.setIp, 'obs_blade_ip', '192.168.1.100');
+  bindOverrideToggle(el.chkOverridePort, el.setPort, 'obs_blade_port', '4455');
+  bindOverrideToggle(el.chkOverridePass, el.setPass, 'obs_blade_pw', 'Leave empty if none');
+  bindOverrideToggle(
+    el.chkOverrideFileUrl,
+    el.setFileUrl,
+    'obs_blade_file_server_url',
+    'http://192.168.1.100:3001'
+  );
+  bindOverrideToggle(
+    el.chkOverrideFilePass,
+    el.setFilePass,
+    'obs_blade_file_pw',
+    'Leave empty if none'
+  );
 
   // OBS Connection Modal Handlers
   if (el.btnBackConnection) {
@@ -1030,28 +1129,47 @@ function setupEventListeners() {
   if (el.formSettingsConn) {
     el.formSettingsConn.addEventListener('submit', (e) => {
       e.preventDefault();
-      let host = el.setIp.value.trim() || '127.0.0.1';
-      const port = el.setPort.value.trim() || '4455';
-      const pass = el.setPass.value;
-      const fileUrl = el.setFileUrl ? el.setFileUrl.value.trim() : '';
-      const fileSamePass = el.chkFileSamePass ? el.chkFileSamePass.checked : true;
-      const filePass = el.setFilePass ? el.setFilePass.value : '';
+      const useCustomIp = Boolean(el.chkOverrideIp?.checked);
+      const useCustomPort = Boolean(el.chkOverridePort?.checked);
+      const useCustomPass = Boolean(el.chkOverridePass?.checked);
+      const useCustomFileUrl = Boolean(el.chkOverrideFileUrl?.checked);
+      const useCustomFilePass = Boolean(el.chkOverrideFilePass?.checked);
 
-      saveCredentials(host, port, pass, fileUrl, fileSamePass, filePass);
-      if (host.startsWith('ws://') || host.startsWith('wss://')) {
-        state.url = host;
-      } else {
-        const protocol = location.protocol === 'https:' && host === location.hostname ? 'wss://' : 'ws://';
-        state.url = `${protocol}${host}:${port}`;
+      if (useCustomIp && !el.setIp.value.trim()) {
+        showGlobalNotice('Please enter an OBS IP address or uncheck Override.', true);
+        el.setIp.focus();
+        return;
       }
-      state.password = pass;
+
+      saveCredentials({
+        ip: useCustomIp ? el.setIp.value.trim() : null,
+        port: useCustomPort ? el.setPort.value.trim() : null,
+        password: useCustomPass ? el.setPass.value : null,
+        fileUrl: useCustomFileUrl ? el.setFileUrl.value.trim() : null,
+        filePassword: useCustomFilePass ? el.setFilePass.value : null,
+      });
+
+      const effective = getEffectiveConnectionConfig();
+      if (!effective.ip) {
+        showGlobalNotice('No default OBS IP configured. Enable Override to enter an OBS IP address.', true);
+        return;
+      }
+
+      if (effective.ip.startsWith('ws://') || effective.ip.startsWith('wss://')) {
+        state.url = effective.ip;
+      } else {
+        const protocol =
+          location.protocol === 'https:' && effective.ip === location.hostname ? 'wss://' : 'ws://';
+        state.url = `${protocol}${effective.ip}:${effective.port}`;
+      }
+      state.password = effective.password;
       state.isRealObs = state.url.includes('/obs-real-ws');
 
       state.obs.connect(state.url, state.password);
       closeConnectionModal();
 
       // Non-blocking asynchronous verification of File Browser server
-      checkFileBrowserStatus(fileUrl, fileSamePass ? pass : filePass);
+      checkFileBrowserStatus(effective.fileUrl, effective.filePassword);
     });
   }
 
@@ -4779,7 +4897,7 @@ function uploadFileWithProgress(uploadUrl, formData, password, onProgress) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', uploadUrl);
     if (password) {
-      xhr.setRequestHeader('X-OBS-Password', password);
+      xhr.setRequestHeader('Authorization', `Bearer ${password}`);
     }
 
     xhr.upload.onprogress = (evt) => {
@@ -4863,7 +4981,7 @@ async function loadHostDirectory(dir) {
     const timeoutId = setTimeout(() => controller.abort(), 4000);
 
     const filePw = getFileServerPassword();
-    const headers = filePw ? { 'X-OBS-Password': filePw } : {};
+    const headers = filePw ? { Authorization: `Bearer ${filePw}` } : {};
 
     const res = await fetch(apiUrl, { signal: controller.signal, headers });
     clearTimeout(timeoutId);

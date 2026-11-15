@@ -70,7 +70,7 @@ async function startServer() {
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-OBS-Password, X-Delete-Unlocked');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Delete-Unlocked');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
     }
@@ -684,7 +684,9 @@ async function startServer() {
    * Status and Server Diagnostics
    */
   app.get('/api/status', (req, res) => {
-    const reqPass = req.headers['x-obs-password'] || req.query.password || '';
+    const authHeader = req.headers.authorization;
+    const bearerPass = typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    const reqPass = bearerPass || req.query.password || '';
     const configuredPass = process.env.FILE_SERVER_PASSWORD || process.env.OBS_PASSWORD || '';
     const authValid = !configuredPass || reqPass === configuredPass;
 
