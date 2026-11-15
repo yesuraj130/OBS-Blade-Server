@@ -1,2186 +1,2400 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FileBrowser — OBS Host File Manager</title>
-  <style>
-    :root {
-      --bg-base: #0d1117;
-      --bg-surface: #161b22;
-      --bg-elevated: #1f2633;
-      --bg-hover: rgba(56, 139, 253, 0.1);
-      --bg-selected: rgba(47, 129, 247, 0.18);
-      --border: #262e3d;
-      --border-focus: #388bfd;
-      --primary: #2f81f7;
-      --primary-hover: #1f6feb;
-      --text: #e6edf3;
-      --text-muted: #8b949e;
-      --danger: #f85149;
-      --danger-bg: rgba(248, 81, 73, 0.14);
-      --warning: #d29922;
-      --success: #3fb950;
-      --radius: 8px;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
-
-    body {
-      background-color: var(--bg-base);
-      color: var(--text);
-      min-height: 100vh;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    /* Fullscreen Login Screen on Startup */
-    .login-screen {
-      position: fixed;
-      inset: 0;
-      z-index: 2000;
-      background: radial-gradient(circle at top, #172237 0%, #0d1117 70%);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .login-screen.active {
-      display: flex;
-    }
-
-    .login-card {
-      width: 100%;
-      max-width: 400px;
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 32px 28px;
-      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
-
-    .login-logo {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      gap: 10px;
-    }
-
-    .login-logo-badge {
-      width: 56px;
-      height: 56px;
-      border-radius: 14px;
-      background: rgba(47, 129, 247, 0.16);
-      border: 1px solid rgba(47, 129, 247, 0.4);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-    }
-
-    .login-title {
-      font-size: 20px;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    .login-subtitle {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .login-error {
-      background: var(--danger-bg);
-      border: 1px solid rgba(248, 81, 73, 0.4);
-      color: #ffa198;
-      padding: 10px 12px;
-      border-radius: var(--radius);
-      font-size: 13px;
-      display: none;
-    }
-
-    /* Main FileBrowser Shell */
-    .fb-shell {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      width: 100%;
-      overflow: hidden;
-    }
-
-    /* Top Bar */
-    .fb-topbar {
-      height: 56px;
-      min-height: 56px;
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 16px;
-      gap: 12px;
-    }
-
-    .fb-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 190px;
-    }
-
-    .fb-brand-icon {
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
-      background: rgba(47, 129, 247, 0.16);
-      border: 1px solid rgba(47, 129, 247, 0.35);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-    }
-
-    .fb-brand-name {
-      font-size: 15px;
-      font-weight: 700;
-      letter-spacing: -0.2px;
-    }
-
-    .fb-brand-sub {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .fb-search-wrap {
-      flex: 1;
-      max-width: 440px;
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-
-    .fb-search-input {
-      width: 100%;
-      background: var(--bg-base);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 8px 32px 8px 34px;
-      border-radius: 8px;
-      font-size: 13px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-
-    .fb-search-input:focus {
-      border-color: var(--border-focus);
-    }
-
-    .fb-search-icon {
-      position: absolute;
-      left: 11px;
-      font-size: 13px;
-      color: var(--text-muted);
-      pointer-events: none;
-    }
-
-    .fb-toolbar-actions {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    /* Body Workspace: Sidebar + Content */
-    .fb-workspace {
-      flex: 1;
-      display: flex;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    .fb-sidebar {
-      width: 230px;
-      min-width: 230px;
-      background: var(--bg-surface);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 14px 10px;
-      overflow-y: auto;
-      gap: 16px;
-    }
-
-    .fb-side-group {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .fb-side-label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      color: var(--text-muted);
-      padding: 4px 10px;
-    }
-
-    .fb-nav-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-      border-radius: 7px;
-      border: 1px solid transparent;
-      background: transparent;
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      text-align: left;
-      width: 100%;
-      transition: background 0.12s, border-color 0.12s;
-    }
-
-    .fb-nav-item:hover {
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .fb-nav-item.active {
-      background: var(--bg-selected);
-      border-color: rgba(47, 129, 247, 0.4);
-      color: #fff;
-    }
-
-    /* Main Content Column */
-    .fb-main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      min-height: 0;
-      background: var(--bg-base);
-    }
-
-    /* Sub-header: Breadcrumbs + Contextual Selection Toolbar */
-    .fb-subbar {
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border);
-      padding: 8px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      min-height: 46px;
-    }
-
-    .fb-breadcrumbs {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      overflow-x: auto;
-      white-space: nowrap;
-      font-size: 13px;
-      flex: 1;
-      min-width: 180px;
-    }
-
-    .fb-crumb {
-      padding: 4px 8px;
-      border-radius: 5px;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12.5px;
-      border: none;
-      background: transparent;
-    }
-
-    .fb-crumb:hover {
-      background: rgba(255, 255, 255, 0.06);
-      color: #fff;
-    }
-
-    .fb-crumb.current {
-      color: #fff;
-      font-weight: 600;
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .fb-crumb-sep {
-      color: #484f58;
-      font-size: 12px;
-      user-select: none;
-    }
-
-    .fb-context-actions {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    /* Buttons */
-    .btn {
-      padding: 6px 11px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: var(--bg-elevated);
-      color: var(--text);
-      font-size: 12.5px;
-      font-weight: 500;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      text-decoration: none;
-      transition: all 0.12s ease;
-      white-space: nowrap;
-    }
-
-    .btn:hover:not(:disabled) {
-      background: #293242;
-      border-color: #424f66;
-    }
-
-    .btn:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: #fff;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: var(--primary-hover);
-      border-color: var(--primary-hover);
-    }
-
-    .btn-danger {
-      background: var(--danger-bg);
-      border-color: rgba(248, 81, 73, 0.45);
-      color: #ffa198;
-    }
-
-    .btn-danger:hover:not(:disabled) {
-      background: rgba(248, 81, 73, 0.25);
-      border-color: var(--danger);
-      color: #fff;
-    }
-
-    .btn-lock-unlocked {
-      background: rgba(210, 153, 34, 0.18);
-      border-color: rgba(210, 153, 34, 0.55);
-      color: #e3b341;
-    }
-
-    /* Upload Progress Banner */
-    .upload-progress-box {
-      display: none;
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border);
-      padding: 10px 16px;
-      gap: 8px;
-      flex-direction: column;
-    }
-
-    .upload-progress-box.active {
-      display: flex;
-    }
-
-    .upload-progress-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 12.5px;
-    }
-
-    .progress-track {
-      height: 7px;
-      background: #090d13;
-      border-radius: 999px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-    }
-
-    .progress-fill {
-      height: 100%;
-      width: 0%;
-      background: var(--primary);
-      transition: width 0.12s linear;
-    }
-
-    /* File Stage (Drag & Drop Area + Scrollable List/Grid) */
-    .fb-stage {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px;
-      position: relative;
-      user-select: none;
-    }
-
-    .fb-stage.dragover::after {
-      content: "Drop files anywhere to upload to this folder";
-      position: fixed;
-      inset: 60px 16px 16px 246px;
-      background: rgba(13, 17, 23, 0.86);
-      border: 2px dashed var(--primary);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      font-weight: 600;
-      color: #fff;
-      z-index: 50;
-      pointer-events: none;
-    }
-
-    /* List Table View */
-    .fb-list-header {
-      display: grid;
-      grid-template-columns: minmax(220px, 1fr) 110px 165px 210px;
-      gap: 12px;
-      padding: 8px 14px;
-      border-bottom: 1px solid var(--border);
-      font-size: 11.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      color: var(--text-muted);
-      background: var(--bg-surface);
-      border-radius: 8px 8px 0 0;
-      border: 1px solid var(--border);
-    }
-
-    .fb-sort-col {
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .fb-sort-col:hover {
-      color: #fff;
-    }
-
-    .fb-entries-list {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-top: none;
-      border-radius: 0 0 8px 8px;
-      overflow: hidden;
-    }
-
-    .fb-row {
-      display: grid;
-      grid-template-columns: minmax(220px, 1fr) 110px 165px 210px;
-      gap: 12px;
-      align-items: center;
-      padding: 10px 14px;
-      border-bottom: 1px solid rgba(38, 46, 61, 0.65);
-      cursor: pointer;
-      transition: background 0.1s;
-      font-size: 13.5px;
-    }
-
-    .fb-row:last-child {
-      border-bottom: none;
-    }
-
-    .fb-row:hover {
-      background: var(--bg-hover);
-    }
-
-    .fb-row.selected {
-      background: var(--bg-selected);
-    }
-
-    .fb-cell-name {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .fb-item-icon {
-      font-size: 20px;
-      flex-shrink: 0;
-    }
-
-    .fb-item-title {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-weight: 500;
-    }
-
-    .fb-cell-meta {
-      font-size: 12.5px;
-      color: var(--text-muted);
-      white-space: nowrap;
-    }
-
-    .fb-cell-actions {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 5px;
-    }
-
-    /* Grid / Mosaic View */
-    .fb-entries-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
-      gap: 12px;
-    }
-
-    .fb-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      padding: 14px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      cursor: pointer;
-      transition: transform 0.12s, border-color 0.12s, background 0.12s;
-      position: relative;
-    }
-
-    .fb-card:hover {
-      border-color: #3b465c;
-      background: var(--bg-hover);
-    }
-
-    .fb-card.selected {
-      border-color: var(--primary);
-      background: var(--bg-selected);
-    }
-
-    .fb-card-thumb {
-      height: 76px;
-      border-radius: 6px;
-      background: #0d1117;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 36px;
-      overflow: hidden;
-    }
-
-    .fb-card-thumb img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .fb-card-name {
-      font-size: 13px;
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .fb-card-sub {
-      font-size: 11.5px;
-      color: var(--text-muted);
-      display: flex;
-      justify-content: space-between;
-      gap: 6px;
-    }
-
-    /* Status Footer */
-    .fb-statusbar {
-      height: 32px;
-      min-height: 32px;
-      background: var(--bg-surface);
-      border-top: 1px solid var(--border);
-      padding: 0 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    /* Modals */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(6, 9, 14, 0.8);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      z-index: 1500;
-    }
-
-    .modal-overlay.open {
-      display: flex;
-    }
-
-    .modal-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      width: 100%;
-      max-width: 500px;
-      overflow: hidden;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .modal-card.modal-wide {
-      max-width: 900px;
-    }
-
-    .modal-head {
-      padding: 14px 18px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .modal-title {
-      font-size: 15px;
-      font-weight: 600;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .modal-body {
-      padding: 18px;
-      font-size: 13.5px;
-      line-height: 1.5;
-      color: var(--text);
-    }
-
-    .modal-foot {
-      padding: 12px 18px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-    }
-
-    .input-field {
-      width: 100%;
-      margin-top: 8px;
-      padding: 10px 12px;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      background: var(--bg-base);
-      color: var(--text);
-      font-size: 14px;
-      outline: none;
-    }
-
-    .input-field:focus {
-      border-color: var(--border-focus);
-    }
-
-    .editor-textarea {
-      width: 100%;
-      height: 62vh;
-      background: #090c10;
-      color: #e6edf3;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 14px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 13px;
-      line-height: 1.55;
-      resize: vertical;
-      outline: none;
-    }
-
-    .preview-stage {
-      background: #080a0f;
-      border-radius: var(--radius);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 220px;
-      max-height: 70vh;
-      overflow: auto;
-      padding: 10px;
-    }
-
-    .preview-stage img,
-    .preview-stage video {
-      max-width: 100%;
-      max-height: 66vh;
-      border-radius: 4px;
-    }
-
-    .preview-stage audio {
-      width: 100%;
-      max-width: 520px;
-    }
-
-    #toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      background: #1f2633;
-      color: #fff;
-      padding: 11px 16px;
-      border-radius: var(--radius);
-      border: 1px solid #384459;
-      font-size: 13px;
-      display: none;
-      max-width: min(90vw, 460px);
-      word-break: break-word;
-      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-      z-index: 2500;
-    }
-
-    #toast.success { border-color: var(--success); }
-    #toast.error { border-color: var(--danger); }
-
-    @media (max-width: 820px) {
-      .fb-sidebar {
-        width: 180px;
-        min-width: 180px;
-      }
-      .fb-list-header,
-      .fb-row {
-        grid-template-columns: minmax(160px, 1fr) 85px 150px;
-      }
-      .fb-hide-mobile {
-        display: none !important;
-      }
-    }
-
-    @media (max-width: 620px) {
-      .fb-workspace {
-        flex-direction: column;
-      }
-      .fb-sidebar {
-        width: 100%;
-        min-width: 0;
-        flex-direction: row;
-        overflow-x: auto;
-        padding: 8px 12px;
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-      }
-      .fb-side-group {
-        flex-direction: row;
-        align-items: center;
-      }
-      .fb-side-label {
-        display: none;
-      }
-      .fb-nav-item {
-        width: auto;
-        padding: 6px 10px;
-      }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Files</title>
+<style>
+:root {
+  --bg: #000000;
+  --surface: #121316;
+  --surface-2: #1c1d22;
+  --surface-3: #26282f;
+  --border: #17181c;
+  --border-strong: #2a2c34;
+  --text: #f3f4f6;
+  --text-muted: #8b8f98;
+  --blue: #1976d2;
+  --blue-bright: #2196f3;
+  --amber: #f5b800;
+  --amber-dark: #d9a300;
+  --danger: #ef5350;
+  --success: #22c55e;
+  --select-bg: #0a1b2e;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+svg { display: block; flex-shrink: 0; }
+.hidden { display: none !important; }
+
+/* Root shell bounded so Shadow DOM tab (top:38px) and standalone 100% viewport both work identically */
+.fb-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Top Bar */
+.topbar {
+  height: 56px;
+  min-height: 56px;
+  padding: 0 6px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  z-index: 20;
+}
+.topbar.sel-mode {
+  background: #071320;
+  border-bottom: 1px solid #102a46;
+}
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue-bright);
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.icon-btn:hover, .icon-btn:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.icon-btn.muted { color: var(--text-muted); }
+.icon-btn.danger { color: var(--danger); }
+.icon-btn:disabled { opacity: 0.35; pointer-events: none; }
+
+.title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.folder-title {
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.folder-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: 20px;
+  padding: 0 10px 0 14px;
+  height: 38px;
+  gap: 6px;
+}
+.search-wrap input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #fff;
+}
+.search-wrap input::placeholder { color: var(--text-muted); }
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Breadcrumb Strip */
+.crumb-bar {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+.crumb-bar::-webkit-scrollbar { display: none; }
+.crumb-btn {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding: 4px 2px;
+  flex-shrink: 0;
+}
+.crumb-btn:hover { color: #fff; }
+.crumb-btn.active { color: var(--blue-bright); }
+.crumb-sep {
+  color: #555963;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* Status Banner (only shown if delete unlocked or error) */
+.status-strip {
+  padding: 6px 14px;
+  background: #231606;
+  border-bottom: 1px solid #59350b;
+  color: #fbbf24;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.status-strip button {
+  color: #fde68a;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid #78480f;
+  border-radius: 6px;
+}
+
+/* Main Content Stage */
+.stage {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg);
+  padding-bottom: 88px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* List View */
+.file-list {
+  display: flex;
+  flex-direction: column;
+}
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  min-height: 64px;
+  background: var(--bg);
+  border-bottom: 1px solid #0e0f12;
+  transition: background 0.12s;
+  cursor: pointer;
+}
+.file-row:hover { background: #0c0e12; }
+.file-row.selected { background: var(--select-bg); }
+.file-row.cut-dim { opacity: 0.52; }
+
+.row-check {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #727782;
+  border-radius: 4px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.12s;
+}
+.is-selecting .row-check { display: inline-flex; }
+.file-row.selected .row-check {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #111;
+}
+
+.item-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--blue);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+.item-badge.thumb {
+  background: #14161b;
+  border: 1px solid #22252d;
+}
+.item-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.item-badge.file-video { background: #1565c0; }
+.item-badge.file-audio { background: #0277bd; }
+.item-badge.file-code { background: #1e88e5; }
+.item-badge.file-other { background: #263238; }
+
+.row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.row-name {
+  font-size: 15px;
+  font-weight: 400;
+  color: #f3f4f6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.row-date {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 11.5px;
+}
+
+/* Grid View */
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+.grid-card {
+  background: #0b0c0f;
+  border: 1px solid #191b20;
+  border-radius: 12px;
+  padding: 12px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  cursor: pointer;
+  min-width: 0;
+}
+.grid-card:hover { background: #12141a; }
+.grid-card.selected {
+  background: var(--select-bg);
+  border-color: var(--blue-bright);
+}
+.grid-card.cut-dim { opacity: 0.52; }
+.grid-card .item-badge {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+}
+.grid-check {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #727782;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.is-selecting .grid-check { display: inline-flex; }
+.grid-card.selected .grid-check {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #111;
+}
+.grid-name {
+  width: 100%;
+  font-size: 13px;
+  text-align: center;
+  color: #f3f4f6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grid-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Empty & Loading States */
+.empty-state {
+  padding: 64px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.empty-state .empty-ico {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: #10131a;
+  color: var(--blue-bright);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Overflow Menus */
+.menu-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+}
+.overflow-menu {
+  position: absolute;
+  top: 52px;
+  right: 10px;
+  width: 228px;
+  background: #1e1f23;
+  border: 1px solid #2d2f36;
+  border-radius: 12px;
+  padding: 6px 0;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.72);
+  z-index: 45;
+}
+.overflow-menu.bottom-anchor {
+  top: auto;
+  bottom: 58px;
+  right: 8px;
+}
+.menu-item {
+  width: 100%;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14.5px;
+  color: #f1f3f4;
+  text-align: left;
+}
+.menu-item:hover { background: rgba(255, 255, 255, 0.06); }
+.menu-item:disabled { opacity: 0.35; pointer-events: none; }
+.menu-item svg { color: var(--blue-bright); }
+.menu-item.danger svg { color: var(--danger); }
+.menu-item.danger { color: #fca5a5; }
+.menu-divider {
+  height: 1px;
+  background: #2b2d34;
+  margin: 4px 0;
+}
+.menu-sublabel {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* Bottom Selection Action Bar */
+.bottom-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 54px;
+  background: #0d0e11;
+  border-top: 1px solid #1f2128;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  z-index: 30;
+}
+.bottom-action {
+  flex: 1;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue-bright);
+  transition: background 0.12s;
+}
+.bottom-action:hover { background: rgba(255, 255, 255, 0.06); }
+.bottom-action:disabled { opacity: 0.3; pointer-events: none; }
+.bottom-action.danger { color: var(--danger); }
+
+/* Bottom Paste Bar */
+.paste-bar {
+  position: absolute;
+  left: 12px;
+  right: 80px;
+  bottom: 16px;
+  background: #1a1c22;
+  border: 1px solid #2c303a;
+  border-radius: 12px;
+  padding: 8px 10px 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 28;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+}
+.paste-info {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #e5e7eb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.paste-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.paste-btn.primary { background: var(--blue-bright); color: #fff; }
+.paste-btn.cancel { background: #2a2d36; color: #d1d5db; }
+
+/* Amber FAB + Speed Dial */
+.fab-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  z-index: 34;
+}
+.fab-stack {
+  position: absolute;
+  right: 16px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+  z-index: 36;
+  pointer-events: none;
+}
+.fab-stack > * { pointer-events: auto; }
+.fab-dial {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+.dial-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dial-label {
+  background: #ffffff;
+  color: #111827;
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+.mini-fab {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--amber);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+.main-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--amber);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  transition: transform 0.16s ease, background 0.15s;
+}
+.main-fab:hover { background: var(--amber-dark); }
+.main-fab.open svg { transform: rotate(45deg); }
+.main-fab svg { transition: transform 0.18s ease; }
+
+/* Navigation Drawer */
+.drawer-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 50;
+}
+.drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(300px, 82vw);
+  background: #15161a;
+  border-right: 1px solid #262932;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.75);
+}
+.drawer-head {
+  padding: 18px 16px 14px;
+  background: linear-gradient(135deg, #0b1626 0%, #15161a 100%);
+  border-bottom: 1px solid #242730;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.drawer-head-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+.drawer-head-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.drawer-sec {
+  padding: 12px 16px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.drawer-item {
+  width: 100%;
+  padding: 11px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  transition: background 0.12s;
+}
+.drawer-item:hover { background: rgba(255, 255, 255, 0.05); }
+.drawer-item.active { background: #102033; }
+.drawer-ico {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.drawer-ico.warn { background: #b45309; }
+.drawer-ico.danger { background: #991b1b; }
+.drawer-item-text {
+  flex: 1;
+  min-width: 0;
+}
+.drawer-item-title {
+  font-size: 14.5px;
+  color: #f3f4f6;
+}
+.drawer-item-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Upload Progress Floating Pill */
+.upload-toast {
+  position: absolute;
+  left: 14px;
+  right: 84px;
+  bottom: 18px;
+  background: #171920;
+  border: 1px solid #2b2f3a;
+  border-radius: 12px;
+  padding: 10px 14px;
+  z-index: 35;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+}
+.upload-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+.upload-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.upload-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: #272a34;
+  overflow: hidden;
+}
+.upload-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--amber);
+  transition: width 0.1s linear;
+}
+
+/* Drag & Drop Overlay */
+.drop-overlay {
+  position: absolute;
+  inset: 10px;
+  border: 2px dashed var(--amber);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.84);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #fff;
+  pointer-events: none;
+}
+
+/* Modals (Prompt, Confirm, Editor, Preview, Properties) */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-card {
+  width: 100%;
+  max-width: 420px;
+  background: #18191e;
+  border: 1px solid #2b2e37;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 90%;
+}
+.modal-card.wide { max-width: 760px; height: min(640px, 88%); }
+.modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.modal-msg {
+  font-size: 13.5px;
+  color: #c2c6d0;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.modal-input {
+  width: 100%;
+  background: #0c0d10;
+  border: 1px solid #303440;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 14.5px;
+  color: #fff;
+  outline: none;
+}
+.modal-input:focus { border-color: var(--blue-bright); }
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.btn {
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.btn.ghost { color: #cbd5e1; background: #262830; }
+.btn.primary { color: #fff; background: var(--blue); }
+.btn.amber { color: #111; background: var(--amber); }
+.btn.danger { color: #fff; background: #dc2626; }
+
+.editor-area {
+  flex: 1;
+  min-height: 220px;
+  width: 100%;
+  resize: none;
+  background: #090a0d;
+  border: 1px solid #2b2e37;
+  border-radius: 10px;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e5e7eb;
+  outline: none;
+}
+.preview-body {
+  flex: 1;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.preview-body img, .preview-body video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.preview-body audio { width: 92%; }
+.prop-grid {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+.prop-k { color: var(--text-muted); }
+.prop-v { color: #f3f4f6; word-break: break-all; }
+
+/* Startup Login Overlay */
+.login-overlay {
+  position: absolute;
+  inset: 0;
+  background: #000000;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: #121318;
+  border: 1px solid #232630;
+  border-radius: 18px;
+  padding: 26px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.login-ico {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--blue);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-title { font-size: 19px; font-weight: 600; color: #fff; }
+.login-sub { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+.pass-box {
+  display: flex;
+  align-items: center;
+  background: #090a0d;
+  border: 1px solid #2c303b;
+  border-radius: 10px;
+  padding-right: 6px;
+}
+.pass-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  padding: 12px;
+  font-size: 14.5px;
+  color: #fff;
+}
+.login-err {
+  font-size: 12.5px;
+  color: #f87171;
+}
+
+/* Snackbar Toast */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  background: #23252d;
+  color: #fff;
+  padding: 9px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  max-width: 90%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+</style>
 </head>
 <body>
-  <!-- 1. Fullscreen Startup Login Screen (Persisted in localStorage) -->
-  <div class="login-screen" id="login-screen">
-    <form class="login-card" id="form-login">
-      <div class="login-logo">
-        <div class="login-logo-badge">📁</div>
-        <div class="login-title">FileBrowser</div>
-        <div class="login-subtitle" id="login-subtitle">Sign in to access OBS Host File Manager</div>
-      </div>
-      <div class="login-error" id="login-error"></div>
-      <div>
-        <label style="font-size: 12.5px; color: var(--text-muted);" for="input-login-password">Password</label>
-        <input type="password" id="input-login-password" class="input-field" placeholder="Enter File Browser password" autocomplete="current-password" required>
-      </div>
-      <button type="submit" class="btn btn-primary" style="justify-content: center; padding: 10px; font-size: 14px;">
-        Sign In
+<div id="fb-shell" class="fb-shell">
+  <!-- Normal & Selection Top Bar -->
+  <header id="topbar" class="topbar">
+    <button type="button" id="btn-menu" class="icon-btn" title="Menu" aria-label="Menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <button type="button" id="btn-sel-close" class="icon-btn hidden" title="Close selection" aria-label="Close selection">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+
+    <div id="title-wrap" class="title-wrap">
+      <div id="folder-title" class="folder-title">Uploads</div>
+      <div id="folder-sub" class="folder-sub">Loading...</div>
+    </div>
+
+    <div id="search-wrap" class="search-wrap hidden">
+      <input id="search-input" type="text" placeholder="Filter files and folders..." autocomplete="off" />
+      <button type="button" id="btn-search-close" class="icon-btn muted" style="width:30px;height:30px;" aria-label="Clear search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
+    </div>
+
+    <div id="normal-actions" class="topbar-actions">
+      <button type="button" id="btn-search" class="icon-btn" title="Search" aria-label="Search">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button type="button" id="btn-more" class="icon-btn" title="More options" aria-label="More options">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+      </button>
+    </div>
+
+    <div id="sel-actions" class="topbar-actions hidden">
+      <button type="button" id="btn-sel-all" class="icon-btn" title="Select all" aria-label="Select all">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><polyline points="8 12 11 15 16 9"/></svg>
+      </button>
+      <button type="button" id="btn-sel-invert" class="icon-btn" title="Invert selection" aria-label="Invert selection">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 3"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Breadcrumb Path Strip -->
+  <nav id="crumb-bar" class="crumb-bar" aria-label="Path breadcrumbs"></nav>
+
+  <!-- Delete Unlocked Warning Strip -->
+  <div id="unlock-strip" class="status-strip hidden">
+    <span>Delete unlocked — destructive removals enabled</span>
+    <button type="button" id="btn-relock">Lock</button>
+  </div>
+
+  <!-- Main File Stage -->
+  <main id="stage" class="stage">
+    <div id="items-container" class="file-list"></div>
+    <div id="empty-state" class="empty-state hidden">
+      <div class="empty-ico">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <div id="empty-text">This folder is empty</div>
+    </div>
+  </main>
+
+  <!-- Hidden Upload Input -->
+  <input id="file-input" type="file" multiple class="hidden" />
+
+  <!-- Top Overflow Menu -->
+  <div id="menu-backdrop" class="menu-backdrop hidden"></div>
+  <div id="top-menu" class="overflow-menu hidden">
+    <button type="button" class="menu-item" id="m-select-all">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><polyline points="8 12 11 15 16 9"/></svg>
+      <span>Select all</span>
+    </button>
+    <button type="button" class="menu-item" id="m-view">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      <span id="m-view-label">Grid view</span>
+    </button>
+    <button type="button" class="menu-item" id="m-sort">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+      <span>Sort by</span>
+      <span class="menu-sublabel" id="m-sort-label">Name ↑</span>
+    </button>
+    <button type="button" class="menu-item hidden" id="m-paste">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+      <span id="m-paste-label">Paste here</span>
+    </button>
+    <div class="menu-divider"></div>
+    <button type="button" class="menu-item" id="m-lock">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span id="m-lock-label">Unlock Delete</span>
+    </button>
+    <button type="button" class="menu-item" id="m-refresh">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      <span>Refresh</span>
+    </button>
+    <button type="button" class="menu-item hidden" id="m-obs">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      <span>Back to OBS Blade</span>
+    </button>
+    <button type="button" class="menu-item danger hidden" id="m-logout">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      <span>Log Out</span>
+    </button>
+  </div>
+
+  <!-- Selection Overflow Menu (Bottom) -->
+  <div id="sel-menu" class="overflow-menu bottom-anchor hidden">
+    <button type="button" class="menu-item" id="sm-open">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span>Open / Edit</span>
+    </button>
+    <button type="button" class="menu-item" id="sm-download">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Download</span>
+    </button>
+    <button type="button" class="menu-item" id="sm-copypath">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <span>Copy OBS Path</span>
+    </button>
+    <button type="button" class="menu-item" id="sm-props">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <span>Properties</span>
+    </button>
+  </div>
+
+  <!-- Bottom Selection Action Bar -->
+  <div id="bottom-bar" class="bottom-bar hidden">
+    <button type="button" id="ba-cut" class="bottom-action" title="Cut">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+    </button>
+    <button type="button" id="ba-copy" class="bottom-action" title="Copy">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    </button>
+    <button type="button" id="ba-delete" class="bottom-action danger" title="Delete">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+    </button>
+    <button type="button" id="ba-rename" class="bottom-action" title="Rename">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    </button>
+    <button type="button" id="ba-more" class="bottom-action" title="More">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+    </button>
+  </div>
+
+  <!-- Clipboard Paste Bar -->
+  <div id="paste-bar" class="paste-bar hidden">
+    <div id="paste-info" class="paste-info">Ready to paste</div>
+    <button type="button" id="btn-paste-cancel" class="paste-btn cancel">Clear</button>
+    <button type="button" id="btn-paste-go" class="paste-btn primary">Paste</button>
+  </div>
+
+  <!-- Upload Progress Toast -->
+  <div id="upload-toast" class="upload-toast hidden">
+    <div class="upload-top">
+      <span id="upload-name" class="upload-name">Uploading...</span>
+      <span id="upload-pct">0%</span>
+    </div>
+    <div class="upload-bar"><div id="upload-fill" class="upload-fill"></div></div>
+  </div>
+
+  <!-- Amber FAB + Speed Dial -->
+  <div id="fab-backdrop" class="fab-backdrop hidden"></div>
+  <div id="fab-stack" class="fab-stack">
+    <div id="fab-dial" class="fab-dial hidden">
+      <button type="button" class="dial-row" id="fab-mkdir">
+        <span class="dial-label">New folder</span>
+        <span class="mini-fab">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </span>
+      </button>
+      <button type="button" class="dial-row" id="fab-mkfile">
+        <span class="dial-label">New file</span>
+        <span class="mini-fab">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </span>
+      </button>
+      <button type="button" class="dial-row" id="fab-upload">
+        <span class="dial-label">Upload files</span>
+        <span class="mini-fab">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </span>
+      </button>
+    </div>
+    <button type="button" id="main-fab" class="main-fab" aria-label="Create or upload">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+
+  <!-- Left Navigation Drawer -->
+  <div id="drawer-scrim" class="drawer-scrim hidden"></div>
+  <aside id="drawer" class="drawer hidden">
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-head-title" id="drawer-host">Host Storage</div>
+        <div class="drawer-head-sub" id="drawer-plat">Connected</div>
+      </div>
+      <button type="button" id="drawer-close" class="icon-btn" aria-label="Close menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="drawer-sec">Storage</div>
+    <button type="button" class="drawer-item" id="nav-uploads">
+      <span class="drawer-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+      <span class="drawer-item-text">
+        <div class="drawer-item-title">Uploads Library</div>
+        <div class="drawer-item-sub" id="nav-uploads-sub">Default media folder</div>
+      </span>
+    </button>
+    <button type="button" class="drawer-item" id="nav-project">
+      <span class="drawer-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+      <span class="drawer-item-text">
+        <div class="drawer-item-title">Project Folder</div>
+        <div class="drawer-item-sub">App workspace directory</div>
+      </span>
+    </button>
+    <button type="button" class="drawer-item" id="nav-drives">
+      <span class="drawer-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
+      <span class="drawer-item-text">
+        <div class="drawer-item-title" id="nav-drives-title">System Drives</div>
+        <div class="drawer-item-sub" id="nav-drives-sub">Host filesystem root</div>
+      </span>
+    </button>
+    <button type="button" class="drawer-item" id="nav-jump">
+      <span class="drawer-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
+      <span class="drawer-item-text">
+        <div class="drawer-item-title">Go to Path...</div>
+        <div class="drawer-item-sub">Open custom folder path</div>
+      </span>
+    </button>
+
+    <div class="drawer-sec">Session & Safety</div>
+    <button type="button" class="drawer-item" id="nav-lock">
+      <span class="drawer-ico warn" id="nav-lock-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      <span class="drawer-item-text">
+        <div class="drawer-item-title" id="nav-lock-title">Delete Locked</div>
+        <div class="drawer-item-sub" id="nav-lock-sub">Tap to unlock file deletion</div>
+      </span>
+    </button>
+    <button type="button" class="drawer-item hidden" id="nav-obs">
+      <span class="drawer-ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></span>
+      <span class="drawer-item-text">
+        <div class="drawer-item-title">Back to OBS Blade</div>
+        <div class="drawer-item-sub">Return to switcher dashboard</div>
+      </span>
+    </button>
+    <button type="button" class="drawer-item hidden" id="nav-logout">
+      <span class="drawer-ico danger"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+      <span class="drawer-item-text">
+        <div class="drawer-item-title">Log Out</div>
+        <div class="drawer-item-sub">Clear saved access password</div>
+      </span>
+    </button>
+  </aside>
+
+  <!-- Drag & Drop Overlay -->
+  <div id="drop-overlay" class="drop-overlay hidden">
+    <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#f5b800" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div style="font-size:16px;font-weight:600;">Drop files to upload here</div>
+  </div>
+
+  <!-- Prompt / Confirm Modal -->
+  <div id="dialog-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-title"><span id="dialog-title">Confirm</span></div>
+      <div id="dialog-msg" class="modal-msg hidden"></div>
+      <input id="dialog-input" class="modal-input hidden" type="text" autocomplete="off" />
+      <div class="modal-actions">
+        <button type="button" id="dialog-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="dialog-ok" class="btn primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Text / Code Editor Modal -->
+  <div id="editor-modal" class="modal-backdrop hidden">
+    <div class="modal-card wide">
+      <div class="modal-title">
+        <span id="editor-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Edit File</span>
+        <button type="button" id="editor-close" class="icon-btn muted" aria-label="Close editor">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <textarea id="editor-area" class="editor-area" spellcheck="false"></textarea>
+      <div class="modal-actions">
+        <button type="button" id="editor-cancel" class="btn ghost">Close</button>
+        <button type="button" id="editor-save" class="btn amber">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Media Preview Modal -->
+  <div id="preview-modal" class="modal-backdrop hidden">
+    <div class="modal-card wide">
+      <div class="modal-title">
+        <span id="preview-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Preview</span>
+        <button type="button" id="preview-close" class="icon-btn muted" aria-label="Close preview">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="preview-body" class="preview-body"></div>
+      <div class="modal-actions">
+        <button type="button" id="preview-copy-path" class="btn ghost">Copy Path</button>
+        <button type="button" id="preview-download" class="btn primary">Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Properties Modal -->
+  <div id="props-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-title">
+        <span>Properties</span>
+        <button type="button" id="props-close" class="icon-btn muted" aria-label="Close properties">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="props-grid" class="prop-grid"></div>
+      <div class="modal-actions">
+        <button type="button" id="props-copy" class="btn ghost">Copy Path</button>
+        <button type="button" id="props-ok" class="btn primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Startup Login Overlay -->
+  <div id="login-overlay" class="login-overlay hidden">
+    <form id="login-form" class="login-card">
+      <div class="login-ico">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <div>
+        <div class="login-title">Sign In</div>
+        <div class="login-sub">Enter file server password to continue</div>
+      </div>
+      <div class="pass-box">
+        <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password" />
+        <button type="button" id="login-eye" class="icon-btn muted" style="width:36px;height:36px;" aria-label="Show password">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div id="login-err" class="login-err hidden"></div>
+      <button type="submit" id="login-submit" class="btn primary" style="width:100%;padding:12px;">Unlock</button>
     </form>
   </div>
 
-  <!-- 2. Main FileBrowser Application Shell -->
-  <div class="fb-shell">
-    <!-- Top Header Bar -->
-    <header class="fb-topbar">
-      <div class="fb-brand">
-        <div class="fb-brand-icon">📁</div>
-        <div>
-          <div class="fb-brand-name">FileBrowser</div>
-          <div class="fb-brand-sub" id="server-subtitle">OBS Host File Manager</div>
-        </div>
-      </div>
+  <!-- Snackbar Toast -->
+  <div id="toast" class="toast hidden"></div>
+</div>
 
-      <div class="fb-search-wrap">
-        <span class="fb-search-icon">🔍</span>
-        <input type="text" id="input-search" class="fb-search-input" placeholder="Filter files &amp; folders in current directory...">
-      </div>
+<script>
+(function () {
+  var PW_KEY = 'obs_file_browser_pw';
+  var VIEW_KEY = 'obs_fb_view_mode';
+  var SORT_KEY = 'obs_fb_sort_mode';
 
-      <div class="fb-toolbar-actions">
-        <button type="button" class="btn btn-primary" id="btn-top-upload" title="Upload files to current folder">📤 Upload</button>
-        <input type="file" id="file-input" style="display: none;" multiple>
-        <button type="button" class="btn" id="btn-new-folder" title="Create new folder">📁+ New Folder</button>
-        <button type="button" class="btn" id="btn-new-file" title="Create new text file">📄+ New File</button>
-        <button type="button" class="btn" id="btn-view-toggle" title="Switch between List and Grid view">🔲 Grid</button>
-        <button type="button" class="btn" id="btn-refresh" title="Refresh directory">🔄</button>
-        <a href="#" class="btn btn-primary" id="btn-dashboard-link" style="display: none;">← OBS Blade</a>
-      </div>
-    </header>
+  var IMG_EXTS = { '.png':1, '.jpg':1, '.jpeg':1, '.gif':1, '.webp':1, '.svg':1, '.bmp':1, '.ico':1 };
+  var VID_EXTS = { '.mp4':1, '.mov':1, '.mkv':1, '.webm':1, '.m4v':1, '.avi':1 };
+  var AUD_EXTS = { '.mp3':1, '.wav':1, '.aac':1, '.flac':1, '.ogg':1, '.m4a':1 };
+  var TXT_EXTS = { '.txt':1, '.log':1, '.json':1, '.srt':1, '.vtt':1, '.md':1, '.js':1, '.ts':1, '.css':1, '.html':1, '.xml':1, '.yml':1, '.yaml':1, '.ini':1, '.conf':1, '.env':1, '.sh':1, '.bat':1, '.csv':1 };
 
-    <!-- Upload Progress Bar -->
-    <div class="upload-progress-box" id="upload-progress-box">
-      <div class="upload-progress-head">
-        <span id="upload-progress-label">Uploading...</span>
-        <button type="button" class="btn btn-danger" id="btn-cancel-upload">Cancel</button>
-      </div>
-      <div class="progress-track">
-        <div class="progress-fill" id="upload-progress-fill"></div>
-      </div>
-    </div>
-
-    <!-- Workspace: Left Sidebar + Main File Explorer -->
-    <div class="fb-workspace">
-      <aside class="fb-sidebar">
-        <div class="fb-side-group">
-          <div class="fb-side-label">Locations</div>
-          <button type="button" class="fb-nav-item active" id="btn-nav-uploads">📂 Uploads Library</button>
-          <button type="button" class="fb-nav-item" id="btn-nav-project">📦 Project Folder</button>
-          <button type="button" class="fb-nav-item" id="btn-nav-drives">💾 System Drives</button>
-        </div>
-
-        <div class="fb-side-group">
-          <div class="fb-side-label">Security &amp; Session</div>
-          <button type="button" class="fb-nav-item" id="btn-delete-lock" title="Unlock to allow deleting files/folders">🔒 Delete Locked</button>
-          <button type="button" class="fb-nav-item" id="btn-logout" style="display: none; color: #ffa198;">🚪 Log Out</button>
-        </div>
-      </aside>
-
-      <section class="fb-main">
-        <!-- Sub-bar: Interactive Breadcrumbs + Contextual Selection Toolbar -->
-        <div class="fb-subbar">
-          <div class="fb-breadcrumbs" id="breadcrumb-bar">
-            <button type="button" class="fb-crumb" id="btn-nav-up" title="Up one level">⬆ Up</button>
-            <span class="fb-crumb-sep">/</span>
-            <span id="breadcrumb-segments">Loading...</span>
-          </div>
-
-          <div class="fb-context-actions" id="context-toolbar">
-            <button type="button" class="btn" id="btn-act-paste" style="display: none;" title="Paste clipboard items here">📋 Paste Here</button>
-            <button type="button" class="btn" id="btn-act-copy-path" disabled title="Copy absolute disk path for OBS">🔗 Copy Path</button>
-            <button type="button" class="btn" id="btn-act-open-edit" disabled title="Preview or edit selected file">👁️ Open / Edit</button>
-            <button type="button" class="btn" id="btn-act-rename" disabled title="Rename selected item">✏️ Rename</button>
-            <button type="button" class="btn" id="btn-act-copy" disabled title="Copy to clipboard">📄 Copy</button>
-            <button type="button" class="btn" id="btn-act-cut" disabled title="Cut / Move to clipboard">✂️ Cut</button>
-            <button type="button" class="btn" id="btn-act-download" disabled title="Download file">⬇️ Download</button>
-            <button type="button" class="btn btn-danger" id="btn-act-delete" disabled title="Delete selected item(s)">🗑️ Delete</button>
-          </div>
-        </div>
-
-        <!-- Main File Stage -->
-        <div class="fb-stage" id="fb-stage">
-          <div class="fb-list-header" id="list-header">
-            <div class="fb-sort-col" data-sort="name">Name <span id="sort-ind-name">▲</span></div>
-            <div class="fb-sort-col" data-sort="size">Size <span id="sort-ind-size"></span></div>
-            <div class="fb-sort-col fb-hide-mobile" data-sort="mtime">Modified <span id="sort-ind-mtime"></span></div>
-            <div style="text-align: right;">Quick Actions</div>
-          </div>
-          <div id="entries-list" class="fb-entries-list">
-            <div style="padding: 36px; text-align: center; color: var(--text-muted); font-size: 13.5px;">
-              Loading directory...
-            </div>
-          </div>
-        </div>
-
-        <!-- Bottom Status Bar -->
-        <footer class="fb-statusbar">
-          <span id="status-counts">0 items</span>
-          <span id="upload-hint-text">Drag &amp; drop files anywhere to upload to the active folder</span>
-        </footer>
-      </section>
-    </div>
-  </div>
-
-  <!-- 3. Prompt Modal (New Folder / New File / Rename) -->
-  <div class="modal-overlay" id="modal-prompt">
-    <div class="modal-card">
-      <div class="modal-head">
-        <span class="modal-title" id="prompt-title">Input</span>
-      </div>
-      <form id="form-prompt">
-        <div class="modal-body">
-          <div id="prompt-label" style="font-size: 13px; color: var(--text-muted);">Enter name:</div>
-          <input type="text" id="input-prompt-value" class="input-field" required>
-        </div>
-        <div class="modal-foot">
-          <button type="button" class="btn" id="btn-prompt-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="btn-prompt-ok">Save</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- 4. Confirm Modal (Large Uploads & Delete Safety) -->
-  <div class="modal-overlay" id="modal-confirm">
-    <div class="modal-card">
-      <div class="modal-head">
-        <span class="modal-title" id="confirm-title">Confirm Action</span>
-      </div>
-      <div class="modal-body" id="confirm-message"></div>
-      <div class="modal-foot">
-        <button type="button" class="btn" id="btn-confirm-cancel">Cancel</button>
-        <button type="button" class="btn btn-primary" id="btn-confirm-ok">Continue</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 5. In-Browser Text / Code Editor Modal -->
-  <div class="modal-overlay" id="modal-editor">
-    <div class="modal-card modal-wide">
-      <div class="modal-head">
-        <span class="modal-title" id="editor-title">Edit File</span>
-        <div style="display: flex; gap: 8px;">
-          <button type="button" class="btn" id="btn-editor-close">Cancel</button>
-          <button type="button" class="btn btn-primary" id="btn-editor-save">💾 Save Changes</button>
-        </div>
-      </div>
-      <div class="modal-body">
-        <textarea id="editor-textarea" class="editor-textarea" spellcheck="false"></textarea>
-        <div id="editor-meta" style="margin-top: 8px; font-size: 12px; color: var(--text-muted); font-family: monospace;"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 6. Media Lightbox Preview Modal -->
-  <div class="modal-overlay" id="modal-preview">
-    <div class="modal-card modal-wide">
-      <div class="modal-head">
-        <span class="modal-title" id="preview-title">Media Preview</span>
-        <div style="display: flex; gap: 8px;">
-          <button type="button" class="btn" id="btn-preview-download">⬇️ Download</button>
-          <button type="button" class="btn" id="btn-close-preview">Close</button>
-        </div>
-      </div>
-      <div class="modal-body">
-        <div class="preview-stage" id="preview-stage"></div>
-        <div id="preview-meta" style="margin-top: 10px; font-size: 12px; color: var(--text-muted); font-family: monospace; word-break: break-all;"></div>
-      </div>
-    </div>
-  </div>
-
-  <div id="toast"></div>
-  <script>
-    const LARGE_FILE_WARN_BYTES = 100 * 1024 * 1024;
-    const STORAGE_PW_KEY = 'obs_file_browser_pw';
-    const STORAGE_VIEW_KEY = 'obs_file_browser_view';
-
-    const PREVIEW_EXTS = {
-      image: new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico']),
-      video: new Set(['.mp4', '.mov', '.mkv', '.webm', '.m4v', '.avi']),
-      audio: new Set(['.mp3', '.wav', '.aac', '.flac', '.ogg', '.m4a']),
-      text: new Set([
-        '.txt', '.log', '.json', '.srt', '.vtt', '.md', '.csv', '.xml', '.yml', '.yaml',
-        '.ini', '.conf', '.cfg', '.js', '.ts', '.css', '.html', '.htm', '.bat', '.vbs', '.sh', '.py'
-      ]),
-    };
-
-    let currentDir = '__UPLOADS__';
-    let parentDir = null;
-    let uploadsDirPath = '';
-    let allEntries = [];
-    let selectedPaths = new Set();
-    let clipboardState = { mode: null, paths: [] }; // mode: 'copy' | 'cut'
-    let viewMode = 'list'; // 'list' | 'grid'
-    let sortField = 'name'; // 'name' | 'size' | 'mtime'
-    let sortAsc = true;
-    let searchQuery = '';
-    let maxUploadBytes = 2048 * 1024 * 1024;
-    let maxUploadMb = 2048;
-    let deleteUnlocked = false;
-    let authRequired = false;
-    let browseAbortController = null;
-    let activeUploadXhr = null;
-    let activeUploadCancelled = false;
-    let activeEditingPath = '';
-    let activePreviewItem = null;
-    let serverPassword = '';
-
-    try {
-      serverPassword = localStorage.getItem(STORAGE_PW_KEY) || '';
-      viewMode = localStorage.getItem(STORAGE_VIEW_KEY) === 'grid' ? 'grid' : 'list';
-    } catch (_) {}
-
-    const el = {
-      loginScreen: document.getElementById('login-screen'),
-      formLogin: document.getElementById('form-login'),
-      loginSubtitle: document.getElementById('login-subtitle'),
-      loginError: document.getElementById('login-error'),
-      inputLoginPassword: document.getElementById('input-login-password'),
-
-      serverSubtitle: document.getElementById('server-subtitle'),
-      uploadHintText: document.getElementById('upload-hint-text'),
-      inputSearch: document.getElementById('input-search'),
-      btnTopUpload: document.getElementById('btn-top-upload'),
-      fileInput: document.getElementById('file-input'),
-      btnNewFolder: document.getElementById('btn-new-folder'),
-      btnNewFile: document.getElementById('btn-new-file'),
-      btnViewToggle: document.getElementById('btn-view-toggle'),
-      btnRefresh: document.getElementById('btn-refresh'),
-      btnDashboardLink: document.getElementById('btn-dashboard-link'),
-
-      btnNavUploads: document.getElementById('btn-nav-uploads'),
-      btnNavProject: document.getElementById('btn-nav-project'),
-      btnNavDrives: document.getElementById('btn-nav-drives'),
-      btnDeleteLock: document.getElementById('btn-delete-lock'),
-      btnLogout: document.getElementById('btn-logout'),
-
-      btnNavUp: document.getElementById('btn-nav-up'),
-      breadcrumbSegments: document.getElementById('breadcrumb-segments'),
-
-      btnActPaste: document.getElementById('btn-act-paste'),
-      btnActCopyPath: document.getElementById('btn-act-copy-path'),
-      btnActOpenEdit: document.getElementById('btn-act-open-edit'),
-      btnActRename: document.getElementById('btn-act-rename'),
-      btnActCopy: document.getElementById('btn-act-copy'),
-      btnActCut: document.getElementById('btn-act-cut'),
-      btnActDownload: document.getElementById('btn-act-download'),
-      btnActDelete: document.getElementById('btn-act-delete'),
-
-      fbStage: document.getElementById('fb-stage'),
-      listHeader: document.getElementById('list-header'),
-      entriesList: document.getElementById('entries-list'),
-      statusCounts: document.getElementById('status-counts'),
-      sortIndName: document.getElementById('sort-ind-name'),
-      sortIndSize: document.getElementById('sort-ind-size'),
-      sortIndMtime: document.getElementById('sort-ind-mtime'),
-
-      uploadProgressBox: document.getElementById('upload-progress-box'),
-      uploadProgressLabel: document.getElementById('upload-progress-label'),
-      uploadProgressFill: document.getElementById('upload-progress-fill'),
-      btnCancelUpload: document.getElementById('btn-cancel-upload'),
-
-      modalPrompt: document.getElementById('modal-prompt'),
-      formPrompt: document.getElementById('form-prompt'),
-      promptTitle: document.getElementById('prompt-title'),
-      promptLabel: document.getElementById('prompt-label'),
-      inputPromptValue: document.getElementById('input-prompt-value'),
-      btnPromptCancel: document.getElementById('btn-prompt-cancel'),
-      btnPromptOk: document.getElementById('btn-prompt-ok'),
-
-      modalConfirm: document.getElementById('modal-confirm'),
-      confirmTitle: document.getElementById('confirm-title'),
-      confirmMessage: document.getElementById('confirm-message'),
-      btnConfirmCancel: document.getElementById('btn-confirm-cancel'),
-      btnConfirmOk: document.getElementById('btn-confirm-ok'),
-
-      modalEditor: document.getElementById('modal-editor'),
-      editorTitle: document.getElementById('editor-title'),
-      editorTextarea: document.getElementById('editor-textarea'),
-      editorMeta: document.getElementById('editor-meta'),
-      btnEditorClose: document.getElementById('btn-editor-close'),
-      btnEditorSave: document.getElementById('btn-editor-save'),
-
-      modalPreview: document.getElementById('modal-preview'),
-      previewTitle: document.getElementById('preview-title'),
-      previewStage: document.getElementById('preview-stage'),
-      previewMeta: document.getElementById('preview-meta'),
-      btnPreviewDownload: document.getElementById('btn-preview-download'),
-      btnClosePreview: document.getElementById('btn-close-preview'),
-
-      toast: document.getElementById('toast'),
-    };
-
-    (function setupDashboardLink() {
+  var state = {
+    password: (function () { try { return localStorage.getItem(PW_KEY) || ''; } catch (_) { return ''; } })(),
+    authRequired: false,
+    platform: 'linux',
+    uploadsDir: '',
+    currentDir: '__UPLOADS__',
+    parentDir: null,
+    entries: [],
+    selected: {},
+    clipboard: null, // { mode: 'copy'|'cut', items: [...] }
+    deleteUnlocked: false,
+    allowSystemDelete: false,
+    viewMode: (function () { try { return localStorage.getItem(VIEW_KEY) || 'list'; } catch (_) { return 'list'; } })(),
+    sortBy: (function () { try { return localStorage.getItem(SORT_KEY) || 'name'; } catch (_) { return 'name'; } })(),
+    sortAsc: true,
+    searchQuery: '',
+    searchOpen: false,
+    fabOpen: false,
+    editingPath: '',
+    previewItem: null,
+    propsItem: null,
+    dashboardUrl: (function () {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const dashUrl = params.get('dashboard');
-        if (dashUrl) {
-          const parsed = new URL(dashUrl);
-          if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-            el.btnDashboardLink.href = parsed.href;
-            el.btnDashboardLink.style.display = 'inline-flex';
-          }
-        }
-      } catch (_) {}
-    })();
+        var u = new URLSearchParams(window.location.search).get('dashboard');
+        return u || '';
+      } catch (_) { return ''; }
+    })(),
+  };
 
-    let toastTimer = null;
-    function showToast(msg, type = 'info') {
-      el.toast.textContent = msg;
-      el.toast.className = type;
-      el.toast.style.display = 'block';
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => {
-        el.toast.style.display = 'none';
-      }, 3600);
-    }
+  var $ = function (id) { return document.getElementById(id); };
+  var shell = $('fb-shell');
+  var topbar = $('topbar');
+  var btnMenu = $('btn-menu');
+  var btnSelClose = $('btn-sel-close');
+  var titleWrap = $('title-wrap');
+  var folderTitle = $('folder-title');
+  var folderSub = $('folder-sub');
+  var searchWrap = $('search-wrap');
+  var searchInput = $('search-input');
+  var btnSearch = $('btn-search');
+  var btnSearchClose = $('btn-search-close');
+  var normalActions = $('normal-actions');
+  var selActions = $('sel-actions');
+  var btnMore = $('btn-more');
+  var btnSelAll = $('btn-sel-all');
+  var btnSelInvert = $('btn-sel-invert');
+  var crumbBar = $('crumb-bar');
+  var unlockStrip = $('unlock-strip');
+  var btnRelock = $('btn-relock');
+  var stage = $('stage');
+  var itemsContainer = $('items-container');
+  var emptyState = $('empty-state');
+  var emptyText = $('empty-text');
+  var fileInput = $('file-input');
 
-    function getAuthHeaders(extra = {}) {
-      const headers = { ...extra };
-      if (serverPassword) {
-        headers['Authorization'] = `Bearer ${serverPassword}`;
+  var menuBackdrop = $('menu-backdrop');
+  var topMenu = $('top-menu');
+  var selMenu = $('sel-menu');
+  var bottomBar = $('bottom-bar');
+  var pasteBar = $('paste-bar');
+  var pasteInfo = $('paste-info');
+  var fabBackdrop = $('fab-backdrop');
+  var fabStack = $('fab-stack');
+  var fabDial = $('fab-dial');
+  var mainFab = $('main-fab');
+
+  var drawerScrim = $('drawer-scrim');
+  var drawer = $('drawer');
+  var loginOverlay = $('login-overlay');
+  var loginForm = $('login-form');
+  var loginPass = $('login-pass');
+  var loginErr = $('login-err');
+  var toastEl = $('toast');
+  var toastTimer = null;
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.add('hidden'); }, 2400);
+  }
+
+  function authHeaders(extra) {
+    var h = extra ? Object.assign({}, extra) : {};
+    if (state.password) h['Authorization'] = 'Bearer ' + state.password;
+    if (state.deleteUnlocked) h['X-Delete-Unlocked'] = 'true';
+    return h;
+  }
+
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    opts.headers = authHeaders(opts.headers);
+    return fetch(url, opts).then(function (res) {
+      if (res.status === 401) {
+        showLogin('Session expired or invalid password');
+        throw new Error('Unauthorized');
       }
-      return headers;
+      return res;
+    });
+  }
+
+  function formatSize(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = Math.floor(Math.log(bytes) / Math.log(1024));
+    i = Math.min(i, units.length - 1);
+    var val = bytes / Math.pow(1024, i);
+    return (i === 0 ? val : val.toFixed(val >= 10 ? 1 : 2).replace(/\.0+$/, '')) + ' ' + units[i];
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var day = String(d.getDate()).padStart(2, '0');
+    var mon = months[d.getMonth()];
+    var yr = d.getFullYear();
+    var hr = d.getHours();
+    var ap = hr >= 12 ? 'pm' : 'am';
+    hr = hr % 12 || 12;
+    var min = String(d.getMinutes()).padStart(2, '0');
+    return day + ' ' + mon + ' ' + yr + ', ' + hr + ':' + min + ' ' + ap;
+  }
+
+  function iconSvg(item) {
+    if (item.isDrive) {
+      return '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>';
+    }
+    if (item.isDirectory) {
+      return '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+    }
+    var ext = (item.ext || '').toLowerCase();
+    if (VID_EXTS[ext]) {
+      return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    }
+    if (AUD_EXTS[ext]) {
+      return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+    }
+    if (TXT_EXTS[ext]) {
+      return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>';
+    }
+    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+  }
+
+  function badgeClass(item) {
+    if (item.isDirectory) return 'item-badge';
+    var ext = (item.ext || '').toLowerCase();
+    if (IMG_EXTS[ext]) return 'item-badge thumb';
+    if (VID_EXTS[ext]) return 'item-badge file-video';
+    if (AUD_EXTS[ext]) return 'item-badge file-audio';
+    if (TXT_EXTS[ext]) return 'item-badge file-code';
+    return 'item-badge file-other';
+  }
+
+  function previewUrl(p) {
+    var q = '/api/fs/preview?path=' + encodeURIComponent(p);
+    if (state.password) q += '&password=' + encodeURIComponent(state.password);
+    return q;
+  }
+
+  function downloadUrl(p) {
+    var q = '/api/fs/download?path=' + encodeURIComponent(p);
+    if (state.password) q += '&password=' + encodeURIComponent(state.password);
+    return q;
+  }
+
+  function selectedItems() {
+    return state.entries.filter(function (e) { return Boolean(state.selected[e.path]); });
+  }
+
+  function filteredSortedEntries() {
+    var q = state.searchQuery.trim().toLowerCase();
+    var list = state.entries.filter(function (e) {
+      return !q || e.name.toLowerCase().indexOf(q) !== -1;
+    });
+    var dir = state.sortAsc ? 1 : -1;
+    list.sort(function (a, b) {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      if (state.sortBy === 'size') {
+        return ((a.size || 0) - (b.size || 0)) * dir;
+      }
+      if (state.sortBy === 'date') {
+        var ta = a.mtime ? new Date(a.mtime).getTime() : 0;
+        var tb = b.mtime ? new Date(b.mtime).getTime() : 0;
+        return (ta - tb) * dir;
+      }
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) * dir;
+    });
+    return list;
+  }
+
+  function folderDisplayName() {
+    if (state.currentDir === '__DRIVES__') return 'System Drives';
+    if (!state.currentDir || state.currentDir === state.uploadsDir) return 'Uploads';
+    if (state.currentDir === '/') return '/';
+    var trimmed = state.currentDir.replace(/[\\/]+$/, '');
+    if (/^[A-Za-z]:$/.test(trimmed)) return trimmed + '\\';
+    var parts = trimmed.split(/[\\/]/);
+    return parts[parts.length - 1] || state.currentDir;
+  }
+
+  function renderHeader() {
+    var sel = selectedItems();
+    var isSel = sel.length > 0;
+    shell.classList.toggle('is-selecting', isSel);
+    topbar.classList.toggle('sel-mode', isSel);
+    btnMenu.classList.toggle('hidden', isSel);
+    btnSelClose.classList.toggle('hidden', !isSel);
+    normalActions.classList.toggle('hidden', isSel || state.searchOpen);
+    selActions.classList.toggle('hidden', !isSel);
+    bottomBar.classList.toggle('hidden', !isSel);
+    fabStack.classList.toggle('hidden', isSel);
+
+    if (isSel) {
+      titleWrap.classList.remove('hidden');
+      searchWrap.classList.add('hidden');
+      folderTitle.textContent = sel.length === 1 ? '1 item selected' : sel.length + ' items selected';
+      folderSub.textContent = sel.length === 1 ? sel[0].name : 'Tap actions below';
+      $('ba-rename').disabled = sel.length !== 1;
+      $('sm-open').disabled = sel.length !== 1;
+      $('sm-download').disabled = sel.length !== 1 || sel[0].isDirectory;
+      $('sm-copypath').disabled = sel.length !== 1;
+      $('sm-props').disabled = sel.length !== 1;
+    } else {
+      titleWrap.classList.toggle('hidden', state.searchOpen);
+      searchWrap.classList.toggle('hidden', !state.searchOpen);
+      folderTitle.textContent = folderDisplayName();
+      var folders = 0, files = 0;
+      for (var i = 0; i < state.entries.length; i++) {
+        if (state.entries[i].isDirectory) folders++; else files++;
+      }
+      folderSub.textContent = folders + (folders === 1 ? ' folder, ' : ' folders, ') + files + (files === 1 ? ' file' : ' files');
     }
 
-    function showPromptDialog({ title, label, initialValue = '', okText = 'Save' }) {
-      return new Promise((resolve) => {
-        el.promptTitle.textContent = title;
-        el.promptLabel.textContent = label;
-        el.inputPromptValue.value = initialValue;
-        el.btnPromptOk.textContent = okText;
-        el.modalPrompt.classList.add('open');
-        setTimeout(() => {
-          el.inputPromptValue.focus();
-          el.inputPromptValue.select();
-        }, 40);
-
-        const cleanup = (val) => {
-          el.modalPrompt.classList.remove('open');
-          el.formPrompt.removeEventListener('submit', onSubmit);
-          el.btnPromptCancel.removeEventListener('click', onCancel);
-          resolve(val);
-        };
-        const onSubmit = (e) => {
-          e.preventDefault();
-          cleanup(el.inputPromptValue.value.trim());
-        };
-        const onCancel = () => cleanup(null);
-
-        el.formPrompt.addEventListener('submit', onSubmit);
-        el.btnPromptCancel.addEventListener('click', onCancel);
-      });
+    // Paste bar (shown only when clipboard active and not selecting)
+    var showPaste = Boolean(state.clipboard && state.clipboard.items.length && !isSel && state.currentDir !== '__DRIVES__');
+    pasteBar.classList.toggle('hidden', !showPaste);
+    if (showPaste) {
+      var n = state.clipboard.items.length;
+      pasteInfo.textContent = (state.clipboard.mode === 'cut' ? 'Move ' : 'Copy ') + n + (n === 1 ? ' item' : ' items');
     }
 
-    function showConfirmDialog({ title, messageHtml, confirmText = 'Continue', danger = false }) {
-      return new Promise((resolve) => {
-        el.confirmTitle.textContent = title;
-        el.confirmMessage.innerHTML = messageHtml;
-        el.btnConfirmOk.textContent = confirmText;
-        el.btnConfirmOk.className = danger ? 'btn btn-danger' : 'btn btn-primary';
-        el.modalConfirm.classList.add('open');
+    // Delete lock UI
+    unlockStrip.classList.toggle('hidden', !state.deleteUnlocked);
+    $('m-lock-label').textContent = state.deleteUnlocked ? 'Lock Delete' : 'Unlock Delete';
+    $('nav-lock-title').textContent = state.deleteUnlocked ? 'Delete Unlocked' : 'Delete Locked';
+    $('nav-lock-sub').textContent = state.deleteUnlocked ? 'Tap to re-enable safety lock' : 'Tap to unlock file deletion';
+    $('nav-lock-ico').style.background = state.deleteUnlocked ? '#dc2626' : '#b45309';
 
-        const cleanup = (result) => {
-          el.modalConfirm.classList.remove('open');
-          el.btnConfirmOk.removeEventListener('click', onOk);
-          el.btnConfirmCancel.removeEventListener('click', onCancel);
-          resolve(result);
-        };
-        const onOk = () => cleanup(true);
-        const onCancel = () => cleanup(false);
+    // Sort / view / menu labels
+    $('m-view-label').textContent = state.viewMode === 'grid' ? 'List view' : 'Grid view';
+    var sortNames = { name: 'Name', size: 'Size', date: 'Date' };
+    $('m-sort-label').textContent = (sortNames[state.sortBy] || 'Name') + (state.sortAsc ? ' ↑' : ' ↓');
+    $('m-paste').classList.toggle('hidden', !state.clipboard || state.currentDir === '__DRIVES__');
+    if (state.clipboard) {
+      $('m-paste-label').textContent = (state.clipboard.mode === 'cut' ? 'Move ' : 'Paste ') + state.clipboard.items.length + ' item(s)';
+    }
+    $('m-obs').classList.toggle('hidden', !state.dashboardUrl);
+    $('nav-obs').classList.toggle('hidden', !state.dashboardUrl);
+    $('m-logout').classList.toggle('hidden', !state.authRequired);
+    $('nav-logout').classList.toggle('hidden', !state.authRequired);
+  }
 
-        el.btnConfirmOk.addEventListener('click', onOk);
-        el.btnConfirmCancel.addEventListener('click', onCancel);
-      });
+  function renderBreadcrumbs() {
+    crumbBar.innerHTML = '';
+    if (state.currentDir === '__DRIVES__') {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'crumb-btn active';
+      b.textContent = 'SYSTEM DRIVES';
+      crumbBar.appendChild(b);
+      return;
     }
 
-    function showLoginScreen(errorMsg = '') {
-      el.loginError.textContent = errorMsg;
-      el.loginError.style.display = errorMsg ? 'block' : 'none';
-      el.inputLoginPassword.value = '';
-      el.loginScreen.classList.add('active');
-      setTimeout(() => el.inputLoginPassword.focus(), 50);
-    }
+    var dir = state.currentDir || '';
+    var segs = [];
 
-    function hideLoginScreen() {
-      el.loginScreen.classList.remove('active');
-    }
-
-    el.formLogin.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const candidate = el.inputLoginPassword.value;
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${candidate}`,
-          },
-          body: JSON.stringify({ password: candidate }),
+    if (state.uploadsDir && (dir === state.uploadsDir || dir.indexOf(state.uploadsDir + '/') === 0 || dir.indexOf(state.uploadsDir + '\\') === 0)) {
+      segs.push({ label: 'UPLOADS', path: state.uploadsDir });
+      var rel = dir.slice(state.uploadsDir.length).replace(/^[\\/]+/, '');
+      if (rel) {
+        var acc = state.uploadsDir;
+        var sep = dir.indexOf('\\') !== -1 ? '\\' : '/';
+        rel.split(/[\\/]+/).forEach(function (part) {
+          if (!part) return;
+          acc = acc.replace(/[\\/]+$/, '') + sep + part;
+          segs.push({ label: part, path: acc });
         });
-        if (!res.ok) {
-          showLoginScreen('Invalid password. Please try again.');
-          return;
-        }
-        serverPassword = candidate;
-        try {
-          localStorage.setItem(STORAGE_PW_KEY, serverPassword);
-        } catch (_) {}
-        hideLoginScreen();
-        el.btnLogout.style.display = 'flex';
-        loadDirectory(currentDir || '__UPLOADS__');
-      } catch (err) {
-        showLoginScreen(`Connection error: ${err.message}`);
       }
-    });
+    } else if (/^[A-Za-z]:/.test(dir)) {
+      var partsW = dir.replace(/[\\/]+$/, '').split('\\');
+      var accW = '';
+      segs.push({ label: 'DRIVES', path: '__DRIVES__' });
+      partsW.forEach(function (part, idx) {
+        accW = idx === 0 ? part + '\\' : accW.replace(/\\+$/, '') + '\\' + part;
+        segs.push({ label: part, path: accW });
+      });
+    } else {
+      segs.push({ label: 'ROOT', path: '/' });
+      var partsL = dir.split('/').filter(Boolean);
+      var accL = '';
+      partsL.forEach(function (part) {
+        accL += '/' + part;
+        segs.push({ label: part, path: accL });
+      });
+    }
 
-    el.btnLogout.addEventListener('click', () => {
-      serverPassword = '';
-      try {
-        localStorage.removeItem(STORAGE_PW_KEY);
-      } catch (_) {}
-      showLoginScreen();
+    segs.forEach(function (seg, idx) {
+      if (idx > 0) {
+        var sp = document.createElement('span');
+        sp.className = 'crumb-sep';
+        sp.textContent = '›';
+        crumbBar.appendChild(sp);
+      }
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'crumb-btn' + (idx === segs.length - 1 ? ' active' : '');
+      btn.textContent = seg.label;
+      btn.addEventListener('click', function () {
+        if (idx < segs.length - 1) browse(seg.path);
+      });
+      crumbBar.appendChild(btn);
     });
+    crumbBar.scrollLeft = crumbBar.scrollWidth;
+  }
 
-    function updateDeleteLockUi() {
-      if (deleteUnlocked) {
-        el.btnDeleteLock.textContent = '🔓 Delete Unlocked';
-        el.btnDeleteLock.className = 'fb-nav-item btn-lock-unlocked';
+  function renderEntries() {
+    var list = filteredSortedEntries();
+    itemsContainer.innerHTML = '';
+    itemsContainer.className = state.viewMode === 'grid' ? 'file-grid' : 'file-list';
+
+    if (!list.length) {
+      emptyState.classList.remove('hidden');
+      emptyText.textContent = state.searchQuery ? 'No matching items' : 'This folder is empty';
+      return;
+    }
+    emptyState.classList.add('hidden');
+
+    var cutMap = {};
+    if (state.clipboard && state.clipboard.mode === 'cut') {
+      state.clipboard.items.forEach(function (it) { cutMap[it.path] = true; });
+    }
+
+    var frag = document.createDocumentFragment();
+
+    list.forEach(function (item) {
+      var isSelected = Boolean(state.selected[item.path]);
+      var isCut = Boolean(cutMap[item.path]);
+      var ext = (item.ext || '').toLowerCase();
+      var isImg = !item.isDirectory && Boolean(IMG_EXTS[ext]);
+
+      var subLeft = item.isDrive
+        ? 'Drive'
+        : item.isDirectory
+          ? (item.itemCount === 0 ? 'Empty' : item.itemCount != null ? (item.itemCount + (item.itemCount === 1 ? ' item' : ' items')) : 'Folder')
+          : formatSize(item.size);
+      var dateText = formatDate(item.mtime);
+
+      var card = document.createElement('div');
+      if (state.viewMode === 'grid') {
+        card.className = 'grid-card' + (isSelected ? ' selected' : '') + (isCut ? ' cut-dim' : '');
+        card.innerHTML =
+          '<span class="grid-check">' + (isSelected ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</span>' +
+          '<div class="' + badgeClass(item) + '">' + (isImg ? '<img loading="lazy" alt="" src="' + previewUrl(item.path) + '" />' : iconSvg(item)) + '</div>' +
+          '<div class="grid-name"></div>' +
+          '<div class="grid-sub"></div>';
+        card.querySelector('.grid-name').textContent = item.name;
+        card.querySelector('.grid-sub').textContent = subLeft;
       } else {
-        el.btnDeleteLock.textContent = '🔒 Delete Locked';
-        el.btnDeleteLock.className = 'fb-nav-item';
+        card.className = 'file-row' + (isSelected ? ' selected' : '') + (isCut ? ' cut-dim' : '');
+        card.innerHTML =
+          '<span class="row-check">' + (isSelected ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><polyline points="20 6 9 17 4 12"/></svg>' : '') + '</span>' +
+          '<div class="' + badgeClass(item) + '">' + (isImg ? '<img loading="lazy" alt="" src="' + previewUrl(item.path) + '" />' : iconSvg(item)) + '</div>' +
+          '<div class="row-main">' +
+            '<div class="row-name"></div>' +
+            '<div class="row-meta"><span class="row-sub"></span><span class="row-date"></span></div>' +
+          '</div>';
+        card.querySelector('.row-name').textContent = item.name;
+        card.querySelector('.row-sub').textContent = subLeft;
+        card.querySelector('.row-date').textContent = dateText;
       }
-      updateContextToolbar();
-      renderEntries();
-    }
 
-    el.btnDeleteLock.addEventListener('click', async () => {
-      if (deleteUnlocked) {
-        deleteUnlocked = false;
-        updateDeleteLockUi();
-        showToast('Delete mode locked.', 'info');
-        return;
-      }
-      const ok = await showConfirmDialog({
-        title: '🔓 Unlock Delete Mode?',
-        messageHtml: `
-          <p>Deleting files or folders permanently removes them from disk and can affect active OBS scenes.</p>
-          <p style="margin-top: 8px; color: var(--text-muted);">Unlock delete operations for this session?</p>
-        `,
-        confirmText: 'Unlock Delete',
-        danger: true,
+      // Tap badge/checkbox to toggle selection directly without opening
+      var badgeEl = card.querySelector('.item-badge');
+      var checkEl = card.querySelector('.row-check, .grid-check');
+      var toggleFn = function (ev) {
+        ev.stopPropagation();
+        toggleSelect(item);
+      };
+      if (badgeEl) badgeEl.addEventListener('click', toggleFn);
+      if (checkEl) checkEl.addEventListener('click', toggleFn);
+
+      // Long press (touch / pointer) enters selection mode
+      var pressTimer = null;
+      var longPressed = false;
+      card.addEventListener('pointerdown', function (ev) {
+        if (ev.button !== 0) return;
+        longPressed = false;
+        pressTimer = setTimeout(function () {
+          longPressed = true;
+          if (!state.selected[item.path]) toggleSelect(item);
+        }, 420);
       });
-      if (ok) {
-        deleteUnlocked = true;
-        updateDeleteLockUi();
-        showToast('Delete mode unlocked.', 'info');
-      }
-    });
+      var cancelPress = function () { clearTimeout(pressTimer); };
+      card.addEventListener('pointerup', cancelPress);
+      card.addEventListener('pointercancel', cancelPress);
+      card.addEventListener('pointermove', cancelPress);
 
-    function updateViewToggleUi() {
-      el.btnViewToggle.textContent = viewMode === 'grid' ? '☰ List' : '🔲 Grid';
-      el.listHeader.style.display = viewMode === 'list' ? 'grid' : 'none';
-      el.entriesList.className = viewMode === 'grid' ? 'fb-entries-grid' : 'fb-entries-list';
-    }
+      // Right-click on desktop toggles selection
+      card.addEventListener('contextmenu', function (ev) {
+        ev.preventDefault();
+        toggleSelect(item);
+      });
 
-    el.btnViewToggle.addEventListener('click', () => {
-      viewMode = viewMode === 'list' ? 'grid' : 'list';
-      try {
-        localStorage.setItem(STORAGE_VIEW_KEY, viewMode);
-      } catch (_) {}
-      updateViewToggleUi();
-      renderEntries();
-    });
-
-    async function checkStatusAndInit() {
-      updateViewToggleUi();
-      try {
-        const res = await fetch('/api/status', { headers: getAuthHeaders() });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const status = await res.json();
-
-        if (status.maxUploadBytes) maxUploadBytes = status.maxUploadBytes;
-        if (status.maxUploadMb) maxUploadMb = status.maxUploadMb;
-        if (status.uploadsDir) uploadsDirPath = status.uploadsDir;
-
-        el.uploadHintText.textContent =
-          `Max ${maxUploadMb} MB per file • Drag & drop files anywhere to upload to the current folder`;
-        el.serverSubtitle.textContent =
-          `OBS Host File Manager (${status.platform || 'host'})`;
-
-        authRequired = Boolean(status.authRequired);
-        el.btnLogout.style.display = authRequired ? 'flex' : 'none';
-
-        if (authRequired && !status.authValid) {
-          showLoginScreen();
-          return;
-        }
-        hideLoginScreen();
-        loadDirectory('__UPLOADS__');
-      } catch (err) {
-        el.entriesList.innerHTML = `
-          <div style="padding: 36px; text-align: center; color: var(--danger); font-size: 13.5px;">
-            Failed to reach File Browser server: ${escapeHtml(err.message)}
-          </div>
-        `;
-      }
-    }
-
-    function updateSidebarActive(dirTarget) {
-      const isDrives = dirTarget === '__DRIVES__';
-      const isUploads =
-        dirTarget === '__UPLOADS__' ||
-        (uploadsDirPath && dirTarget && dirTarget.toLowerCase() === uploadsDirPath.toLowerCase());
-      el.btnNavUploads.classList.toggle('active', Boolean(isUploads));
-      el.btnNavDrives.classList.toggle('active', Boolean(isDrives));
-      el.btnNavProject.classList.toggle('active', !isUploads && !isDrives);
-    }
-
-    function renderBreadcrumbs(dirStr) {
-      el.breadcrumbSegments.innerHTML = '';
-      if (dirStr === '__DRIVES__') {
-        const span = document.createElement('span');
-        span.className = 'fb-crumb current';
-        span.textContent = 'System Drives';
-        el.breadcrumbSegments.appendChild(span);
-        return;
-      }
-
-      const isWin = /^[a-zA-Z]:\\/.test(dirStr);
-      const sep = isWin ? '\\' : '/';
-      const parts = dirStr.split(/[\\/]+/).filter(Boolean);
-
-      if (!isWin) {
-        const rootBtn = document.createElement('button');
-        rootBtn.type = 'button';
-        rootBtn.className = 'fb-crumb';
-        rootBtn.textContent = '/';
-        rootBtn.addEventListener('click', () => loadDirectory('/'));
-        el.breadcrumbSegments.appendChild(rootBtn);
-      }
-
-      let accum = '';
-      parts.forEach((part, idx) => {
-        if (idx === 0 && isWin) {
-          accum = part + '\\';
+      card.addEventListener('click', function () {
+        if (longPressed) { longPressed = false; return; }
+        var hasSel = selectedItems().length > 0;
+        if (hasSel) {
+          toggleSelect(item);
         } else {
-          accum = accum ? (accum.endsWith(sep) ? accum + part : accum + sep + part) : (isWin ? part : '/' + part);
+          openItem(item);
         }
-        const targetPath = accum;
-
-        if (idx > 0 || !isWin) {
-          const s = document.createElement('span');
-          s.className = 'fb-crumb-sep';
-          s.textContent = '›';
-          el.breadcrumbSegments.appendChild(s);
-        }
-
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = idx === parts.length - 1 ? 'fb-crumb current' : 'fb-crumb';
-        btn.textContent = part;
-        btn.addEventListener('click', () => loadDirectory(targetPath));
-        el.breadcrumbSegments.appendChild(btn);
       });
-    }
 
-    async function loadDirectory(dir) {
-      if (browseAbortController) {
-        browseAbortController.abort();
-      }
-      browseAbortController = new AbortController();
-
-      try {
-        const res = await fetch(`/api/fs/browse?dir=${encodeURIComponent(dir || '')}`, {
-          headers: getAuthHeaders(),
-          signal: browseAbortController.signal,
-        });
-
-        if (res.status === 401) {
-          showLoginScreen('Session expired or password required.');
-          return;
-        }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-
-        currentDir = data.currentDir;
-        parentDir = data.parentDir;
-        if (data.uploadsDir) uploadsDirPath = data.uploadsDir;
-        allEntries = Array.isArray(data.entries) ? data.entries : [];
-        selectedPaths.clear();
-
-        el.btnNavUp.disabled = !parentDir;
-        updateSidebarActive(currentDir);
-        renderBreadcrumbs(currentDir);
-        updateContextToolbar();
-        renderEntries();
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-        el.entriesList.innerHTML = `
-          <div style="padding: 36px; text-align: center; color: var(--danger); font-size: 13.5px;">
-            Failed to load directory: ${escapeHtml(err.message)}
-          </div>
-        `;
-      }
-    }
-
-    function getSelectedEntries() {
-      return allEntries.filter((e) => selectedPaths.has(e.path));
-    }
-
-    function updateContextToolbar() {
-      const selected = getSelectedEntries();
-      const count = selected.length;
-      const single = count === 1 ? selected[0] : null;
-      const inDrives = currentDir === '__DRIVES__';
-
-      el.btnTopUpload.disabled = inDrives;
-      el.btnNewFolder.disabled = inDrives;
-      el.btnNewFile.disabled = inDrives;
-
-      el.btnActPaste.style.display = clipboardState.paths.length > 0 && !inDrives ? 'inline-flex' : 'none';
-      if (clipboardState.paths.length > 0) {
-        el.btnActPaste.textContent = `📋 Paste (${clipboardState.paths.length})`;
-      }
-
-      el.btnActCopyPath.disabled = count !== 1;
-      el.btnActOpenEdit.disabled = !single;
-      el.btnActRename.disabled = !single || Boolean(single.isDrive);
-      el.btnActCopy.disabled = count === 0 || inDrives;
-      el.btnActCut.disabled = count === 0 || inDrives;
-      el.btnActDownload.disabled = !single || single.isDirectory;
-      el.btnActDelete.disabled =
-        !deleteUnlocked || count === 0 || selected.some((item) => !item.deletable);
-    }
-
-    function getPreviewType(ext) {
-      if (PREVIEW_EXTS.image.has(ext)) return 'image';
-      if (PREVIEW_EXTS.video.has(ext)) return 'video';
-      if (PREVIEW_EXTS.audio.has(ext)) return 'audio';
-      if (PREVIEW_EXTS.text.has(ext)) return 'text';
-      return null;
-    }
-
-    function getSortedFilteredEntries() {
-      const q = searchQuery.trim().toLowerCase();
-      const filtered = q
-        ? allEntries.filter((item) => item.name.toLowerCase().includes(q))
-        : allEntries.slice();
-
-      filtered.sort((a, b) => {
-        if (a.isDirectory && !b.isDirectory) return -1;
-        if (!a.isDirectory && b.isDirectory) return 1;
-        let cmp = 0;
-        if (sortField === 'size') {
-          cmp = (a.size || 0) - (b.size || 0);
-        } else if (sortField === 'mtime') {
-          cmp = new Date(a.mtime || 0).getTime() - new Date(b.mtime || 0).getTime();
-        } else {
-          cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-        }
-        return sortAsc ? cmp : -cmp;
-      });
-      return filtered;
-    }
-
-    function updateSortIndicators() {
-      const arrow = sortAsc ? '▲' : '▼';
-      el.sortIndName.textContent = sortField === 'name' ? arrow : '';
-      el.sortIndSize.textContent = sortField === 'size' ? arrow : '';
-      el.sortIndMtime.textContent = sortField === 'mtime' ? arrow : '';
-    }
-
-    document.querySelectorAll('.fb-sort-col').forEach((col) => {
-      col.addEventListener('click', () => {
-        const field = col.getAttribute('data-sort');
-        if (!field) return;
-        if (sortField === field) {
-          sortAsc = !sortAsc;
-        } else {
-          sortField = field;
-          sortAsc = true;
-        }
-        updateSortIndicators();
-        renderEntries();
-      });
+      frag.appendChild(card);
     });
 
-    el.inputSearch.addEventListener('input', () => {
-      searchQuery = el.inputSearch.value;
-      renderEntries();
-    });
+    itemsContainer.appendChild(frag);
+  }
 
-    function toggleSelectItem(item, multiKey) {
-      if (!multiKey) {
-        const alreadyOnly = selectedPaths.size === 1 && selectedPaths.has(item.path);
-        selectedPaths.clear();
-        if (!alreadyOnly) selectedPaths.add(item.path);
+  function renderAll() {
+    renderHeader();
+    renderBreadcrumbs();
+    renderEntries();
+  }
+
+  function toggleSelect(item) {
+    if (state.selected[item.path]) delete state.selected[item.path];
+    else state.selected[item.path] = true;
+    renderAll();
+  }
+
+  function clearSelection() {
+    state.selected = {};
+    renderAll();
+  }
+
+  function closeMenus() {
+    menuBackdrop.classList.add('hidden');
+    topMenu.classList.add('hidden');
+    selMenu.classList.add('hidden');
+  }
+
+  function setFabOpen(open) {
+    state.fabOpen = open;
+    fabBackdrop.classList.toggle('hidden', !open);
+    fabDial.classList.toggle('hidden', !open);
+    mainFab.classList.toggle('open', open);
+  }
+
+  function setDrawerOpen(open) {
+    drawerScrim.classList.toggle('hidden', !open);
+    drawer.classList.toggle('hidden', !open);
+  }
+
+  function browse(dir) {
+    var target = dir || state.currentDir || '__UPLOADS__';
+    state.selected = {};
+    closeMenus();
+    setDrawerOpen(false);
+    return apiFetch('/api/fs/browse?dir=' + encodeURIComponent(target))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        state.currentDir = data.currentDir;
+        state.parentDir = data.parentDir;
+        if (data.uploadsDir) {
+          state.uploadsDir = data.uploadsDir;
+          $('nav-uploads-sub').textContent = data.uploadsDir;
+        }
+        if (data.platform) {
+          state.platform = data.platform;
+          $('drawer-plat').textContent = 'Host (' + data.platform + ')';
+          $('nav-drives-title').textContent = data.platform === 'win32' ? 'System Drives' : 'Root /';
+        }
+        state.entries = Array.isArray(data.entries) ? data.entries : [];
+        renderAll();
+      })
+      .catch(function (err) {
+        if (err.message !== 'Unauthorized') showToast(err.message || 'Failed to load folder');
+      });
+  }
+
+  function openItem(item) {
+    if (item.isDirectory || item.isDrive) {
+      browse(item.path);
+      return;
+    }
+    var ext = (item.ext || '').toLowerCase();
+    if (IMG_EXTS[ext] || VID_EXTS[ext] || AUD_EXTS[ext]) {
+      openPreview(item);
+    } else if (TXT_EXTS[ext] || item.size <= 512 * 1024) {
+      openEditor(item);
+    } else {
+      window.open(downloadUrl(item.path), '_blank');
+    }
+  }
+
+  // Dialog helpers
+  function openDialog(opts) {
+    return new Promise(function (resolve) {
+      var modal = $('dialog-modal');
+      var titleEl = $('dialog-title');
+      var msgEl = $('dialog-msg');
+      var inp = $('dialog-input');
+      var okBtn = $('dialog-ok');
+      var cancelBtn = $('dialog-cancel');
+
+      titleEl.textContent = opts.title || 'Confirm';
+      if (opts.message) {
+        msgEl.textContent = opts.message;
+        msgEl.classList.remove('hidden');
       } else {
-        if (selectedPaths.has(item.path)) selectedPaths.delete(item.path);
-        else selectedPaths.add(item.path);
+        msgEl.classList.add('hidden');
       }
-      updateContextToolbar();
-      renderEntries();
-    }
-
-    function openItemPrimaryAction(item) {
-      if (item.isDirectory) {
-        loadDirectory(item.path);
-        return;
-      }
-      const pType = getPreviewType(item.ext);
-      if (pType === 'text') {
-        openTextEditor(item);
-      } else if (pType) {
-        openPreviewModal(item, pType);
+      if (opts.prompt) {
+        inp.value = opts.defaultValue || '';
+        inp.placeholder = opts.placeholder || '';
+        inp.classList.remove('hidden');
       } else {
-        copyToClipboard(item.path);
+        inp.classList.add('hidden');
       }
+      okBtn.textContent = opts.okText || 'OK';
+      okBtn.className = 'btn ' + (opts.danger ? 'danger' : 'primary');
+      modal.classList.remove('hidden');
+
+      if (opts.prompt) {
+        setTimeout(function () { inp.focus(); inp.select(); }, 30);
+      }
+
+      function cleanup(val) {
+        modal.classList.add('hidden');
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        inp.removeEventListener('keydown', onKey);
+        resolve(val);
+      }
+      function onOk() { cleanup(opts.prompt ? inp.value : true); }
+      function onCancel() { cleanup(opts.prompt ? null : false); }
+      function onKey(e) {
+        if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+        if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      }
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      inp.addEventListener('keydown', onKey);
+    });
+  }
+
+  function openEditor(item) {
+    apiFetch('/api/fs/content?path=' + encodeURIComponent(item.path))
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.data.error || 'Cannot open file');
+        state.editingPath = item.path;
+        $('editor-title').textContent = item.name;
+        $('editor-area').value = res.data.content || '';
+        $('editor-modal').classList.remove('hidden');
+      })
+      .catch(function (err) {
+        showToast(err.message || 'Cannot edit file');
+      });
+  }
+
+  function openPreview(item) {
+    state.previewItem = item;
+    $('preview-title').textContent = item.name;
+    var body = $('preview-body');
+    body.innerHTML = '';
+    var src = previewUrl(item.path);
+    var ext = (item.ext || '').toLowerCase();
+    var el;
+    if (IMG_EXTS[ext]) {
+      el = document.createElement('img');
+      el.src = src;
+    } else if (VID_EXTS[ext]) {
+      el = document.createElement('video');
+      el.src = src;
+      el.controls = true;
+      el.autoplay = true;
+    } else {
+      el = document.createElement('audio');
+      el.src = src;
+      el.controls = true;
+      el.autoplay = true;
     }
+    body.appendChild(el);
+    $('preview-modal').classList.remove('hidden');
+  }
 
-    function renderEntries() {
-      const items = getSortedFilteredEntries();
-      const dirCount = items.filter((e) => e.isDirectory).length;
-      const fileCount = items.length - dirCount;
-      el.statusCounts.textContent =
-        `${dirCount} folder(s), ${fileCount} file(s)` +
-        (selectedPaths.size > 0 ? ` • ${selectedPaths.size} selected` : '');
+  function openProps(item) {
+    state.propsItem = item;
+    var grid = $('props-grid');
+    grid.innerHTML = '';
+    var rows = [
+      ['Name', item.name],
+      ['Type', item.isDrive ? 'Drive' : item.isDirectory ? 'Folder' : (item.ext || 'File')],
+      ['Size', item.isDirectory ? (item.itemCount != null ? item.itemCount + ' items' : 'Folder') : formatSize(item.size) + ' (' + item.size + ' B)'],
+      ['Modified', formatDate(item.mtime) || '—'],
+      ['OBS Path', item.path],
+    ];
+    rows.forEach(function (pair) {
+      var k = document.createElement('div');
+      k.className = 'prop-k';
+      k.textContent = pair[0];
+      var v = document.createElement('div');
+      v.className = 'prop-v';
+      v.textContent = pair[1];
+      grid.appendChild(k);
+      grid.appendChild(v);
+    });
+    $('props-modal').classList.remove('hidden');
+  }
 
-      el.entriesList.innerHTML = '';
-      if (!items.length) {
-        el.entriesList.innerHTML = `
-          <div style="padding: 40px; text-align: center; color: var(--text-muted); font-size: 13.5px;">
-            ${searchQuery ? 'No matching files or folders.' : 'This folder is empty. Drag & drop files here or click New Folder / New File.'}
-          </div>
-        `;
-        return;
-      }
-
-      const frag = document.createDocumentFragment();
-
-      items.forEach((item) => {
-        const isSelected = selectedPaths.has(item.path);
-        const icon = item.isDrive ? '💾' : item.isDirectory ? '📁' : getFileIcon(item.ext);
-        const sizeStr = item.isDirectory ? '—' : formatBytes(item.size);
-        const dateStr = item.mtime ? formatDate(item.mtime) : '—';
-        const pType = !item.isDirectory ? getPreviewType(item.ext) : null;
-
-        if (viewMode === 'grid') {
-          const card = document.createElement('div');
-          card.className = `fb-card${isSelected ? ' selected' : ''}`;
-          const isImg = pType === 'image';
-          const thumbContent = isImg
-            ? `<img src="${buildPreviewUrl(item.path)}" alt="${escapeHtml(item.name)}" loading="lazy">`
-            : `<span>${icon}</span>`;
-
-          card.innerHTML = `
-            <div class="fb-card-thumb">${thumbContent}</div>
-            <div class="fb-card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
-            <div class="fb-card-sub">
-              <span>${item.isDirectory ? 'Folder' : sizeStr}</span>
-              <span>${item.ext ? escapeHtml(item.ext.slice(1).toUpperCase()) : ''}</span>
-            </div>
-          `;
-
-          card.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleSelectItem(item, e.ctrlKey || e.metaKey || e.shiftKey);
-          });
-          card.addEventListener('dblclick', (e) => {
-            e.stopPropagation();
-            openItemPrimaryAction(item);
-          });
-
-          frag.appendChild(card);
-        } else {
-          const row = document.createElement('div');
-          row.className = `fb-row${isSelected ? ' selected' : ''}`;
-
-          row.innerHTML = `
-            <div class="fb-cell-name">
-              <span class="fb-item-icon">${icon}</span>
-              <span class="fb-item-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
-            </div>
-            <div class="fb-cell-meta">${sizeStr}</div>
-            <div class="fb-cell-meta fb-hide-mobile">${dateStr}</div>
-            <div class="fb-cell-actions">
-              ${pType === 'text' ? `<button type="button" class="btn btn-row-edit" title="Edit text file">✏️ Edit</button>` : ''}
-              ${pType && pType !== 'text' ? `<button type="button" class="btn btn-row-preview" title="Preview media">👁️</button>` : ''}
-              <button type="button" class="btn btn-row-copy" title="Copy OBS Path">🔗 Path</button>
-              <button type="button" class="btn btn-row-open">${item.isDirectory ? 'Open' : 'Select'}</button>
-            </div>
-          `;
-
-          row.addEventListener('click', (e) => {
-            if (e.target.closest('button')) return;
-            toggleSelectItem(item, e.ctrlKey || e.metaKey || e.shiftKey);
-          });
-          row.addEventListener('dblclick', (e) => {
-            if (e.target.closest('button')) return;
-            openItemPrimaryAction(item);
-          });
-
-          row.querySelector('.btn-row-open').addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (item.isDirectory) loadDirectory(item.path);
-            else copyToClipboard(item.path);
-          });
-
-          row.querySelector('.btn-row-copy').addEventListener('click', (e) => {
-            e.stopPropagation();
-            copyToClipboard(item.path);
-          });
-
-          const editBtn = row.querySelector('.btn-row-edit');
-          if (editBtn) {
-            editBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              openTextEditor(item);
-            });
-          }
-
-          const prevBtn = row.querySelector('.btn-row-preview');
-          if (prevBtn) {
-            prevBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              openPreviewModal(item, pType);
-            });
-          }
-
-          frag.appendChild(row);
-        }
-      });
-
-      el.entriesList.appendChild(frag);
+  function copyToClipboard(text) {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        showToast('Copied to clipboard');
+      }).catch(function () { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
     }
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showToast('Copied to clipboard'); } catch (_) {}
+    document.body.removeChild(ta);
+  }
 
-    // Create New Folder
-    el.btnNewFolder.addEventListener('click', async () => {
-      if (currentDir === '__DRIVES__') return;
-      const folderName = await showPromptDialog({
-        title: '📁 Create New Folder',
-        label: `Create inside ${currentDir}:`,
-        okText: 'Create Folder',
+  // Operations
+  function doMkdir() {
+    setFabOpen(false);
+    if (state.currentDir === '__DRIVES__') return showToast('Open a drive first');
+    openDialog({ title: 'New folder', prompt: true, placeholder: 'Folder name', okText: 'Create' })
+      .then(function (name) {
+        if (!name || !name.trim()) return;
+        return apiFetch('/api/fs/mkdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: state.currentDir, name: name.trim() }),
+        }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error); return d; }); })
+          .then(function () { showToast('Folder created'); browse(); })
+          .catch(function (e) { showToast(e.message || 'Create failed'); });
       });
-      if (!folderName) return;
+  }
 
-      try {
-        const res = await fetch('/api/fs/mkdir', {
+  function doMkfile() {
+    setFabOpen(false);
+    if (state.currentDir === '__DRIVES__') return showToast('Open a drive first');
+    openDialog({ title: 'New file', prompt: true, placeholder: 'notes.txt', okText: 'Create' })
+      .then(function (name) {
+        if (!name || !name.trim()) return;
+        return apiFetch('/api/fs/mkfile', {
           method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ dir: currentDir, name: folderName }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        showToast(`✓ Created folder "${folderName}"`, 'success');
-        loadDirectory(currentDir);
-      } catch (err) {
-        showToast(`Failed to create folder: ${err.message}`, 'error');
-      }
-    });
-
-    // Create New Text File
-    el.btnNewFile.addEventListener('click', async () => {
-      if (currentDir === '__DRIVES__') return;
-      const fileName = await showPromptDialog({
-        title: '📄 Create New Text File',
-        label: `File name (e.g. notes.txt, lower-third.txt, config.json):`,
-        initialValue: 'untitled.txt',
-        okText: 'Create & Edit',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: state.currentDir, name: name.trim(), content: '' }),
+        }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error); return d; }); })
+          .then(function () { showToast('File created'); browse(); })
+          .catch(function (e) { showToast(e.message || 'Create failed'); });
       });
-      if (!fileName) return;
+  }
 
-      try {
-        const res = await fetch('/api/fs/mkfile', {
+  function doRename() {
+    var sel = selectedItems();
+    if (sel.length !== 1) return;
+    var target = sel[0];
+    openDialog({ title: 'Rename', prompt: true, defaultValue: target.name, okText: 'Rename' })
+      .then(function (newName) {
+        if (!newName || !newName.trim() || newName.trim() === target.name) return;
+        return apiFetch('/api/fs/rename', {
           method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ dir: currentDir, name: fileName, content: '' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        showToast(`✓ Created "${fileName}"`, 'success');
-        await loadDirectory(currentDir);
-        openTextEditor({ name: fileName, path: data.path, size: 0 });
-      } catch (err) {
-        showToast(`Failed to create file: ${err.message}`, 'error');
-      }
-    });
-
-    // Contextual Toolbar Actions
-    el.btnActCopyPath.addEventListener('click', () => {
-      const sel = getSelectedEntries();
-      if (sel.length === 1) copyToClipboard(sel[0].path);
-    });
-
-    el.btnActOpenEdit.addEventListener('click', () => {
-      const sel = getSelectedEntries();
-      if (sel.length === 1) openItemPrimaryAction(sel[0]);
-    });
-
-    el.btnActRename.addEventListener('click', async () => {
-      const sel = getSelectedEntries();
-      if (sel.length !== 1) return;
-      const item = sel[0];
-      const newName = await showPromptDialog({
-        title: '✏️ Rename Item',
-        label: `Enter new name for "${item.name}":`,
-        initialValue: item.name,
-        okText: 'Rename',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: target.path, newName: newName.trim() }),
+        }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error); return d; }); })
+          .then(function () { showToast('Renamed'); browse(); })
+          .catch(function (e) { showToast(e.message || 'Rename failed'); });
       });
-      if (!newName || newName === item.name) return;
+  }
 
-      try {
-        const res = await fetch('/api/fs/rename', {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ path: item.path, newName }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        showToast(`✓ Renamed to "${newName}"`, 'success');
-        loadDirectory(currentDir);
-      } catch (err) {
-        showToast(`Rename failed: ${err.message}`, 'error');
-      }
-    });
-
-    el.btnActCopy.addEventListener('click', () => {
-      const sel = getSelectedEntries();
-      if (!sel.length) return;
-      clipboardState = { mode: 'copy', paths: sel.map((e) => e.path) };
-      updateContextToolbar();
-      showToast(`Copied ${sel.length} item(s) to clipboard. Navigate to target folder and click Paste.`, 'info');
-    });
-
-    el.btnActCut.addEventListener('click', () => {
-      const sel = getSelectedEntries();
-      if (!sel.length) return;
-      clipboardState = { mode: 'cut', paths: sel.map((e) => e.path) };
-      updateContextToolbar();
-      showToast(`Cut ${sel.length} item(s) to clipboard. Navigate to target folder and click Paste.`, 'info');
-    });
-
-    el.btnActPaste.addEventListener('click', async () => {
-      if (!clipboardState.paths.length || currentDir === '__DRIVES__') return;
-      const endpoint = clipboardState.mode === 'cut' ? '/api/fs/move' : '/api/fs/copy';
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ sources: clipboardState.paths, destDir: currentDir }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        const actionWord = clipboardState.mode === 'cut' ? 'Moved' : 'Copied';
-        showToast(`✓ ${actionWord} ${clipboardState.paths.length} item(s) here`, 'success');
-        if (clipboardState.mode === 'cut') {
-          clipboardState = { mode: null, paths: [] };
-        }
-        updateContextToolbar();
-        loadDirectory(currentDir);
-      } catch (err) {
-        showToast(`Paste failed: ${err.message}`, 'error');
-      }
-    });
-
-    function triggerFileDownload(filePath) {
-      let url = `/api/fs/download?path=${encodeURIComponent(filePath)}`;
-      if (serverPassword) {
-        url += `&password=${encodeURIComponent(serverPassword)}`;
-      }
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+  function toggleDeleteLock() {
+    closeMenus();
+    if (state.deleteUnlocked) {
+      state.deleteUnlocked = false;
+      renderHeader();
+      showToast('Delete lock enabled');
+      return;
     }
-
-    el.btnActDownload.addEventListener('click', () => {
-      const sel = getSelectedEntries();
-      if (sel.length === 1 && !sel[0].isDirectory) {
-        triggerFileDownload(sel[0].path);
-      }
-    });
-
-    el.btnActDelete.addEventListener('click', async () => {
-      if (!deleteUnlocked) return;
-      const sel = getSelectedEntries();
-      if (!sel.length) return;
-      const ok = await showConfirmDialog({
-        title: `🗑️ Delete ${sel.length} Item(s)?`,
-        messageHtml: `
-          <p>Permanently delete <strong>${sel.length} selected item(s)</strong> from disk?</p>
-          <p style="margin-top: 8px; font-family: monospace; font-size: 12px; color: var(--text-muted); word-break: break-all;">
-            ${escapeHtml(sel.map((x) => x.name).join(', '))}
-          </p>
-        `,
-        confirmText: 'Delete Permanently',
-        danger: true,
-      });
+    openDialog({
+      title: 'Unlock Delete Mode',
+      message: 'Allow permanent deletion of files and folders? Use carefully.',
+      okText: 'Unlock',
+      danger: true,
+    }).then(function (ok) {
       if (!ok) return;
-
-      try {
-        const res = await fetch('/api/fs/delete', {
-          method: 'POST',
-          headers: getAuthHeaders({
-            'Content-Type': 'application/json',
-            'X-Delete-Unlocked': 'true',
-          }),
-          body: JSON.stringify({ paths: sel.map((x) => x.path) }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        showToast(`✓ Deleted ${sel.length} item(s)`, 'success');
-        loadDirectory(currentDir);
-      } catch (err) {
-        showToast(`Delete failed: ${err.message}`, 'error');
-      }
+      state.deleteUnlocked = true;
+      renderHeader();
+      showToast('Delete unlocked');
     });
+  }
 
-    // In-Browser Text Editor
-    async function openTextEditor(item) {
-      activeEditingPath = item.path;
-      el.editorTitle.textContent = `Editing: ${item.name}`;
-      el.editorMeta.textContent = item.path;
-      el.editorTextarea.value = 'Loading file content...';
-      el.editorTextarea.disabled = true;
-      el.modalEditor.classList.add('open');
-
-      try {
-        const res = await fetch(`/api/fs/content?path=${encodeURIComponent(item.path)}`, {
-          headers: getAuthHeaders(),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        el.editorTextarea.value = data.content || '';
-        el.editorTextarea.disabled = false;
-        el.editorTextarea.focus();
-      } catch (err) {
-        el.modalEditor.classList.remove('open');
-        showToast(`Cannot open in editor: ${err.message}`, 'error');
-      }
-    }
-
-    el.btnEditorClose.addEventListener('click', () => {
-      el.modalEditor.classList.remove('open');
-      activeEditingPath = '';
-    });
-
-    el.btnEditorSave.addEventListener('click', async () => {
-      if (!activeEditingPath) return;
-      try {
-        const res = await fetch('/api/fs/content', {
-          method: 'PUT',
-          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ path: activeEditingPath, content: el.editorTextarea.value }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        el.modalEditor.classList.remove('open');
-        showToast('✓ File saved!', 'success');
-        loadDirectory(currentDir);
-      } catch (err) {
-        showToast(`Save failed: ${err.message}`, 'error');
-      }
-    });
-
-    // Media Lightbox Preview
-    function buildPreviewUrl(filePath) {
-      let url = `/api/fs/preview?path=${encodeURIComponent(filePath)}`;
-      if (serverPassword) {
-        url += `&password=${encodeURIComponent(serverPassword)}`;
-      }
-      return url;
-    }
-
-    async function openPreviewModal(item, type) {
-      cleanupPreviewMedia();
-      activePreviewItem = item;
-      el.previewTitle.textContent = item.name;
-      el.previewMeta.textContent = `${item.path}${item.size ? ` • ${formatBytes(item.size)}` : ''}`;
-
-      if (type === 'video' && item.size > LARGE_FILE_WARN_BYTES) {
-        const proceed = await showConfirmDialog({
-          title: '🎬 Large Video Preview',
-          messageHtml: `
-            <p><strong>${escapeHtml(item.name)}</strong> is <strong>${formatBytes(item.size)}</strong>.</p>
-            <p style="margin-top: 8px; color: var(--text-muted);">Video streams directly via HTTP 206 range requests.</p>
-          `,
-          confirmText: 'Stream Preview',
-        });
-        if (!proceed) return;
-      }
-
-      const previewUrl = buildPreviewUrl(item.path);
-      el.modalPreview.classList.add('open');
-
-      if (type === 'image') {
-        const img = document.createElement('img');
-        img.alt = item.name;
-        img.src = previewUrl;
-        el.previewStage.appendChild(img);
-      } else if (type === 'video') {
-        const video = document.createElement('video');
-        video.controls = true;
-        video.preload = 'metadata';
-        video.playsInline = true;
-        video.src = previewUrl;
-        el.previewStage.appendChild(video);
-      } else if (type === 'audio') {
-        const audio = document.createElement('audio');
-        audio.controls = true;
-        audio.preload = 'metadata';
-        audio.src = previewUrl;
-        el.previewStage.appendChild(audio);
-      }
-    }
-
-    function cleanupPreviewMedia() {
-      const mediaNodes = el.previewStage.querySelectorAll('video, audio');
-      mediaNodes.forEach((m) => {
-        try {
-          m.pause();
-          m.removeAttribute('src');
-          m.load();
-        } catch (_) {}
+  function doDelete() {
+    var sel = selectedItems();
+    if (!sel.length) return;
+    if (!state.deleteUnlocked) {
+      openDialog({
+        title: 'Delete Locked',
+        message: 'Delete lock is currently enabled for safety. Unlock delete mode and permanently delete ' + sel.length + ' item(s)?',
+        okText: 'Unlock & Delete',
+        danger: true,
+      }).then(function (ok) {
+        if (!ok) return;
+        state.deleteUnlocked = true;
+        renderHeader();
+        executeDelete(sel);
       });
-      el.previewStage.innerHTML = '';
+      return;
     }
-
-    function closePreviewModal() {
-      cleanupPreviewMedia();
-      el.modalPreview.classList.remove('open');
-      activePreviewItem = null;
-    }
-
-    el.btnClosePreview.addEventListener('click', closePreviewModal);
-    el.btnPreviewDownload.addEventListener('click', () => {
-      if (activePreviewItem) triggerFileDownload(activePreviewItem.path);
+    openDialog({
+      title: 'Delete ' + sel.length + (sel.length === 1 ? ' item?' : ' items?'),
+      message: sel.length === 1 ? sel[0].name : 'Selected files and folders will be permanently removed.',
+      okText: 'Delete',
+      danger: true,
+    }).then(function (ok) {
+      if (ok) executeDelete(sel);
     });
-    el.modalPreview.addEventListener('click', (e) => {
-      if (e.target === el.modalPreview) closePreviewModal();
-    });
+  }
 
-    function copyToClipboard(text) {
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(() => {
-          showToast(`✓ Copied OBS path: ${text}`, 'success');
-        }).catch(() => fallbackCopyText(text));
+  function executeDelete(items) {
+    apiFetch('/api/fs/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: items.map(function (i) { return i.path; }) }),
+    }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error); return d; }); })
+      .then(function (d) {
+        showToast('Deleted ' + (d.deleted ? d.deleted.length : items.length) + ' item(s)');
+        browse();
+      })
+      .catch(function (e) { showToast(e.message || 'Delete failed'); });
+  }
+
+  function doPaste() {
+    closeMenus();
+    if (!state.clipboard || !state.clipboard.items.length) return;
+    if (state.currentDir === '__DRIVES__') return showToast('Open a folder first');
+    var ep = state.clipboard.mode === 'cut' ? '/api/fs/move' : '/api/fs/copy';
+    var sources = state.clipboard.items.map(function (i) { return i.path; });
+    apiFetch(ep, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sources: sources, destDir: state.currentDir }),
+    }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error); return d; }); })
+      .then(function () {
+        var wasCut = state.clipboard.mode === 'cut';
+        if (wasCut) state.clipboard = null;
+        showToast(wasCut ? 'Moved items' : 'Copied items');
+        browse();
+      })
+      .catch(function (e) { showToast(e.message || 'Paste failed'); });
+  }
+
+  function uploadFiles(files) {
+    if (!files || !files.length) return;
+    if (state.currentDir === '__DRIVES__') return showToast('Open a folder before uploading');
+    var list = Array.prototype.slice.call(files);
+    var toast = $('upload-toast');
+    var nameEl = $('upload-name');
+    var pctEl = $('upload-pct');
+    var fillEl = $('upload-fill');
+    var idx = 0;
+
+    function next() {
+      if (idx >= list.length) {
+        toast.classList.add('hidden');
+        showToast('Uploaded ' + list.length + (list.length === 1 ? ' file' : ' files'));
+        browse();
         return;
       }
-      fallbackCopyText(text);
-    }
+      var f = list[idx++];
+      toast.classList.remove('hidden');
+      nameEl.textContent = '(' + idx + '/' + list.length + ') ' + f.name;
+      pctEl.textContent = '0%';
+      fillEl.style.width = '0%';
 
-    function fallbackCopyText(text) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try {
-        document.execCommand('copy');
-        showToast(`✓ Copied OBS path: ${text}`, 'success');
-      } catch (_) {
-        showToast(`Path: ${text}`, 'info');
-      }
-      document.body.removeChild(ta);
-    }
-
-    function getFileIcon(ext) {
-      switch (ext) {
-        case '.png': case '.jpg': case '.jpeg': case '.gif': case '.webp': case '.bmp': case '.svg': return '🖼️';
-        case '.mp4': case '.mov': case '.mkv': case '.webm': case '.avi': case '.m4v': return '🎬';
-        case '.mp3': case '.wav': case '.aac': case '.flac': case '.ogg': case '.m4a': return '🎵';
-        case '.json': case '.yml': case '.yaml': case '.xml': case '.ini': return '⚙️';
-        case '.txt': case '.md': case '.log': case '.srt': case '.vtt': return '📝';
-        default: return '📄';
-      }
-    }
-
-    function formatBytes(bytes) {
-      if (!bytes) return '0 B';
-      if (bytes < 1024) return `${bytes} B`;
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-      if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-    }
-
-    function formatDate(isoStr) {
-      try {
-        const d = new Date(isoStr);
-        return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' }) +
-          ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-      } catch (_) {
-        return '—';
-      }
-    }
-
-    function escapeHtml(str) {
-      if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function uploadSingleFileWithProgress(file, index, totalCount) {
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        activeUploadXhr = xhr;
-
-        const formData = new FormData();
-        formData.append('media', file);
-
-        const targetQuery =
-          currentDir && currentDir !== '__DRIVES__'
-            ? `?dir=${encodeURIComponent(currentDir)}&keepName=true`
-            : '';
-
-        xhr.open('POST', `/api/upload${targetQuery}`);
-        if (serverPassword) {
-          xhr.setRequestHeader('Authorization', `Bearer ${serverPassword}`);
+      var xhr = new XMLHttpRequest();
+      var url = '/api/upload?dir=' + encodeURIComponent(state.currentDir) + '&keepName=true';
+      xhr.open('POST', url, true);
+      if (state.password) xhr.setRequestHeader('Authorization', 'Bearer ' + state.password);
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) {
+          var p = Math.round((e.loaded / e.total) * 100);
+          pctEl.textContent = p + '%';
+          fillEl.style.width = p + '%';
         }
+      };
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          next();
+        } else {
+          toast.classList.add('hidden');
+          showToast('Upload failed: ' + f.name);
+        }
+      };
+      xhr.onerror = function () {
+        toast.classList.add('hidden');
+        showToast('Network error uploading ' + f.name);
+      };
+      var fd = new FormData();
+      fd.append('media', f);
+      xhr.send(fd);
+    }
+    next();
+  }
 
-        xhr.upload.onprogress = (evt) => {
-          if (!evt.lengthComputable) return;
-          const pct = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
-          el.uploadProgressFill.style.width = `${pct}%`;
-          el.uploadProgressLabel.textContent =
-            `Uploading (${index + 1}/${totalCount}): ${file.name} — ${pct}% (${formatBytes(evt.loaded)} / ${formatBytes(evt.total)})`;
-        };
+  // Login screen controls
+  function showLogin(errMsg) {
+    loginOverlay.classList.remove('hidden');
+    if (errMsg) {
+      loginErr.textContent = errMsg;
+      loginErr.classList.remove('hidden');
+    } else {
+      loginErr.classList.add('hidden');
+    }
+    setTimeout(function () { loginPass.focus(); }, 40);
+  }
 
-        xhr.onload = () => {
-          activeUploadXhr = null;
-          let payload = {};
-          try { payload = JSON.parse(xhr.responseText); } catch (_) {}
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(payload);
-          } else {
-            reject(new Error(payload.error || `HTTP ${xhr.status}`));
-          }
-        };
-
-        xhr.onerror = () => {
-          activeUploadXhr = null;
-          reject(new Error('Network connection lost during upload'));
-        };
-
-        xhr.onabort = () => {
-          activeUploadXhr = null;
-          reject(new Error('Upload cancelled'));
-        };
-
-        xhr.send(formData);
+  loginForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var pw = loginPass.value;
+    loginErr.classList.add('hidden');
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          loginErr.textContent = res.d.error || 'Invalid password';
+          loginErr.classList.remove('hidden');
+          return;
+        }
+        state.password = pw;
+        try { localStorage.setItem(PW_KEY, pw); } catch (_) {}
+        loginPass.value = '';
+        loginOverlay.classList.add('hidden');
+        browse('__UPLOADS__');
+      })
+      .catch(function () {
+        loginErr.textContent = 'Connection failed';
+        loginErr.classList.remove('hidden');
       });
+  });
+
+  $('login-eye').addEventListener('click', function () {
+    loginPass.type = loginPass.type === 'password' ? 'text' : 'password';
+  });
+
+  // Event bindings
+  btnMenu.addEventListener('click', function () { setDrawerOpen(true); });
+  $('drawer-close').addEventListener('click', function () { setDrawerOpen(false); });
+  drawerScrim.addEventListener('click', function () { setDrawerOpen(false); });
+
+  btnSelClose.addEventListener('click', clearSelection);
+  btnSelAll.addEventListener('click', function () {
+    filteredSortedEntries().forEach(function (e) { state.selected[e.path] = true; });
+    renderAll();
+  });
+  btnSelInvert.addEventListener('click', function () {
+    filteredSortedEntries().forEach(function (e) {
+      if (state.selected[e.path]) delete state.selected[e.path];
+      else state.selected[e.path] = true;
+    });
+    renderAll();
+  });
+
+  btnSearch.addEventListener('click', function () {
+    state.searchOpen = true;
+    renderHeader();
+    searchInput.focus();
+  });
+  btnSearchClose.addEventListener('click', function () {
+    state.searchQuery = '';
+    searchInput.value = '';
+    state.searchOpen = false;
+    renderAll();
+  });
+  searchInput.addEventListener('input', function () {
+    state.searchQuery = searchInput.value;
+    renderEntries();
+  });
+
+  btnMore.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = topMenu.classList.contains('hidden');
+    closeMenus();
+    if (open) {
+      menuBackdrop.classList.remove('hidden');
+      topMenu.classList.remove('hidden');
     }
-
-    async function uploadFiles(fileList) {
-      if (currentDir === '__DRIVES__') {
-        showToast('Open a drive or folder first before uploading.', 'error');
-        return;
-      }
-      const files = Array.from(fileList || []);
-      if (!files.length) return;
-
-      const oversized = files.filter((f) => f.size > maxUploadBytes);
-      if (oversized.length) {
-        showToast(
-          `"${oversized[0].name}" (${formatBytes(oversized[0].size)}) exceeds server max of ${maxUploadMb} MB.`,
-          'error'
-        );
-        return;
-      }
-
-      const largeFiles = files.filter((f) => f.size > LARGE_FILE_WARN_BYTES);
-      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-
-      if (largeFiles.length > 0 || totalSize > LARGE_FILE_WARN_BYTES) {
-        const confirmed = await showConfirmDialog({
-          title: '⚠️ Large File Upload (> 100 MB)',
-          messageHtml: `
-            <p>Upload <strong>${files.length} file(s)</strong> totaling <strong>${formatBytes(totalSize)}</strong> to <code>${escapeHtml(currentDir)}</code>?</p>
-          `,
-          confirmText: 'Start Upload',
-        });
-        if (!confirmed) return;
-      }
-
-      activeUploadCancelled = false;
-      el.uploadProgressBox.classList.add('active');
-      el.uploadProgressFill.style.width = '0%';
-
-      let uploadedCount = 0;
-      for (let i = 0; i < files.length; i++) {
-        if (activeUploadCancelled) break;
-        const file = files[i];
-        el.uploadProgressLabel.textContent = `Uploading (${i + 1}/${files.length}): ${file.name}...`;
-        try {
-          await uploadSingleFileWithProgress(file, i, files.length);
-          uploadedCount++;
-        } catch (err) {
-          showToast(`Upload failed for "${file.name}": ${err.message}`, 'error');
-          if (activeUploadCancelled) break;
-        }
-      }
-
-      el.uploadProgressBox.classList.remove('active');
-      el.uploadProgressFill.style.width = '0%';
-      el.fileInput.value = '';
-
-      if (uploadedCount > 0) {
-        showToast(`✓ Uploaded ${uploadedCount} file(s)!`, 'success');
-        loadDirectory(currentDir);
-      }
+  });
+  $('ba-more').addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = selMenu.classList.contains('hidden');
+    closeMenus();
+    if (open) {
+      menuBackdrop.classList.remove('hidden');
+      selMenu.classList.remove('hidden');
     }
+  });
+  menuBackdrop.addEventListener('click', closeMenus);
 
-    el.btnCancelUpload.addEventListener('click', () => {
-      activeUploadCancelled = true;
-      if (activeUploadXhr) activeUploadXhr.abort();
-    });
+  // Top menu actions
+  $('m-select-all').addEventListener('click', function () {
+    closeMenus();
+    filteredSortedEntries().forEach(function (e) { state.selected[e.path] = true; });
+    renderAll();
+  });
+  $('m-view').addEventListener('click', function () {
+    closeMenus();
+    state.viewMode = state.viewMode === 'list' ? 'grid' : 'list';
+    try { localStorage.setItem(VIEW_KEY, state.viewMode); } catch (_) {}
+    renderAll();
+  });
+  $('m-sort').addEventListener('click', function () {
+    var order = ['name', 'size', 'date'];
+    var idx = order.indexOf(state.sortBy);
+    if (state.sortAsc) {
+      state.sortAsc = false;
+    } else {
+      state.sortAsc = true;
+      state.sortBy = order[(idx + 1) % order.length];
+    }
+    try { localStorage.setItem(SORT_KEY, state.sortBy); } catch (_) {}
+    renderAll();
+  });
+  $('m-paste').addEventListener('click', doPaste);
+  $('m-lock').addEventListener('click', toggleDeleteLock);
+  $('m-refresh').addEventListener('click', function () { closeMenus(); browse(); });
+  $('m-obs').addEventListener('click', function () { if (state.dashboardUrl) window.location.href = state.dashboardUrl; });
+  $('m-logout').addEventListener('click', doLogout);
 
-    el.btnTopUpload.addEventListener('click', () => el.fileInput.click());
-    el.fileInput.addEventListener('change', (e) => uploadFiles(e.target.files));
+  function doLogout() {
+    closeMenus();
+    setDrawerOpen(false);
+    state.password = '';
+    try { localStorage.removeItem(PW_KEY); } catch (_) {}
+    showLogin('');
+  }
 
-    el.fbStage.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      el.fbStage.classList.add('dragover');
-    });
-    el.fbStage.addEventListener('dragleave', (e) => {
-      if (e.target === el.fbStage) el.fbStage.classList.remove('dragover');
-    });
-    el.fbStage.addEventListener('drop', (e) => {
-      e.preventDefault();
-      el.fbStage.classList.remove('dragover');
+  // Bottom Selection Bar actions
+  $('ba-cut').addEventListener('click', function () {
+    var sel = selectedItems();
+    if (!sel.length) return;
+    state.clipboard = { mode: 'cut', items: sel };
+    clearSelection();
+    showToast('Cut ' + sel.length + ' item(s)');
+  });
+  $('ba-copy').addEventListener('click', function () {
+    var sel = selectedItems();
+    if (!sel.length) return;
+    state.clipboard = { mode: 'copy', items: sel };
+    clearSelection();
+    showToast('Copied ' + sel.length + ' item(s)');
+  });
+  $('ba-delete').addEventListener('click', doDelete);
+  $('ba-rename').addEventListener('click', doRename);
+
+  $('sm-open').addEventListener('click', function () {
+    closeMenus();
+    var sel = selectedItems();
+    if (sel.length === 1) { clearSelection(); openItem(sel[0]); }
+  });
+  $('sm-download').addEventListener('click', function () {
+    closeMenus();
+    var sel = selectedItems();
+    if (sel.length === 1 && !sel[0].isDirectory) {
+      window.open(downloadUrl(sel[0].path), '_blank');
+    }
+  });
+  $('sm-copypath').addEventListener('click', function () {
+    closeMenus();
+    var sel = selectedItems();
+    if (sel.length === 1) copyToClipboard(sel[0].path);
+  });
+  $('sm-props').addEventListener('click', function () {
+    closeMenus();
+    var sel = selectedItems();
+    if (sel.length === 1) openProps(sel[0]);
+  });
+
+  // Paste bar & unlock strip
+  $('btn-paste-go').addEventListener('click', doPaste);
+  $('btn-paste-cancel').addEventListener('click', function () {
+    state.clipboard = null;
+    renderAll();
+  });
+  btnRelock.addEventListener('click', function () {
+    state.deleteUnlocked = false;
+    renderHeader();
+    showToast('Delete lock enabled');
+  });
+
+  // FAB Speed Dial
+  mainFab.addEventListener('click', function (e) {
+    e.stopPropagation();
+    setFabOpen(!state.fabOpen);
+  });
+  fabBackdrop.addEventListener('click', function () { setFabOpen(false); });
+  $('fab-mkdir').addEventListener('click', doMkdir);
+  $('fab-mkfile').addEventListener('click', doMkfile);
+  $('fab-upload').addEventListener('click', function () {
+    setFabOpen(false);
+    fileInput.value = '';
+    fileInput.click();
+  });
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files && fileInput.files.length) uploadFiles(fileInput.files);
+  });
+
+  // Drawer Nav
+  $('nav-uploads').addEventListener('click', function () { browse('__UPLOADS__'); });
+  $('nav-project').addEventListener('click', function () { browse('__PROJECT__'); });
+  $('nav-drives').addEventListener('click', function () { browse('__DRIVES__'); });
+  $('nav-jump').addEventListener('click', function () {
+    setDrawerOpen(false);
+    openDialog({ title: 'Go to Path', prompt: true, defaultValue: state.currentDir === '__DRIVES__' ? '' : state.currentDir, placeholder: 'Enter folder path', okText: 'Open' })
+      .then(function (p) { if (p && p.trim()) browse(p.trim()); });
+  });
+  $('nav-lock').addEventListener('click', function () { setDrawerOpen(false); toggleDeleteLock(); });
+  $('nav-obs').addEventListener('click', function () { if (state.dashboardUrl) window.location.href = state.dashboardUrl; });
+  $('nav-logout').addEventListener('click', doLogout);
+
+  // Modals close / save
+  $('editor-close').addEventListener('click', function () { $('editor-modal').classList.add('hidden'); });
+  $('editor-cancel').addEventListener('click', function () { $('editor-modal').classList.add('hidden'); });
+  $('editor-save').addEventListener('click', function () {
+    if (!state.editingPath) return;
+    apiFetch('/api/fs/content', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: state.editingPath, content: $('editor-area').value }),
+    }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error); return d; }); })
+      .then(function () {
+        $('editor-modal').classList.add('hidden');
+        showToast('Saved');
+        browse();
+      })
+      .catch(function (e) { showToast(e.message || 'Save failed'); });
+  });
+
+  $('preview-close').addEventListener('click', function () {
+    $('preview-modal').classList.add('hidden');
+    $('preview-body').innerHTML = '';
+  });
+  $('preview-copy-path').addEventListener('click', function () {
+    if (state.previewItem) copyToClipboard(state.previewItem.path);
+  });
+  $('preview-download').addEventListener('click', function () {
+    if (state.previewItem) window.open(downloadUrl(state.previewItem.path), '_blank');
+  });
+
+  $('props-close').addEventListener('click', function () { $('props-modal').classList.add('hidden'); });
+  $('props-ok').addEventListener('click', function () { $('props-modal').classList.add('hidden'); });
+  $('props-copy').addEventListener('click', function () {
+    if (state.propsItem) copyToClipboard(state.propsItem.path);
+  });
+
+  // Drag & Drop upload
+  var dragDepth = 0;
+  shell.addEventListener('dragenter', function (e) {
+    e.preventDefault();
+    dragDepth++;
+    $('drop-overlay').classList.remove('hidden');
+  });
+  shell.addEventListener('dragover', function (e) { e.preventDefault(); });
+  shell.addEventListener('dragleave', function (e) {
+    e.preventDefault();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) $('drop-overlay').classList.add('hidden');
+  });
+  shell.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dragDepth = 0;
+    $('drop-overlay').classList.add('hidden');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
       uploadFiles(e.dataTransfer.files);
-    });
+    }
+  });
 
-    // Clear selection when clicking empty stage background
-    el.fbStage.addEventListener('click', (e) => {
-      if (e.target === el.fbStage || e.target === el.entriesList) {
-        selectedPaths.clear();
-        updateContextToolbar();
-        renderEntries();
+  // Keyboard Escape
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closeMenus();
+      setFabOpen(false);
+      setDrawerOpen(false);
+      if (selectedItems().length) clearSelection();
+    }
+  });
+
+  // Startup initialization
+  fetch('/api/status', { headers: authHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (st) {
+      state.authRequired = Boolean(st.authRequired);
+      state.allowSystemDelete = Boolean(st.allowSystemDelete);
+      state.platform = st.platform || state.platform;
+      if (st.uploadsDir) {
+        state.uploadsDir = st.uploadsDir;
+        $('nav-uploads-sub').textContent = st.uploadsDir;
       }
+      if (st.authRequired && !st.authValid) {
+        showLogin('');
+      } else {
+        browse('__UPLOADS__');
+      }
+    })
+    .catch(function () {
+      browse('__UPLOADS__');
     });
-
-    // Sidebar & Navigation handlers
-    el.btnNavUp.addEventListener('click', () => {
-      if (parentDir) loadDirectory(parentDir);
-    });
-    el.btnNavUploads.addEventListener('click', () => loadDirectory('__UPLOADS__'));
-    el.btnNavProject.addEventListener('click', () => loadDirectory('__PROJECT__'));
-    el.btnNavDrives.addEventListener('click', () => loadDirectory('__DRIVES__'));
-    el.btnRefresh.addEventListener('click', () => loadDirectory(currentDir));
-
-    updateDeleteLockUi();
-    checkStatusAndInit();
-  </script>
+})();
+</script>
 </body>
 </html>

@@ -463,11 +463,20 @@ app.get('/api/fs/browse', requireAuth, (req, res) => {
         const st = fs.statSync(fullPath);
         const isDir = st.isDirectory();
         if (!isDir && !st.isFile()) continue;
+        let itemCount = null;
+        if (isDir) {
+          try {
+            itemCount = fs.readdirSync(fullPath).filter((n) => !n.startsWith('.')).length;
+          } catch (_) {
+            itemCount = null;
+          }
+        }
         items.push({
           name: entry.name,
           path: fullPath,
           isDirectory: isDir,
           size: isDir ? 0 : st.size,
+          itemCount,
           mtime: st.mtime ? st.mtime.toISOString() : null,
           ext: isDir ? '' : path.extname(entry.name).toLowerCase(),
           deletable: ALLOW_SYSTEM_DELETE || isPathInside(fullPath, uploadsDir),

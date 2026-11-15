@@ -855,6 +855,14 @@ async function startServer() {
           const st = fs.statSync(fullPath);
           const isDir = st.isDirectory();
           if (!isDir && !st.isFile()) continue;
+          let itemCount = null;
+          if (isDir) {
+            try {
+              itemCount = fs.readdirSync(fullPath).filter((n) => !n.startsWith('.')).length;
+            } catch (_) {
+              itemCount = null;
+            }
+          }
           const isInsideUploads = (() => {
             const rel = path.relative(path.resolve(uploadsDir), path.resolve(fullPath));
             return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
@@ -864,6 +872,7 @@ async function startServer() {
             path: fullPath,
             isDirectory: isDir,
             size: isDir ? 0 : st.size,
+            itemCount,
             mtime: st.mtime ? st.mtime.toISOString() : null,
             ext: isDir ? '' : path.extname(entry.name).toLowerCase(),
             deletable: isInsideUploads,
