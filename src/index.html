@@ -951,7 +951,7 @@
       </div>
     </div>
 
-    <!-- 13. Pan & Zoom (Live PTZ) Modal (Solution B: Move Transition Plugin) -->
+    <!-- 13. Pan & Zoom (Live PTZ) Modal (Built-in Crop Filter) -->
     <div id="modal-ptz" class="blade-dialog-overlay">
       <div class="blade-dialog-content ptz-dialog-content">
         <div class="dialog-header-blade">
@@ -963,12 +963,12 @@
           <button id="btn-done-ptz" type="button" class="dialog-done-btn">Done</button>
         </div>
 
-        <!-- Missing Plugin Warning Banner (Displayed if Move Transition plugin is not detected) -->
-        <div id="ptz-plugin-warning" class="ptz-warning-banner" style="display: none;">
+        <!-- Missing Bounding Box Warning Banner (Displayed if scene item has OBS_BOUNDS_NONE) -->
+        <div id="ptz-bounds-warning" class="ptz-warning-banner" style="display: none;">
           <div class="ptz-warning-icon">⚠️</div>
           <div class="ptz-warning-text">
-            <strong>Move Transition plugin not detected in OBS.</strong>
-            <span>Please install the <a href="https://obsproject.com/forum/resources/move-transition.913/" target="_blank" rel="noopener noreferrer">Move Transition plugin</a> on your OBS host to enable automated PTZ source filters.</span>
+            <strong>No Bounding Box set on this scene item.</strong>
+            <span>Zooming via OBS's Crop filter will shrink the source instead of zooming in unless a Bounding Box (e.g. <em>Scale to inner bounds</em> or <em>Stretch to bounds</em>) is set in Transform.</span>
           </div>
         </div>
 
@@ -988,9 +988,11 @@
         <div id="ptz-status-banner" class="properties-status-banner" style="display: none;"></div>
 
         <!-- 1. Top Section: Clean Live Video Preview with Gesture Touch Surface -->
-        <div class="ptz-preview-wrapper">
+        <div id="ptz-preview-wrapper" class="ptz-preview-wrapper">
           <div id="ptz-gesture-viewport" class="ptz-gesture-viewport" title="Drag to Pan • Pinch or Wheel to Zoom">
-            <img id="ptz-live-img" class="ptz-live-img" alt="PTZ Live Preview" style="display: none;" />
+            <div id="ptz-crop-mask" class="ptz-crop-mask">
+              <img id="ptz-live-img" class="ptz-live-img" alt="PTZ Live Preview" style="display: none;" />
+            </div>
             
             <div id="ptz-loading-spinner" class="full-preview-loading" style="display: none;">
               <div class="spinner-blade"></div>
@@ -1094,30 +1096,6 @@
             </div>
           </div>
 
-          <!-- Move Transition Animation Settings -->
-          <div class="ptz-control-card">
-            <div class="ptz-card-header">
-              <span>Move Transition Settings</span>
-              <span id="ptz-duration-text" class="ptz-level-text">500 ms</span>
-            </div>
-            <div class="ptz-settings-row">
-              <div style="flex: 1;">
-                <label for="slider-ptz-duration" class="transform-label">Animation Glide Duration</label>
-                <input id="slider-ptz-duration" type="range" min="0" max="2000" step="100" value="500" class="ptz-slider" />
-              </div>
-              <div style="width: 140px;">
-                <label for="select-ptz-easing" class="transform-label">Easing Curve</label>
-                <select id="select-ptz-easing" class="input-blade select-compact" style="width: 100%;">
-                  <option value="ease_in_out">Ease In Out</option>
-                  <option value="ease_out">Ease Out</option>
-                  <option value="ease_in">Ease In</option>
-                  <option value="linear">Linear</option>
-                  <option value="cubic">Cubic</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
           <!-- Filter Presets Section -->
           <div class="ptz-control-card">
             <div class="ptz-card-header">
@@ -1128,7 +1106,7 @@
               </button>
             </div>
             <div id="ptz-presets-list-container" class="ptz-presets-list">
-              <!-- Populated dynamically with saved Move/Crop filters on this source -->
+              <!-- Populated dynamically with saved Crop/PTZ filters on this source -->
             </div>
           </div>
 
@@ -1152,7 +1130,7 @@
             <label style="font-size: 12px; color: var(--obs-text-gray);" for="input-ptz-preset-name">Preset Filter Name</label>
             <input id="input-ptz-preset-name" class="input-blade" style="width: 100%; margin-top: 4px;" placeholder="e.g. PTZ - Pastor Close-up" required />
             <div style="font-size: 11px; color: var(--obs-text-gray); margin-top: 4px;">
-              This creates a permanent Move filter in OBS Studio under this source so you can toggle it anytime.
+              This creates a permanent Crop/Pad filter in OBS Studio under this source so you can toggle it anytime.
             </div>
           </div>
           <div style="display: flex; gap: 8px; justify-content: flex-end;">

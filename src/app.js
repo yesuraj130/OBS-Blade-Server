@@ -261,13 +261,15 @@ const el = {
   btnBackPtz: document.getElementById('btn-back-ptz'),
   btnDonePtz: document.getElementById('btn-done-ptz'),
   ptzModalTitle: document.getElementById('ptz-modal-title'),
-  ptzPluginWarning: document.getElementById('ptz-plugin-warning'),
+  ptzBoundsWarning: document.getElementById('ptz-bounds-warning'),
   ptzSourceBadge: document.getElementById('ptz-source-badge'),
   ptzSceneBadge: document.getElementById('ptz-scene-badge'),
   ptzZoomIndicator: document.getElementById('ptz-zoom-indicator'),
   btnPtzRefreshFrame: document.getElementById('btn-ptz-refresh-frame'),
   ptzStatusBanner: document.getElementById('ptz-status-banner'),
+  ptzPreviewWrapper: document.getElementById('ptz-preview-wrapper'),
   ptzGestureViewport: document.getElementById('ptz-gesture-viewport'),
+  ptzCropMask: document.getElementById('ptz-crop-mask'),
   ptzLiveImg: document.getElementById('ptz-live-img'),
   ptzLoadingSpinner: document.getElementById('ptz-loading-spinner'),
   ptzPreviewFallback: document.getElementById('ptz-preview-fallback'),
@@ -285,9 +287,6 @@ const el = {
   hikPtzKnob: document.getElementById('hik-ptz-knob'),
   hikPanXText: document.getElementById('hik-pan-x-text'),
   hikPanYText: document.getElementById('hik-pan-y-text'),
-  sliderPtzDuration: document.getElementById('slider-ptz-duration'),
-  ptzDurationText: document.getElementById('ptz-duration-text'),
-  selectPtzEasing: document.getElementById('select-ptz-easing'),
   btnOpenSavePreset: document.getElementById('btn-open-save-preset'),
   ptzPresetsListContainer: document.getElementById('ptz-presets-list-container'),
   btnPtzReturnWide: document.getElementById('btn-ptz-return-wide'),
@@ -1913,6 +1912,8 @@ function setupEventListeners() {
     el.btnPtzPanUp,
     () => {
       if (!activePtzSession) return;
+      const geom = computePtzGeometry(activePtzSession);
+      if (geom.marginY <= 0.5) return;
       activePtzSession.hasPtzModified = true;
       activePtzSession.panY = Math.max(-1.0, Math.round((activePtzSession.panY - ptzPanStepSize) * 1000) / 1000);
       updatePtzUiIndicators();
@@ -1925,6 +1926,8 @@ function setupEventListeners() {
     el.btnPtzPanDown,
     () => {
       if (!activePtzSession) return;
+      const geom = computePtzGeometry(activePtzSession);
+      if (geom.marginY <= 0.5) return;
       activePtzSession.hasPtzModified = true;
       activePtzSession.panY = Math.min(1.0, Math.round((activePtzSession.panY + ptzPanStepSize) * 1000) / 1000);
       updatePtzUiIndicators();
@@ -1937,6 +1940,8 @@ function setupEventListeners() {
     el.btnPtzPanLeft,
     () => {
       if (!activePtzSession) return;
+      const geom = computePtzGeometry(activePtzSession);
+      if (geom.marginX <= 0.5) return;
       activePtzSession.hasPtzModified = true;
       activePtzSession.panX = Math.max(-1.0, Math.round((activePtzSession.panX - ptzPanStepSize) * 1000) / 1000);
       updatePtzUiIndicators();
@@ -1949,6 +1954,8 @@ function setupEventListeners() {
     el.btnPtzPanRight,
     () => {
       if (!activePtzSession) return;
+      const geom = computePtzGeometry(activePtzSession);
+      if (geom.marginX <= 0.5) return;
       activePtzSession.hasPtzModified = true;
       activePtzSession.panX = Math.min(1.0, Math.round((activePtzSession.panX + ptzPanStepSize) * 1000) / 1000);
       updatePtzUiIndicators();
@@ -1980,21 +1987,6 @@ function setupEventListeners() {
     });
   });
 
-  // Move Transition Glide Duration & Easing
-  if (el.sliderPtzDuration) {
-    el.sliderPtzDuration.addEventListener('input', () => {
-      const dur = parseInt(el.sliderPtzDuration.value, 10);
-      if (el.ptzDurationText) el.ptzDurationText.textContent = `${dur} ms`;
-      if (activePtzSession) activePtzSession.duration = dur;
-    });
-  }
-
-  if (el.selectPtzEasing) {
-    el.selectPtzEasing.addEventListener('change', () => {
-      if (activePtzSession) activePtzSession.easing = el.selectPtzEasing.value;
-    });
-  }
-
   // Return to Wide Action
   if (el.btnPtzReturnWide) {
     el.btnPtzReturnWide.addEventListener('click', async (e) => {
@@ -2007,9 +1999,6 @@ function setupEventListeners() {
   if (el.btnPtzApplyNow) {
     el.btnPtzApplyNow.addEventListener('click', async (e) => {
       e.preventDefault();
-      if (!isMovePluginInstalled) {
-        showPtzBanner('⚠️ Move Transition plugin not detected in OBS. Please install Move Transition plugin to have this action.', true);
-      }
       await dispatchPtzToObs();
       showPtzBanner('✓ PTZ framing applied to OBS Studio!', false);
     });
@@ -2019,9 +2008,6 @@ function setupEventListeners() {
   if (el.btnOpenSavePreset) {
     el.btnOpenSavePreset.addEventListener('click', (e) => {
       e.preventDefault();
-      if (!isMovePluginInstalled) {
-        showPtzBanner('⚠️ Move Transition plugin not detected. Please install Move Transition plugin to have this action.', true);
-      }
       openSavePtzPresetModal();
     });
   }
@@ -2041,6 +2027,13 @@ function setupEventListeners() {
       }
     });
   }
+
+  window.addEventListener('resize', () => {
+    if (activePtzSession && el.modalPtz?.classList.contains('open')) {
+      updatePtzViewportSize();
+      updatePtzUiIndicators();
+    }
+  });
 
   // Setup Gesture Viewport Handlers (Drag to Pan, Pinch to Zoom, Wheel)
   setupPtzGestureHandlers();
@@ -3747,13 +3740,12 @@ function applyPresetAction(preset) {
   syncTransformInputsFromDraft();
 }
 
-// --- Pan & Zoom (Live PTZ) Engine (Solution B: Move Transition Plugin) ---
+// --- Pan & Zoom (Live PTZ) Engine (Built-in Crop Filter) ---
 const LIVE_PTZ_FILTER_NAME = 'Temporary filter for Live PTZ (Do Not Use)';
 const LEGACY_PTZ_FILTER_NAMES = ['Blade Live PTZ', 'Live PTZ (Move Transition)'];
 
 let activePtzSession = null;
 let ptzPanStepSize = 0.06;
-let isMovePluginInstalled = true;
 let ptzDispatchTimeout = null;
 let lastPtzDispatchTime = 0;
 const activePtzPointers = new Map();
@@ -3777,58 +3769,6 @@ function showPtzBanner(message, isError = false) {
   }, 4000);
 }
 
-async function checkMovePluginStatus() {
-  try {
-    let hasMove = false;
-    const res = await state.obs.getSceneTransitionList().catch(() => null);
-    const transitions = res?.transitions || [];
-    if (
-      transitions.some(
-        (t) =>
-          (t.transitionKind && t.transitionKind.toLowerCase().includes('move')) ||
-          (t.transitionName && t.transitionName.toLowerCase().includes('move'))
-      )
-    ) {
-      hasMove = true;
-    }
-
-    if (!hasMove) {
-      const kindsRes = await state.obs.getTransitionKindList().catch(() => null);
-      if (kindsRes?.transitionKinds?.some((k) => k.toLowerCase().includes('move'))) {
-        hasMove = true;
-      }
-    }
-
-    if (!hasMove && activePtzSession?.sourceName) {
-      const filtersRes = await state.obs.getSourceFilterList(activePtzSession.sourceName).catch(() => null);
-      if (
-        filtersRes?.filters?.some(
-          (f) =>
-            (f.filterKind && f.filterKind.toLowerCase().includes('move')) ||
-            (f.filterName && f.filterName.toLowerCase().includes('move'))
-        )
-      ) {
-        hasMove = true;
-      }
-    }
-
-    isMovePluginInstalled = hasMove;
-    if (el.ptzPluginWarning) {
-      el.ptzPluginWarning.style.display = hasMove ? 'none' : 'flex';
-    }
-
-    if (!hasMove) {
-      showPtzBanner('⚠️ Move Transition plugin not detected in OBS. Please install the plugin on your host to enable this action.', true);
-    }
-  } catch (err) {
-    console.warn('[Check Move Plugin Error]', err);
-    isMovePluginInstalled = true;
-    if (el.ptzPluginWarning) {
-      el.ptzPluginWarning.style.display = 'none';
-    }
-  }
-}
-
 async function openPtzModal(sceneName, item) {
   if (!item || !item.sourceName) return;
 
@@ -3844,10 +3784,16 @@ async function openPtzModal(sceneName, item) {
     zoom: 1.0,
     panX: 0,
     panY: 0,
-    duration: 500,
-    easing: 'ease_in_out',
     sourceWidth: 1920,
     sourceHeight: 1080,
+    boundsType: 'OBS_BOUNDS_NONE',
+    boundsWidth: 0,
+    boundsHeight: 0,
+    boundsAlignment: 0,
+    viewportWidth: 0,
+    viewportHeight: 0,
+    dispScaleX: 1,
+    dispScaleY: 1,
     hasPtzModified: false,
   };
 
@@ -3855,11 +3801,24 @@ async function openPtzModal(sceneName, item) {
     if (item.sceneItemId != null) {
       const transRes = await state.obs.getSceneItemTransform(resolvedScene, item.sceneItemId).catch(() => null);
       if (transRes?.sceneItemTransform) {
-        activePtzSession.sourceWidth = transRes.sceneItemTransform.sourceWidth || 1920;
-        activePtzSession.sourceHeight = transRes.sceneItemTransform.sourceHeight || 1080;
+        const trans = transRes.sceneItemTransform;
+        activePtzSession.sourceWidth = trans.sourceWidth || 1920;
+        activePtzSession.sourceHeight = trans.sourceHeight || 1080;
+        activePtzSession.boundsType = trans.boundsType || 'OBS_BOUNDS_NONE';
+        activePtzSession.boundsWidth = Number(trans.boundsWidth || 0);
+        activePtzSession.boundsHeight = Number(trans.boundsHeight || 0);
+        activePtzSession.boundsAlignment = Number(trans.boundsAlignment ?? 0);
       }
     }
   } catch (_) {}
+
+  const hasValidBounds =
+    activePtzSession.boundsType !== 'OBS_BOUNDS_NONE' &&
+    activePtzSession.boundsWidth > 0 &&
+    activePtzSession.boundsHeight > 0;
+  if (el.ptzBoundsWarning) {
+    el.ptzBoundsWarning.style.display = hasValidBounds ? 'none' : 'flex';
+  }
 
   if (el.ptzModalTitle) {
     el.ptzModalTitle.textContent = `Pan & Zoom: ${item.sourceName}`;
@@ -3871,9 +3830,6 @@ async function openPtzModal(sceneName, item) {
     el.ptzSceneBadge.textContent = `Scene: ${resolvedScene}`;
   }
   if (el.sliderPtzZoom) el.sliderPtzZoom.value = '1.0';
-  if (el.sliderPtzDuration) el.sliderPtzDuration.value = '500';
-  if (el.ptzDurationText) el.ptzDurationText.textContent = '500 ms';
-  if (el.selectPtzEasing) el.selectPtzEasing.value = 'ease_in_out';
 
   // Immediate frame display so preview is never blank on top
   if (el.ptzLiveImg) {
@@ -3889,19 +3845,17 @@ async function openPtzModal(sceneName, item) {
     }
   }
 
-  updatePtzUiIndicators();
-
   if (el.modalPtz) {
     el.modalPtz.classList.add('open');
   }
 
-  // 1. Check Move Transition plugin in OBS
-  await checkMovePluginStatus();
+  updatePtzViewportSize();
+  updatePtzUiIndicators();
 
-  // 2. Refresh live preview frame
+  // 1. Refresh live preview frame
   fetchPtzPreviewFrame(item.sourceName);
 
-  // 3. Load existing PTZ filter presets on this source
+  // 2. Load existing PTZ filter presets on this source
   await loadPtzPresetsList(item.sourceName);
 }
 
@@ -4019,23 +3973,119 @@ async function fetchPtzPreviewFrame(sourceName) {
   }
 }
 
-function calculatePtzCrop(zoom, panX, panY, srcW = 1920, srcH = 1080) {
-  // User requirement: "zoom max limit change to 20"
-  const z = Math.max(1.0, Math.min(20.0, zoom));
-  const visW = srcW / z;
-  const visH = srcH / z;
-  const marginX = (srcW - visW) / 2;
-  const marginY = (srcH - visH) / 2;
+function updatePtzViewportSize() {
+  if (!activePtzSession || !el.ptzPreviewWrapper || !el.ptzGestureViewport) return;
+  const { boundsType, boundsWidth, boundsHeight, sourceWidth, sourceHeight } = activePtzSession;
+  const hasBounds = boundsType !== 'OBS_BOUNDS_NONE' && boundsWidth > 0 && boundsHeight > 0;
+  const targetAr = hasBounds
+    ? boundsWidth / boundsHeight
+    : Math.max(0.1, (sourceWidth || 1920) / (sourceHeight || 1080));
 
-  const px = Math.max(-1.0, Math.min(1.0, panX));
-  const py = Math.max(-1.0, Math.min(1.0, panY));
+  const wrapStyle = getComputedStyle(el.ptzPreviewWrapper);
+  const padX = (parseFloat(wrapStyle.paddingLeft) || 0) + (parseFloat(wrapStyle.paddingRight) || 0);
+  const padY = (parseFloat(wrapStyle.paddingTop) || 0) + (parseFloat(wrapStyle.paddingBottom) || 0);
+  const availW = Math.max(100, el.ptzPreviewWrapper.clientWidth - padX);
+  const availH = Math.max(100, el.ptzPreviewWrapper.clientHeight - padY);
+  const availAr = availW / availH;
+
+  let vpW, vpH;
+  if (targetAr >= availAr) {
+    vpW = availW;
+    vpH = availW / targetAr;
+  } else {
+    vpH = availH;
+    vpW = availH * targetAr;
+  }
+
+  el.ptzGestureViewport.style.width = `${Math.round(vpW)}px`;
+  el.ptzGestureViewport.style.height = `${Math.round(vpH)}px`;
+  activePtzSession.viewportWidth = vpW;
+  activePtzSession.viewportHeight = vpH;
+}
+
+function computePtzGeometry(session) {
+  const srcW = Math.max(1, session?.sourceWidth || 1920);
+  const srcH = Math.max(1, session?.sourceHeight || 1080);
+  const z = Math.max(1.0, Math.min(20.0, session?.zoom || 1.0));
+  const boundsType = session?.boundsType || 'OBS_BOUNDS_NONE';
+  const hasBounds = boundsType !== 'OBS_BOUNDS_NONE' && (session?.boundsWidth || 0) > 0 && (session?.boundsHeight || 0) > 0;
+  const boxW = hasBounds ? session.boundsWidth : srcW;
+  const boxH = hasBounds ? session.boundsHeight : srcH;
+
+  let visW = srcW / z;
+  let visH = srcH / z;
+
+  if (hasBounds) {
+    if (boundsType === 'OBS_BOUNDS_SCALE_INNER') {
+      const scale1 = Math.min(boxW / srcW, boxH / srcH);
+      const targetScale = scale1 * z;
+      visW = Math.min(srcW, boxW / targetScale);
+      visH = Math.min(srcH, boxH / targetScale);
+    } else if (boundsType === 'OBS_BOUNDS_SCALE_TO_WIDTH') {
+      const scale1 = boxW / srcW;
+      const targetScale = scale1 * z;
+      visW = srcW / z;
+      visH = srcH * scale1 <= boxH ? Math.min(srcH, boxH / targetScale) : srcH / z;
+    } else if (boundsType === 'OBS_BOUNDS_SCALE_TO_HEIGHT') {
+      const scale1 = boxH / srcH;
+      const targetScale = scale1 * z;
+      visH = srcH / z;
+      visW = srcW * scale1 <= boxW ? Math.min(srcW, boxW / targetScale) : srcW / z;
+    }
+  }
+
+  visW = Math.max(1, Math.min(srcW, visW));
+  visH = Math.max(1, Math.min(srcH, visH));
+
+  const marginX = Math.max(0, (srcW - visW) / 2);
+  const marginY = Math.max(0, (srcH - visH) / 2);
+
+  const px = marginX > 0.5 ? Math.max(-1.0, Math.min(1.0, session?.panX || 0)) : 0;
+  const py = marginY > 0.5 ? Math.max(-1.0, Math.min(1.0, session?.panY || 0)) : 0;
 
   const left = Math.max(0, Math.round(marginX * (1 + px)));
   const right = Math.max(0, Math.round(marginX * (1 - px)));
   const top = Math.max(0, Math.round(marginY * (1 + py)));
   const bottom = Math.max(0, Math.round(marginY * (1 - py)));
 
-  return { left, right, top, bottom, relative: true };
+  return {
+    left,
+    right,
+    top,
+    bottom,
+    relative: true,
+    visW: Math.max(1, srcW - left - right),
+    visH: Math.max(1, srcH - top - bottom),
+    marginX,
+    marginY,
+    srcW,
+    srcH,
+    boxW,
+    boxH,
+    hasBounds,
+    boundsType,
+    boundsAlignment: Number(session?.boundsAlignment ?? 0),
+  };
+}
+
+function calculatePtzCrop(zoom, panX, panY, srcW = 1920, srcH = 1080, boundsType = 'OBS_BOUNDS_NONE', boxW = 0, boxH = 0) {
+  const geom = computePtzGeometry({
+    zoom,
+    panX,
+    panY,
+    sourceWidth: srcW,
+    sourceHeight: srcH,
+    boundsType,
+    boundsWidth: boxW,
+    boundsHeight: boxH,
+  });
+  return {
+    left: geom.left,
+    right: geom.right,
+    top: geom.top,
+    bottom: geom.bottom,
+    relative: true,
+  };
 }
 
 function updatePtzUiIndicators() {
@@ -4051,25 +4101,82 @@ function updatePtzUiIndicators() {
     el.sliderPtzZoom.value = String(z);
   }
 
+  const geom = computePtzGeometry(activePtzSession);
+  if (geom.marginX <= 0.5 && activePtzSession.panX !== 0) activePtzSession.panX = 0;
+  if (geom.marginY <= 0.5 && activePtzSession.panY !== 0) activePtzSession.panY = 0;
+
   // Update visual framing guide crosshair position
   const crossH = document.querySelector('.ptz-crosshair-h');
   const crossV = document.querySelector('.ptz-crosshair-v');
   if (crossH) {
-    const normY = 50 + activePtzSession.panY * 30;
+    const normY = 50 + (geom.marginY > 0.5 ? activePtzSession.panY : 0) * 30;
     crossH.style.top = `${normY}%`;
   }
   if (crossV) {
-    const normX = 50 + activePtzSession.panX * 30;
+    const normX = 50 + (geom.marginX > 0.5 ? activePtzSession.panX : 0) * 30;
     crossV.style.left = `${normX}%`;
   }
 
-  // Live CSS transform on preview image for immediate silky-smooth interactive feedback
-  if (el.ptzLiveImg && el.ptzLiveImg.style.display !== 'none') {
-    const maxTranslate = (1 - 1 / Math.max(1, z)) * 50;
-    const transX = -activePtzSession.panX * maxTranslate;
-    const transY = -activePtzSession.panY * maxTranslate;
-    el.ptzLiveImg.style.transform = `scale(${z}) translate(${transX}%, ${transY}%)`;
-    el.ptzLiveImg.style.transformOrigin = 'center center';
+  // 1:1 WYSIWYG preview matching OBS bounding box + crop filter
+  if (el.ptzCropMask && el.ptzLiveImg && el.ptzGestureViewport) {
+    if (!activePtzSession.viewportWidth || !activePtzSession.viewportHeight) {
+      updatePtzViewportSize();
+    }
+    const vpW = activePtzSession.viewportWidth || el.ptzGestureViewport.clientWidth || 320;
+    const vpH = activePtzSession.viewportHeight || el.ptzGestureViewport.clientHeight || 180;
+
+    let scaleX;
+    let scaleY;
+    if (!geom.hasBounds) {
+      const s = Math.min(vpW / geom.srcW, vpH / geom.srcH);
+      scaleX = s;
+      scaleY = s;
+    } else if (geom.boundsType === 'OBS_BOUNDS_STRETCH') {
+      scaleX = vpW / geom.visW;
+      scaleY = vpH / geom.visH;
+    } else if (geom.boundsType === 'OBS_BOUNDS_SCALE_OUTER') {
+      const s = Math.max(vpW / geom.visW, vpH / geom.visH);
+      scaleX = s;
+      scaleY = s;
+    } else if (geom.boundsType === 'OBS_BOUNDS_SCALE_TO_WIDTH') {
+      const s = vpW / geom.visW;
+      scaleX = s;
+      scaleY = s;
+    } else if (geom.boundsType === 'OBS_BOUNDS_SCALE_TO_HEIGHT') {
+      const s = vpH / geom.visH;
+      scaleX = s;
+      scaleY = s;
+    } else {
+      const s = Math.min(vpW / geom.visW, vpH / geom.visH);
+      scaleX = s;
+      scaleY = s;
+    }
+
+    const maskW = geom.visW * scaleX;
+    const maskH = geom.visH * scaleY;
+    const align = geom.boundsAlignment || 0;
+
+    let maskLeft = (vpW - maskW) / 2;
+    if ((align & 1) !== 0) maskLeft = 0;
+    else if ((align & 2) !== 0) maskLeft = vpW - maskW;
+
+    let maskTop = (vpH - maskH) / 2;
+    if ((align & 4) !== 0) maskTop = 0;
+    else if ((align & 8) !== 0) maskTop = vpH - maskH;
+
+    el.ptzCropMask.style.width = `${maskW}px`;
+    el.ptzCropMask.style.height = `${maskH}px`;
+    el.ptzCropMask.style.left = `${maskLeft}px`;
+    el.ptzCropMask.style.top = `${maskTop}px`;
+
+    el.ptzLiveImg.style.width = `${geom.srcW * scaleX}px`;
+    el.ptzLiveImg.style.height = `${geom.srcH * scaleY}px`;
+    el.ptzLiveImg.style.left = `${-geom.left * scaleX}px`;
+    el.ptzLiveImg.style.top = `${-geom.top * scaleY}px`;
+    el.ptzLiveImg.style.transform = '';
+
+    activePtzSession.dispScaleX = scaleX;
+    activePtzSession.dispScaleY = scaleY;
   }
 
   // Update Hik-Connect 360° red joystick puck and coordinates
@@ -4095,10 +4202,11 @@ let hasQueuedPtzDispatch = false;
 
 async function executePtzDispatch() {
   if (!activePtzSession) return;
-  const { sourceName, zoom, panX, panY, sourceWidth, sourceHeight } = activePtzSession;
+  const { sourceName } = activePtzSession;
+  const geom = computePtzGeometry(activePtzSession);
 
-  // If zoomed all the way out (no scaling) and pan is at center, remove the temporary filter as requested
-  if (zoom <= 1.001 && Math.abs(panX) < 0.005 && Math.abs(panY) < 0.005) {
+  // If zoomed all the way out (no crop on any edge), remove the temporary filter as requested
+  if (geom.left === 0 && geom.right === 0 && geom.top === 0 && geom.bottom === 0) {
     await state.obs.removeSourceFilter(sourceName, LIVE_PTZ_FILTER_NAME).catch(() => null);
     for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
       await state.obs.removeSourceFilter(sourceName, legacy).catch(() => null);
@@ -4106,7 +4214,13 @@ async function executePtzDispatch() {
     return;
   }
 
-  const cropSettings = calculatePtzCrop(zoom, panX, panY, sourceWidth, sourceHeight);
+  const cropSettings = {
+    left: geom.left,
+    right: geom.right,
+    top: geom.top,
+    bottom: geom.bottom,
+    relative: true,
+  };
 
   // Fast path: Try updating existing filter settings directly
   try {
@@ -4160,9 +4274,6 @@ async function returnToWideAction() {
   activePtzSession.panY = 0;
   activePtzSession.hasPtzModified = true;
   updatePtzUiIndicators();
-  if (el.ptzLiveImg) {
-    el.ptzLiveImg.style.transform = '';
-  }
 
   const { sourceName } = activePtzSession;
   try {
@@ -4318,8 +4429,15 @@ async function saveCurrentPtzPreset(presetName) {
   const cleanName = presetName.trim();
   if (!cleanName) return;
 
-  const { sourceName, zoom, panX, panY, sourceWidth, sourceHeight } = activePtzSession;
-  const cropSettings = calculatePtzCrop(zoom, panX, panY, sourceWidth, sourceHeight);
+  const { sourceName } = activePtzSession;
+  const geom = computePtzGeometry(activePtzSession);
+  const cropSettings = {
+    left: geom.left,
+    right: geom.right,
+    top: geom.top,
+    bottom: geom.bottom,
+    relative: true,
+  };
 
   try {
     await state.obs.createSourceFilter(sourceName, cleanName, 'crop_filter', cropSettings);
@@ -4395,18 +4513,29 @@ function setupPtzGestureHandlers() {
         queuePtzUpdate(false);
       }
     } else if (activePtzPointers.size === 1) {
-      // 1-Finger Drag to Pan
+      // 1-Finger Drag to Pan (1:1 pixel-matched to cropped preview)
       const prev = activePtzPointers.get(e.pointerId);
       const deltaX = e.clientX - prev.x;
       const deltaY = e.clientY - prev.y;
       activePtzPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-      const rect = el.ptzGestureViewport.getBoundingClientRect();
-      const sensitivity = 2.0 / (activePtzSession.zoom * Math.max(100, rect.width));
+      const geom = computePtzGeometry(activePtzSession);
+      const scaleX = activePtzSession.dispScaleX || 1;
+      const scaleY = activePtzSession.dispScaleY || 1;
 
       activePtzSession.hasPtzModified = true;
-      activePtzSession.panX = Math.max(-1.0, Math.min(1.0, activePtzSession.panX - deltaX * sensitivity * 1.5));
-      activePtzSession.panY = Math.max(-1.0, Math.min(1.0, activePtzSession.panY - deltaY * sensitivity * 1.5));
+      if (geom.marginX > 0.5) {
+        const stepX = deltaX / (geom.marginX * scaleX);
+        activePtzSession.panX = Math.max(-1.0, Math.min(1.0, activePtzSession.panX - stepX));
+      } else {
+        activePtzSession.panX = 0;
+      }
+      if (geom.marginY > 0.5) {
+        const stepY = deltaY / (geom.marginY * scaleY);
+        activePtzSession.panY = Math.max(-1.0, Math.min(1.0, activePtzSession.panY - stepY));
+      } else {
+        activePtzSession.panY = 0;
+      }
 
       queuePtzUpdate(false);
     }
@@ -4469,11 +4598,20 @@ function startHikJoystickLoop() {
         const dirX = hikJoystickDeflection.x / mag;
         const dirY = hikJoystickDeflection.y / mag;
 
+        const geom = computePtzGeometry(activePtzSession);
         const prevX = activePtzSession.panX;
         const prevY = activePtzSession.panY;
 
-        activePtzSession.panX = Math.max(-1.0, Math.min(1.0, activePtzSession.panX + dirX * speed * dt));
-        activePtzSession.panY = Math.max(-1.0, Math.min(1.0, activePtzSession.panY + dirY * speed * dt));
+        if (geom.marginX > 0.5) {
+          activePtzSession.panX = Math.max(-1.0, Math.min(1.0, activePtzSession.panX + dirX * speed * dt));
+        } else {
+          activePtzSession.panX = 0;
+        }
+        if (geom.marginY > 0.5) {
+          activePtzSession.panY = Math.max(-1.0, Math.min(1.0, activePtzSession.panY + dirY * speed * dt));
+        } else {
+          activePtzSession.panY = 0;
+        }
 
         if (activePtzSession.panX !== prevX || activePtzSession.panY !== prevY) {
           activePtzSession.hasPtzModified = true;
