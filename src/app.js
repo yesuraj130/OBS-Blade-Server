@@ -809,8 +809,17 @@ function setupObsEvents() {
   });
 
   state.obs.on('filterChanged', (data) => {
+    if (data?.sourceName) {
+      thumbnailCache.delete(data.sourceName);
+    }
     if (activeFiltersTarget && activeFiltersTarget.name === data.sourceName) {
       loadFiltersForTarget(activeFiltersTarget);
+    }
+  });
+
+  state.obs.on('filterSettingsChanged', (data) => {
+    if (data?.sourceName) {
+      thumbnailCache.delete(data.sourceName);
     }
   });
 
@@ -2719,6 +2728,228 @@ function renderCategoryGrid() {
 // 5. Load and Render Sources in Pure Black List
 // In-memory cache for source thumbnails: sourceName -> { dataUrl, isError, timestamp }
 const thumbnailCache = new Map();
+// Cache of uncropped base source dimensions: sourceName -> { origW, origH }
+const sourceBaseSizeCache = new Map();
+let ptzScreenshotTrimCanvas = null;
+
+function isConnectedToLocalSimulator() {
+  try {
+    const rawUrl = state.obs?.url || state.url || '';
+    if (!rawUrl) return false;
+    const parsed = new URL(rawUrl, location.href);
+    return parsed.pathname === '/obs-ws';
+  } catch (_) {
+    return false;
+  }
+}
+
+function summarizeSourceCropFilters(filters = []) {
+  let totalCropX = 0;
+  let totalCropY = 0;
+  let hasActiveCropFilter = false;
+  let allRelative = true;
+  let ptzFilter = null;
+
+  for (const f of filters) {
+    if (f.filterName === LIVE_PTZ_FILTER_NAME || (!ptzFilter && LEGACY_PTZ_FILTER_NAMES.includes(f.filterName))) {
+      ptzFilter = f;
+    }
+    if (f.filterKind === 'crop_filter' && f.filterEnabled !== false && f.filterSettings) {
+      hasActiveCropFilter = true;
+      const s = f.filterSettings;
+      if (s.relative === false) {
+        allRelative = false;
+      } else {
+        totalCropX += Math.max(0, Number(s.left || 0)) + Math.max(0, Number(s.right || 0));
+        totalCropY += Math.max(0, Number(s.top || 0)) + Math.max(0, Number(s.bottom || 0));
+      }
+    }
+  }
+
+  return { ptzFilter, totalCropX, totalCropY, hasActiveCropFilter, allRelative };
+}
+
+function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (err) => reject(err);
+    img.src = src;
+  });
+}
+
+async function trimCroppedObsScreenshot(dataUrl, fracW, fracH, options = {}) {
+  const safeFracW = Math.max(0.001, Math.min(1, Number(fracW) || 1));
+  const safeFracH = Math.max(0.001, Math.min(1, Number(fracH) || 1));
+
+  if (!dataUrl || dataUrl.startsWith('data:image/svg') || (safeFracW >= 0.998 && safeFracH >= 0.998)) {
+    return { dataUrl, wasTrimmed: false, natW: 0, natH: 0 };
+  }
+
+  try {
+    const img = await loadImageElement(dataUrl);
+    const natW = img.naturalWidth || 0;
+    const natH = img.naturalHeight || 0;
+    if (!natW || !natH) {
+      return { dataUrl, wasTrimmed: false, natW: 0, natH: 0 };
+    }
+
+    const natRatio = natW / natH;
+    if (
+      options.visRatio &&
+      options.origRatio &&
+      Math.abs(natRatio - options.visRatio) < 0.02 &&
+      Math.abs(options.visRatio - options.origRatio) > 0.05
+    ) {
+      return { dataUrl, wasTrimmed: false, natW, natH };
+    }
+
+    const cropW = Math.max(1, Math.min(natW, Math.round(natW * safeFracW)));
+    const cropH = Math.max(1, Math.min(natH, Math.round(natH * safeFracH)));
+    if (cropW >= natW && cropH >= natH) {
+      return { dataUrl, wasTrimmed: false, natW, natH };
+    }
+
+    if (!ptzScreenshotTrimCanvas) {
+      ptzScreenshotTrimCanvas = document.createElement('canvas');
+    }
+    const canvas = ptzScreenshotTrimCanvas;
+    canvas.width = natW;
+    canvas.height = natH;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+      return { dataUrl, wasTrimmed: false, natW, natH };
+    }
+
+    ctx.clearRect(0, 0, natW, natH);
+    ctx.drawImage(img, 0, 0, natW, natH);
+
+    // Confirm outer right/bottom band is black OBS padding before trimming
+    let sampleSum = 0;
+    let sampleCount = 0;
+    const samplePixelMax = (px, py) => {
+      const d = ctx.getImageData(px, py, 1, 1).data;
+      sampleSum += Math.max(d[0], d[1], d[2]);
+      sampleCount++;
+    };
+
+    if (natW - cropW >= 2) {
+      const sx = Math.min(natW - 1, cropW + Math.floor((natW - cropW) / 2));
+      for (let k = 0; k < 6; k++) {
+        const sy = Math.min(cropH - 1, Math.floor(((k + 0.5) / 6) * cropH));
+        samplePixelMax(sx, Math.max(0, sy));
+      }
+    }
+    if (natH - cropH >= 2) {
+      const sy = Math.min(natH - 1, cropH + Math.floor((natH - cropH) / 2));
+      for (let k = 0; k < 6; k++) {
+        const sx = Math.min(cropW - 1, Math.floor(((k + 0.5) / 6) * cropW));
+        samplePixelMax(Math.max(0, sx), sy);
+      }
+    }
+
+    const avgOuterMax = sampleCount > 0 ? sampleSum / sampleCount : 255;
+    if (avgOuterMax > 24) {
+      return { dataUrl, wasTrimmed: false, natW, natH };
+    }
+
+    canvas.width = cropW;
+    canvas.height = cropH;
+    ctx.clearRect(0, 0, cropW, cropH);
+    ctx.drawImage(img, 0, 0, cropW, cropH, 0, 0, cropW, cropH);
+
+    const trimmedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    return { dataUrl: trimmedDataUrl, wasTrimmed: true, natW: cropW, natH: cropH };
+  } catch (_) {
+    return { dataUrl, wasTrimmed: false, natW: 0, natH: 0 };
+  }
+}
+
+async function fetchCroppedSourceScreenshot(sourceName, imageWidth, options = {}) {
+  const isSim = isConnectedToLocalSimulator();
+  let resolvedScene = options.sceneName || null;
+  let resolvedItemId = options.sceneItemId ?? null;
+
+  if (!options.isScene && resolvedItemId == null && Array.isArray(state.sceneItems)) {
+    const match = state.sceneItems.find((i) => i.sourceName === sourceName);
+    if (match) {
+      resolvedItemId = match.sceneItemId;
+      if (!resolvedScene || resolvedScene === '__CURRENT__') {
+        resolvedScene = getCurrentTargetScene();
+      }
+    }
+  } else if (resolvedScene === '__CURRENT__') {
+    resolvedScene = getCurrentTargetScene();
+  }
+
+  const cachedBase = sourceBaseSizeCache.get(sourceName);
+  const needTransform =
+    !isSim &&
+    !options.isScene &&
+    resolvedScene &&
+    resolvedItemId != null &&
+    (!options.reuseCachedBaseSize || !cachedBase);
+
+  const [shotRes, filterRes, transRes] = await Promise.all([
+    state.obs.getSourceScreenshot(sourceName, 'jpg', imageWidth),
+    isSim ? Promise.resolve(null) : state.obs.getSourceFilterList(sourceName).catch(() => null),
+    needTransform
+      ? state.obs.getSceneItemTransform(resolvedScene, resolvedItemId).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  if (!shotRes || !shotRes.imageData) {
+    return null;
+  }
+
+  if (isSim) {
+    return { dataUrl: shotRes.imageData, wasTrimmed: false };
+  }
+
+  const filters = filterRes?.filters || [];
+  const { totalCropX, totalCropY, hasActiveCropFilter, allRelative } = summarizeSourceCropFilters(filters);
+  const trans = transRes?.sceneItemTransform || null;
+
+  if (!hasActiveCropFilter) {
+    if (trans && trans.sourceWidth > 0 && trans.sourceHeight > 0) {
+      sourceBaseSizeCache.set(sourceName, {
+        origW: Number(trans.sourceWidth),
+        origH: Number(trans.sourceHeight),
+      });
+    }
+    return { dataUrl: shotRes.imageData, wasTrimmed: false };
+  }
+
+  let origW = cachedBase?.origW || null;
+  let origH = cachedBase?.origH || null;
+  let visW = null;
+  let visH = null;
+
+  if (trans && trans.sourceWidth != null && trans.sourceHeight != null) {
+    visW = Math.max(1, Number(trans.sourceWidth));
+    visH = Math.max(1, Number(trans.sourceHeight));
+    if (allRelative) {
+      origW = Math.max(visW, visW + totalCropX);
+      origH = Math.max(visH, visH + totalCropY);
+      sourceBaseSizeCache.set(sourceName, { origW, origH });
+    }
+  } else if (origW && origH && allRelative) {
+    visW = Math.max(1, origW - totalCropX);
+    visH = Math.max(1, origH - totalCropY);
+  }
+
+  if (origW && origH && visW && visH && (visW < origW || visH < origH)) {
+    const trimmed = await trimCroppedObsScreenshot(
+      shotRes.imageData,
+      visW / origW,
+      visH / origH,
+      { origRatio: origW / origH, visRatio: visW / visH }
+    );
+    return { dataUrl: trimmed.dataUrl, wasTrimmed: trimmed.wasTrimmed };
+  }
+
+  return { dataUrl: shotRes.imageData, wasTrimmed: false };
+}
 
 /**
  * Determine high-level source category for type-specific fallback icons
@@ -2877,7 +3108,7 @@ function getTypeIconSvg(category) {
  * Load source thumbnail dynamically via OBS WebSocket GetSourceScreenshot
  * Falls back to generic category icon if unavailable or error
  */
-async function loadSourceThumbnail(sourceName, category, imgEl, fallbackEl) {
+async function loadSourceThumbnail(sourceName, category, imgEl, fallbackEl, sceneName = null, sceneItemId = null) {
   // Audio sources don't produce visual frames; immediately show fallback icon
   if (category === 'audio') {
     imgEl.style.display = 'none';
@@ -2901,10 +3132,10 @@ async function loadSourceThumbnail(sourceName, category, imgEl, fallbackEl) {
   }
 
   try {
-    const res = await state.obs.getSourceScreenshot(sourceName, 'jpg', 96);
-    if (res && res.imageData) {
-      thumbnailCache.set(sourceName, { dataUrl: res.imageData, timestamp: now });
-      imgEl.src = res.imageData;
+    const res = await fetchCroppedSourceScreenshot(sourceName, 96, { sceneName, sceneItemId });
+    if (res && res.dataUrl) {
+      thumbnailCache.set(sourceName, { dataUrl: res.dataUrl, timestamp: now });
+      imgEl.src = res.dataUrl;
       imgEl.onload = () => {
         imgEl.style.display = 'block';
         fallbackEl.style.display = 'none';
@@ -3000,7 +3231,7 @@ function renderSourcesList(sceneName, items) {
     // Load actual thumbnail or display fallback icon
     const thumbImg = row.querySelector('.source-thumb-img');
     const fallbackBox = row.querySelector('.source-type-icon-fallback');
-    loadSourceThumbnail(item.sourceName, category, thumbImg, fallbackBox);
+    loadSourceThumbnail(item.sourceName, category, thumbImg, fallbackBox, sceneName, item.sceneItemId);
 
     // Single tap / click on thumbnail opens full preview of source (latest frame)
     const thumbBox = row.querySelector('.source-thumb-box');
@@ -3284,11 +3515,24 @@ async function fetchFullPreviewFrame(sourceName, isSilentAuto = false) {
     if (!isSilentAuto && el.fullPreviewLoading) {
       el.fullPreviewLoading.style.display = 'flex';
     }
-    // Request high-resolution frame (1280px width)
-    const res = await state.obs.getSourceScreenshot(sourceName, 'jpg', 1280);
-    if (res && res.imageData) {
+    const targetItem = activePreviewTarget?.item || null;
+    const targetScene = activePreviewTarget?.sceneName || null;
+    const isScene =
+      targetItem?.inputKind === 'scene' ||
+      (targetItem?.sourceName === targetScene && targetItem?.sceneItemId == null);
+
+    // Request high-resolution frame (1280px width) and trim any OBS crop padding
+    const res = await fetchCroppedSourceScreenshot(sourceName, 1280, {
+      sceneName: targetScene,
+      sceneItemId: targetItem?.sceneItemId ?? null,
+      isScene,
+      reuseCachedBaseSize: isSilentAuto,
+    });
+    if (!activePreviewTarget || activePreviewTarget.item?.sourceName !== sourceName) return;
+
+    if (res && res.dataUrl) {
       if (el.fullPreviewImg) {
-        el.fullPreviewImg.src = res.imageData;
+        el.fullPreviewImg.src = res.dataUrl;
         el.fullPreviewImg.style.display = 'block';
       }
       if (el.fullPreviewFallback) {
@@ -3301,14 +3545,14 @@ async function fetchFullPreviewFrame(sourceName, isSilentAuto = false) {
         el.fullPreviewStatusText.textContent = isSilentAuto ? 'LIVE (5 FPS)' : 'LATEST FRAME';
       }
       // Update cache
-      thumbnailCache.set(sourceName, { dataUrl: res.imageData, timestamp: Date.now() });
+      thumbnailCache.set(sourceName, { dataUrl: res.dataUrl, timestamp: Date.now() });
 
       // Update thumbnail img in source list if present
       const listThumbs = document.querySelectorAll(
         `[data-source-name="${CSS.escape(sourceName)}"] .source-thumb-img`
       );
       listThumbs.forEach((img) => {
-        img.src = res.imageData;
+        img.src = res.dataUrl;
         img.style.display = 'block';
         const fallback = img.parentElement?.querySelector('.source-type-icon-fallback');
         if (fallback) fallback.style.display = 'none';
@@ -3769,6 +4013,43 @@ function showPtzBanner(message, isError = false) {
   }, 4000);
 }
 
+function invertPtzCrop(crop, srcW = 1920, srcH = 1080, boundsType = 'OBS_BOUNDS_NONE', boxW = 0, boxH = 0) {
+  const left = Math.max(0, Number(crop?.left || 0));
+  const right = Math.max(0, Number(crop?.right || 0));
+  const top = Math.max(0, Number(crop?.top || 0));
+  const bottom = Math.max(0, Number(crop?.bottom || 0));
+
+  const visW = Math.max(1, srcW - left - right);
+  const visH = Math.max(1, srcH - top - bottom);
+  const hasBounds = boundsType !== 'OBS_BOUNDS_NONE' && boxW > 0 && boxH > 0;
+
+  let zoom = 1.0;
+  if (hasBounds && boundsType === 'OBS_BOUNDS_SCALE_INNER') {
+    const scale1 = Math.min(boxW / srcW, boxH / srcH);
+    const currentScale = Math.min(boxW / visW, boxH / visH);
+    zoom = scale1 > 0 ? currentScale / scale1 : 1.0;
+  } else if (hasBounds && boundsType === 'OBS_BOUNDS_SCALE_OUTER') {
+    const scale1 = Math.max(boxW / srcW, boxH / srcH);
+    const currentScale = Math.max(boxW / visW, boxH / visH);
+    zoom = scale1 > 0 ? currentScale / scale1 : 1.0;
+  } else if (hasBounds && boundsType === 'OBS_BOUNDS_SCALE_TO_WIDTH') {
+    zoom = srcW / visW;
+  } else if (hasBounds && boundsType === 'OBS_BOUNDS_SCALE_TO_HEIGHT') {
+    zoom = srcH / visH;
+  } else {
+    zoom = Math.max(srcW / visW, srcH / visH);
+  }
+
+  zoom = Math.max(1.0, Math.min(20.0, Math.round(zoom * 100) / 100));
+
+  const sumX = left + right;
+  const sumY = top + bottom;
+  const panX = sumX > 1 ? Math.max(-1.0, Math.min(1.0, (left - right) / sumX)) : 0;
+  const panY = sumY > 1 ? Math.max(-1.0, Math.min(1.0, (top - bottom) / sumY)) : 0;
+
+  return { zoom, panX, panY, left, right, top, bottom };
+}
+
 async function openPtzModal(sceneName, item) {
   if (!item || !item.sourceName) return;
 
@@ -3786,6 +4067,8 @@ async function openPtzModal(sceneName, item) {
     panY: 0,
     sourceWidth: 1920,
     sourceHeight: 1080,
+    origWidth: 1920,
+    origHeight: 1080,
     boundsType: 'OBS_BOUNDS_NONE',
     boundsWidth: 0,
     boundsHeight: 0,
@@ -3794,23 +4077,100 @@ async function openPtzModal(sceneName, item) {
     viewportHeight: 0,
     dispScaleX: 1,
     dispScaleY: 1,
+    obsAppliedCrop: { left: 0, right: 0, top: 0, bottom: 0 },
+    capturedCrop: { left: 0, right: 0, top: 0, bottom: 0 },
     hasPtzModified: false,
   };
 
-  try {
-    if (item.sceneItemId != null) {
-      const transRes = await state.obs.getSceneItemTransform(resolvedScene, item.sceneItemId).catch(() => null);
-      if (transRes?.sceneItemTransform) {
-        const trans = transRes.sceneItemTransform;
-        activePtzSession.sourceWidth = trans.sourceWidth || 1920;
-        activePtzSession.sourceHeight = trans.sourceHeight || 1080;
-        activePtzSession.boundsType = trans.boundsType || 'OBS_BOUNDS_NONE';
-        activePtzSession.boundsWidth = Number(trans.boundsWidth || 0);
-        activePtzSession.boundsHeight = Number(trans.boundsHeight || 0);
-        activePtzSession.boundsAlignment = Number(trans.boundsAlignment ?? 0);
+  let rawSourceW = null;
+  let rawSourceH = null;
+  const [transRes, filterListRes] = await Promise.all([
+    item.sceneItemId != null
+      ? state.obs.getSceneItemTransform(resolvedScene, item.sceneItemId).catch(() => null)
+      : Promise.resolve(null),
+    state.obs.getSourceFilterList(item.sourceName).catch(() => null),
+  ]);
+
+  if (transRes?.sceneItemTransform) {
+    const trans = transRes.sceneItemTransform;
+    if (trans.sourceWidth != null) rawSourceW = Number(trans.sourceWidth);
+    if (trans.sourceHeight != null) rawSourceH = Number(trans.sourceHeight);
+    activePtzSession.boundsType = trans.boundsType || 'OBS_BOUNDS_NONE';
+    activePtzSession.boundsWidth = Number(trans.boundsWidth || 0);
+    activePtzSession.boundsHeight = Number(trans.boundsHeight || 0);
+    activePtzSession.boundsAlignment = Number(trans.boundsAlignment ?? 0);
+  }
+
+  // Restore active Live PTZ crop_filter state and recover pre-crop source dimensions
+  const filters = filterListRes?.filters || [];
+  let { ptzFilter, totalCropX, totalCropY, allRelative } = summarizeSourceCropFilters(filters);
+  if (!ptzFilter) {
+    ptzFilter = await state.obs.getSourceFilter(item.sourceName, LIVE_PTZ_FILTER_NAME).catch(() => null);
+    if (!ptzFilter) {
+      for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
+        ptzFilter = await state.obs.getSourceFilter(item.sourceName, legacy).catch(() => null);
+        if (ptzFilter) break;
       }
     }
-  } catch (_) {}
+  }
+
+  const isSim = isConnectedToLocalSimulator();
+  const hasActivePtz = !!(ptzFilter && ptzFilter.filterEnabled !== false && ptzFilter.filterSettings);
+  const ptzSettings = hasActivePtz ? ptzFilter.filterSettings : null;
+  const l = ptzSettings ? Math.max(0, Number(ptzSettings.left || 0)) : 0;
+  const r = ptzSettings ? Math.max(0, Number(ptzSettings.right || 0)) : 0;
+  const t = ptzSettings ? Math.max(0, Number(ptzSettings.top || 0)) : 0;
+  const b = ptzSettings ? Math.max(0, Number(ptzSettings.bottom || 0)) : 0;
+  const isPtzRelative = ptzSettings ? ptzSettings.relative !== false : true;
+
+  // In real OBS, GetSceneItemTransform returns post-filter sourceWidth/sourceHeight.
+  // Add back active relative crop_filter margins to recover the pre-PTZ dimensions.
+  const cachedBase = sourceBaseSizeCache.get(item.sourceName);
+  let prePtzW = rawSourceW && rawSourceW > 0 ? rawSourceW : 1920;
+  let prePtzH = rawSourceH && rawSourceH > 0 ? rawSourceH : 1080;
+
+  if (!isSim && rawSourceW != null && rawSourceH != null) {
+    if (hasActivePtz && isPtzRelative) {
+      prePtzW = Math.max(1, rawSourceW + l + r);
+      prePtzH = Math.max(1, rawSourceH + t + b);
+    }
+    if (allRelative) {
+      const origW = Math.max(1, rawSourceW + totalCropX);
+      const origH = Math.max(1, rawSourceH + totalCropY);
+      activePtzSession.origWidth = origW;
+      activePtzSession.origHeight = origH;
+      sourceBaseSizeCache.set(item.sourceName, { origW, origH });
+    } else if (cachedBase) {
+      activePtzSession.origWidth = cachedBase.origW;
+      activePtzSession.origHeight = cachedBase.origH;
+    } else {
+      activePtzSession.origWidth = prePtzW;
+      activePtzSession.origHeight = prePtzH;
+    }
+  } else {
+    activePtzSession.origWidth = prePtzW;
+    activePtzSession.origHeight = prePtzH;
+  }
+
+  activePtzSession.sourceWidth = prePtzW;
+  activePtzSession.sourceHeight = prePtzH;
+
+  if (hasActivePtz && l + r + t + b > 0) {
+    const restored = invertPtzCrop(
+      { left: l, right: r, top: t, bottom: b },
+      activePtzSession.sourceWidth,
+      activePtzSession.sourceHeight,
+      activePtzSession.boundsType,
+      activePtzSession.boundsWidth,
+      activePtzSession.boundsHeight
+    );
+    activePtzSession.zoom = restored.zoom;
+    activePtzSession.panX = restored.panX;
+    activePtzSession.panY = restored.panY;
+    activePtzSession.obsAppliedCrop = { left: l, right: r, top: t, bottom: b };
+    activePtzSession.capturedCrop = { left: l, right: r, top: t, bottom: b };
+    activePtzSession.hasPtzModified = true;
+  }
 
   const hasValidBounds =
     activePtzSession.boundsType !== 'OBS_BOUNDS_NONE' &&
@@ -3829,19 +4189,25 @@ async function openPtzModal(sceneName, item) {
   if (el.ptzSceneBadge) {
     el.ptzSceneBadge.textContent = `Scene: ${resolvedScene}`;
   }
-  if (el.sliderPtzZoom) el.sliderPtzZoom.value = '1.0';
+  if (el.sliderPtzZoom) el.sliderPtzZoom.value = String(activePtzSession.zoom);
 
-  // Immediate frame display so preview is never blank on top
+  // Immediate placeholder until fresh OBS screenshot arrives
   if (el.ptzLiveImg) {
-    const cached = thumbnailCache.get(item.sourceName);
-    if (cached && cached.dataUrl) {
-      el.ptzLiveImg.src = cached.dataUrl;
-      el.ptzLiveImg.style.display = 'block';
-      if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+    if (activePtzSession.hasPtzModified) {
+      el.ptzLiveImg.removeAttribute('src');
+      el.ptzLiveImg.style.display = 'none';
+      if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'flex';
     } else {
-      el.ptzLiveImg.src = generateSyntheticPtzFrame(item.sourceName);
-      el.ptzLiveImg.style.display = 'block';
-      if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+      const cached = thumbnailCache.get(item.sourceName);
+      if (cached && cached.dataUrl) {
+        el.ptzLiveImg.src = cached.dataUrl;
+        el.ptzLiveImg.style.display = 'block';
+        if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+      } else {
+        el.ptzLiveImg.src = generateSyntheticPtzFrame(item.sourceName);
+        el.ptzLiveImg.style.display = 'block';
+        if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+      }
     }
   }
 
@@ -3852,7 +4218,7 @@ async function openPtzModal(sceneName, item) {
   updatePtzViewportSize();
   updatePtzUiIndicators();
 
-  // 1. Refresh live preview frame
+  // 1. Refresh fresh live preview frame from OBS
   fetchPtzPreviewFrame(item.sourceName);
 
   // 2. Load existing PTZ filter presets on this source
@@ -3873,11 +4239,30 @@ async function closePtzModal() {
   // User requirement: "and remove this filter as soon as reset called or window closed without any changes or window closed with all zoomed out state (no scaling)"
   if (activePtzSession?.sourceName) {
     const srcName = activePtzSession.sourceName;
+    const wasModified = !!activePtzSession.hasPtzModified;
     const shouldRemove = !activePtzSession.hasPtzModified || activePtzSession.zoom <= 1.001;
     if (shouldRemove) {
       state.obs.removeSourceFilter(srcName, LIVE_PTZ_FILTER_NAME).catch(() => null);
       for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
         state.obs.removeSourceFilter(srcName, legacy).catch(() => null);
+      }
+    }
+    if (wasModified) {
+      thumbnailCache.delete(srcName);
+      if (state.obs.status === 'connected') {
+        setTimeout(() => {
+          const item = (state.sceneItems || []).find((i) => i.sourceName === srcName);
+          const scene = getCurrentTargetScene();
+          if (!item) return;
+          document
+            .querySelectorAll(`[data-source-name="${CSS.escape(srcName)}"] .source-thumb-img`)
+            .forEach((imgEl) => {
+              const fallbackEl = imgEl.parentElement?.querySelector('.source-type-icon-fallback');
+              if (fallbackEl) {
+                loadSourceThumbnail(srcName, getSourceTypeCategory(item), imgEl, fallbackEl, scene, item.sceneItemId);
+              }
+            });
+        }, 180);
       }
     }
   }
@@ -3920,33 +4305,67 @@ async function fetchPtzPreviewFrame(sourceName) {
   try {
     if (el.ptzLoadingSpinner) el.ptzLoadingSpinner.style.display = 'flex';
 
-    // 1. Show cached thumbnail if available
-    const cached = thumbnailCache.get(sourceName);
-    if (cached && cached.dataUrl) {
-      el.ptzLiveImg.src = cached.dataUrl;
-      el.ptzLiveImg.style.display = 'block';
-      if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
-    }
-
     let gotImage = false;
+    const isSim = isConnectedToLocalSimulator();
+    const obsCropAtCapture = activePtzSession?.obsAppliedCrop
+      ? { ...activePtzSession.obsAppliedCrop }
+      : { left: 0, right: 0, top: 0, bottom: 0 };
 
-    // 2. Try direct source screenshot
+    // 1. Fetch fresh direct source screenshot from OBS
     try {
       const res = await state.obs.getSourceScreenshot(sourceName, 'jpg', 1280);
+      if (!activePtzSession || activePtzSession.sourceName !== sourceName) return;
+
       if (res && res.imageData) {
-        el.ptzLiveImg.src = res.imageData;
+        const prePtzW = Math.max(1, activePtzSession.sourceWidth || 1920);
+        const prePtzH = Math.max(1, activePtzSession.sourceHeight || 1080);
+        const capW = Math.max(1, prePtzW - obsCropAtCapture.left - obsCropAtCapture.right);
+        const capH = Math.max(1, prePtzH - obsCropAtCapture.top - obsCropAtCapture.bottom);
+        const origW = Math.max(capW, activePtzSession.origWidth || prePtzW);
+        const origH = Math.max(capH, activePtzSession.origHeight || prePtzH);
+
+        let finalDataUrl = res.imageData;
+        let nextCapturedCrop = { left: 0, right: 0, top: 0, bottom: 0 };
+
+        if (!isSim && (capW < origW || capH < origH)) {
+          const trimmed = await trimCroppedObsScreenshot(
+            res.imageData,
+            capW / origW,
+            capH / origH,
+            { origRatio: origW / origH, visRatio: capW / capH }
+          );
+          if (!activePtzSession || activePtzSession.sourceName !== sourceName) return;
+          finalDataUrl = trimmed.dataUrl;
+
+          const hasPtzCrop =
+            obsCropAtCapture.left + obsCropAtCapture.right + obsCropAtCapture.top + obsCropAtCapture.bottom > 0;
+          const matchesTightCapAspect =
+            trimmed.natW > 0 &&
+            trimmed.natH > 0 &&
+            Math.abs(trimmed.natW / trimmed.natH - capW / capH) < 0.02 &&
+            Math.abs(capW / capH - origW / origH) > 0.05;
+
+          if (hasPtzCrop && (trimmed.wasTrimmed || matchesTightCapAspect)) {
+            nextCapturedCrop = obsCropAtCapture;
+          }
+        }
+
+        activePtzSession.capturedCrop = nextCapturedCrop;
+        el.ptzLiveImg.src = finalDataUrl;
         el.ptzLiveImg.style.display = 'block';
         if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
-        thumbnailCache.set(sourceName, { dataUrl: res.imageData, timestamp: Date.now() });
+        thumbnailCache.set(sourceName, { dataUrl: finalDataUrl, timestamp: Date.now() });
         gotImage = true;
       }
     } catch (_) {}
 
-    // 3. Fallback to active scene screenshot if direct source screenshot failed
+    // 2. Fallback to active scene screenshot if direct source screenshot failed
     if (!gotImage && activePtzSession?.sceneName) {
       try {
         const sceneRes = await state.obs.getSourceScreenshot(activePtzSession.sceneName, 'jpg', 1280);
+        if (!activePtzSession || activePtzSession.sourceName !== sourceName) return;
         if (sceneRes && sceneRes.imageData) {
+          activePtzSession.capturedCrop = { left: 0, right: 0, top: 0, bottom: 0 };
           el.ptzLiveImg.src = sceneRes.imageData;
           el.ptzLiveImg.style.display = 'block';
           if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
@@ -3955,11 +4374,18 @@ async function fetchPtzPreviewFrame(sourceName) {
       } catch (_) {}
     }
 
-    // 4. Fallback to synthetic active viewfinder frame if screenshot unavailable
+    // 3. Fallback to synthetic active viewfinder frame if screenshot unavailable
     if (!gotImage && (!el.ptzLiveImg.src || el.ptzLiveImg.style.display === 'none')) {
+      if (activePtzSession && activePtzSession.sourceName === sourceName) {
+        activePtzSession.capturedCrop = { left: 0, right: 0, top: 0, bottom: 0 };
+      }
       el.ptzLiveImg.src = generateSyntheticPtzFrame(sourceName);
       el.ptzLiveImg.style.display = 'block';
       if (el.ptzPreviewFallback) el.ptzPreviewFallback.style.display = 'none';
+    }
+
+    if (activePtzSession && activePtzSession.sourceName === sourceName) {
+      updatePtzUiIndicators();
     }
   } catch (err) {
     console.warn('[PTZ Preview Frame Failed]', err);
@@ -4169,10 +4595,14 @@ function updatePtzUiIndicators() {
     el.ptzCropMask.style.left = `${maskLeft}px`;
     el.ptzCropMask.style.top = `${maskTop}px`;
 
-    el.ptzLiveImg.style.width = `${geom.srcW * scaleX}px`;
-    el.ptzLiveImg.style.height = `${geom.srcH * scaleY}px`;
-    el.ptzLiveImg.style.left = `${-geom.left * scaleX}px`;
-    el.ptzLiveImg.style.top = `${-geom.top * scaleY}px`;
+    const cap = activePtzSession.capturedCrop || { left: 0, right: 0, top: 0, bottom: 0 };
+    const capW = Math.max(1, geom.srcW - cap.left - cap.right);
+    const capH = Math.max(1, geom.srcH - cap.top - cap.bottom);
+
+    el.ptzLiveImg.style.width = `${capW * scaleX}px`;
+    el.ptzLiveImg.style.height = `${capH * scaleY}px`;
+    el.ptzLiveImg.style.left = `${(cap.left - geom.left) * scaleX}px`;
+    el.ptzLiveImg.style.top = `${(cap.top - geom.top) * scaleY}px`;
     el.ptzLiveImg.style.transform = '';
 
     activePtzSession.dispScaleX = scaleX;
@@ -4211,6 +4641,9 @@ async function executePtzDispatch() {
     for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
       await state.obs.removeSourceFilter(sourceName, legacy).catch(() => null);
     }
+    if (activePtzSession && activePtzSession.sourceName === sourceName) {
+      activePtzSession.obsAppliedCrop = { left: 0, right: 0, top: 0, bottom: 0 };
+    }
     return;
   }
 
@@ -4242,6 +4675,16 @@ async function executePtzDispatch() {
       }
     }
   }
+
+  if (activePtzSession && activePtzSession.sourceName === sourceName) {
+    activePtzSession.obsAppliedCrop = {
+      left: geom.left,
+      right: geom.right,
+      top: geom.top,
+      bottom: geom.bottom,
+    };
+  }
+  thumbnailCache.delete(sourceName);
 
   if (state.isPreviewExpanded) {
     setTimeout(fetchPreviewSnapshot, 200);
@@ -4281,6 +4724,15 @@ async function returnToWideAction() {
     await state.obs.removeSourceFilter(sourceName, LIVE_PTZ_FILTER_NAME).catch(() => null);
     for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
       await state.obs.removeSourceFilter(sourceName, legacy).catch(() => null);
+    }
+
+    if (activePtzSession && activePtzSession.sourceName === sourceName) {
+      activePtzSession.obsAppliedCrop = { left: 0, right: 0, top: 0, bottom: 0 };
+      thumbnailCache.delete(sourceName);
+      const cap = activePtzSession.capturedCrop;
+      if (cap && cap.left + cap.right + cap.top + cap.bottom > 0) {
+        fetchPtzPreviewFrame(sourceName);
+      }
     }
 
     await loadPtzPresetsList(sourceName);

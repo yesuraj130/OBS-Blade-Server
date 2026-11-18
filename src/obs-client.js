@@ -387,6 +387,8 @@ export class ObsClient {
       eventType === 'SourceFilterListReindexed'
     ) {
       this.emit('filterChanged', eventData);
+    } else if (eventType === 'SourceFilterSettingsChanged') {
+      this.emit('filterSettingsChanged', eventData);
     } else if (eventType === 'StreamStateChanged') {
       this.emit('streamStateChanged', eventData);
     } else if (eventType === 'RecordStateChanged') {
