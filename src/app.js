@@ -3,12 +3,12 @@
  * Pure Native Web Client (HTML5 / Vanilla ES6 / CSS3)
  */
 
-import { ObsClient } from './obs-client.js';
 import { buildPropertiesView } from './obs-properties-builder.js';
 
 // State
 const state = {
-  obs: new ObsClient(),
+  obs: new window.OBSWebSocket(),
+  obsStatus: 'disconnected', // 'disconnected' | 'connecting' | 'connected'
   url: '',
   password: '',
   studioMode: true,
@@ -473,7 +473,7 @@ export function init() {
   }
 
   if (state.url) {
-    state.obs.connect(state.url, state.password);
+    connectObs(state.url, state.password);
     const effective = getEffectiveConnectionConfig();
     if (effective.fileUrl) {
       checkFileBrowserStatus(effective.fileUrl, effective.filePassword);
@@ -553,15 +553,20 @@ async function handleTabActive() {
   if (isConnModalOpen) return;
 
   console.log('[App] Tab active / visible. Checking OBS connection health...');
-  if (state.obs.status !== 'connected' || !state.obs.ws || state.obs.ws.readyState !== WebSocket.OPEN) {
+  if (
+    state.obsStatus !== 'connected' ||
+    !state.obs.identified ||
+    !state.obs.socket ||
+    state.obs.socket.readyState !== WebSocket.OPEN
+  ) {
     if (state.url) {
-      state.obs.connect(state.url, state.password, false);
+      connectObs(state.url, state.password, false);
     } else {
       connectToLocalSimulator();
     }
   } else {
     // Check health & re-sync initial state
-    state.obs.checkConnectionHealth();
+    checkObsConnectionHealth();
   }
 }
 
@@ -707,51 +712,67 @@ function saveHiddenTabPreferences() {
   } catch (e) {}
 }
 
-function connectToLocalSimulator() {
-  const isSecure = location.protocol === 'https:';
-  const protocol = isSecure ? 'wss://' : 'ws://';
-  state.url = `${protocol}${location.host}/obs-ws`;
-  state.password = '';
-  state.isRealObs = false;
-  state.obs.connect(state.url, '');
+let obsReconnectTimer = null;
+let obsReconnectAttempts = 0;
+let obsManualDisconnect = false;
+let obsConnectSeq = 0;
+let obsLastError = null;
+
+function clearObsReconnectTimer() {
+  if (obsReconnectTimer) {
+    clearTimeout(obsReconnectTimer);
+    obsReconnectTimer = null;
+  }
 }
 
-function connectToRealObs() {
-  const isSecure = location.protocol === 'https:';
-  const protocol = isSecure ? 'wss://' : 'ws://';
-  state.url = `${protocol}${location.host}/obs-real-ws`;
-  state.password = '';
-  state.isRealObs = true;
-  state.obs.connect(state.url, '');
-}
-
-function setupObsEvents() {
-  state.obs.on('status', ({ status, error }) => {
-    if (status === 'connected') {
-      state.hasFallenBackToSimulator = false;
-      const isReal = state.url && state.url.includes('/obs-real-ws');
-      el.navTopTitle.textContent = isReal ? 'OBS Studio 29 (Live)' : 'OBS Dashboard';
-    } else if (status === 'connecting') {
-      el.navTopTitle.textContent = 'Connecting...';
-    } else {
-      el.navTopTitle.textContent = 'OBS Dashboard (Offline)';
-      isExpanderAutoRefreshRunning = false;
-      isFullPreviewAutoRefreshRunning = false;
-      if (state.isRealObs && error && !state.hasFallenBackToSimulator) {
-        state.hasFallenBackToSimulator = true;
-        console.warn('[OBS Client] Real OBS not currently reachable, connecting to local simulator...');
-        setTimeout(() => {
-          connectToLocalSimulator();
-        }, 300);
-      }
+function setObsStatus(status, error = null) {
+  state.obsStatus = status;
+  if (status === 'connected') {
+    state.hasFallenBackToSimulator = false;
+    const isReal = state.url && state.url.includes('/obs-real-ws');
+    el.navTopTitle.textContent = isReal ? 'OBS Studio 29 (Live)' : 'OBS Dashboard';
+  } else if (status === 'connecting') {
+    el.navTopTitle.textContent = 'Connecting...';
+  } else {
+    el.navTopTitle.textContent = 'OBS Dashboard (Offline)';
+    isExpanderAutoRefreshRunning = false;
+    isFullPreviewAutoRefreshRunning = false;
+    if (state.isRealObs && error && !state.hasFallenBackToSimulator) {
+      state.hasFallenBackToSimulator = true;
+      console.warn('[OBS Client] Real OBS not currently reachable, connecting to local simulator...');
+      setTimeout(() => {
+        connectToLocalSimulator();
+      }, 300);
     }
-  });
+  }
+}
 
-  state.obs.on('synced', (data) => {
-    state.studioMode = data.studioMode;
-    state.scenes = data.scenes;
-    state.currentProgramScene = data.currentProgramScene;
-    state.currentPreviewScene = data.currentPreviewScene || data.currentProgramScene;
+function scheduleObsReconnect() {
+  if (obsManualDisconnect || !state.url || obsReconnectTimer) return;
+  // Exponential backoff: 1.5s, 2.25s, 3.4s, 5.1s, max 8s
+  const delay = Math.min(1500 * Math.pow(1.5, Math.min(obsReconnectAttempts++, 5)), 8000);
+  obsReconnectTimer = setTimeout(() => {
+    obsReconnectTimer = null;
+    if (!obsManualDisconnect && state.obsStatus === 'disconnected') {
+      console.log(`[OBS Client] Attempting auto-reconnect (${state.url})...`);
+      connectObs(state.url, state.password, true);
+    }
+  }, delay);
+}
+
+async function syncObsInitialState() {
+  try {
+    const [studioMode, sceneList] = await Promise.all([
+      state.obs.call('GetStudioModeEnabled').catch(() => ({ studioModeEnabled: false })),
+      state.obs.call('GetSceneList').catch(() => ({ scenes: [] })),
+    ]);
+
+    state.studioMode = !!studioMode?.studioModeEnabled;
+    state.scenes = sceneList?.scenes || [];
+    state.currentProgramScene = sceneList?.currentProgramSceneName || '';
+    state.currentPreviewScene =
+      sceneList?.currentPreviewSceneName || state.currentProgramScene;
+
     if (!state.selectedCategoryScene) {
       state.selectedCategoryScene = '__CURRENT__';
     }
@@ -760,9 +781,130 @@ function setupObsEvents() {
     renderTopSceneButtons();
     renderCategoryGrid();
     loadSourcesForScene(state.selectedCategoryScene);
+  } catch (err) {
+    console.warn('[OBS Client] Initial sync warning:', err);
+  }
+}
+
+async function connectObs(url, password = '', isAutoRetry = false) {
+  const seq = ++obsConnectSeq;
+  if (!isAutoRetry) {
+    obsManualDisconnect = false;
+    obsReconnectAttempts = 0;
+  }
+  clearObsReconnectTimer();
+
+  if (url) state.url = url;
+  if (password != null) state.password = password;
+  obsLastError = null;
+  setObsStatus('connecting');
+
+  if (state.obs.socket) {
+    try {
+      await state.obs.disconnect();
+    } catch (_) {}
+    if (seq !== obsConnectSeq) return;
+  }
+
+  try {
+    await state.obs.connect(state.url, state.password || undefined, {
+      rpcVersion: 1,
+      eventSubscriptions: window.OBSWebSocket.EventSubscription.All,
+    });
+    if (seq !== obsConnectSeq) return;
+
+    obsReconnectAttempts = 0;
+    clearObsReconnectTimer();
+    setObsStatus('connected');
+    await syncObsInitialState();
+  } catch (err) {
+    if (seq !== obsConnectSeq) return;
+    obsLastError = err?.message || 'Connection failed';
+    setObsStatus('disconnected', obsLastError);
+    scheduleObsReconnect();
+  }
+}
+
+async function disconnectObs(isManual = true) {
+  obsManualDisconnect = isManual;
+  obsConnectSeq++;
+  clearObsReconnectTimer();
+  setObsStatus('disconnected');
+  try {
+    await state.obs.disconnect();
+  } catch (_) {}
+}
+
+async function checkObsConnectionHealth() {
+  if (obsManualDisconnect) return false;
+
+  if (
+    state.obsStatus !== 'connected' ||
+    !state.obs.identified ||
+    !state.obs.socket ||
+    state.obs.socket.readyState !== WebSocket.OPEN
+  ) {
+    console.log('[OBS Client] Socket not connected during health check. Reconnecting immediately...');
+    if (state.url) {
+      connectObs(state.url, state.password, false);
+    }
+    return false;
+  }
+
+  // Socket claims to be OPEN, verify responsiveness via quick GetVersion ping
+  try {
+    const pingPromise = state.obs.call('GetVersion');
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Health check timeout')), 1800)
+    );
+    await Promise.race([pingPromise, timeoutPromise]);
+    // Active! Re-sync initial state to reflect any background updates
+    await syncObsInitialState();
+    return true;
+  } catch (err) {
+    console.warn('[OBS Client] Socket failed health check (zombie/silent drop). Reconnecting...', err);
+    try {
+      await state.obs.disconnect();
+    } catch (_) {}
+    if (state.url) {
+      connectObs(state.url, state.password, false);
+    }
+    return false;
+  }
+}
+
+function connectToLocalSimulator() {
+  const isSecure = location.protocol === 'https:';
+  const protocol = isSecure ? 'wss://' : 'ws://';
+  state.url = `${protocol}${location.host}/obs-ws`;
+  state.password = '';
+  state.isRealObs = false;
+  connectObs(state.url, '');
+}
+
+function connectToRealObs() {
+  const isSecure = location.protocol === 'https:';
+  const protocol = isSecure ? 'wss://' : 'ws://';
+  state.url = `${protocol}${location.host}/obs-real-ws`;
+  state.password = '';
+  state.isRealObs = true;
+  connectObs(state.url, '');
+}
+
+function setupObsEvents() {
+  state.obs.on('ConnectionError', (err) => {
+    obsLastError = err?.message || 'Network error or connection refused';
   });
 
-  state.obs.on('programSceneChanged', (sceneName) => {
+  state.obs.on('ConnectionClosed', (err) => {
+    if (state.obsStatus === 'connected') {
+      const reason = err?.message || obsLastError || 'Connection closed';
+      setObsStatus('disconnected', reason);
+      scheduleObsReconnect();
+    }
+  });
+
+  state.obs.on('CurrentProgramSceneChanged', ({ sceneName }) => {
     state.currentProgramScene = sceneName;
     renderTopSceneButtons();
     renderCategoryGrid();
@@ -771,7 +913,7 @@ function setupObsEvents() {
     }
   });
 
-  state.obs.on('previewSceneChanged', (sceneName) => {
+  state.obs.on('CurrentPreviewSceneChanged', ({ sceneName }) => {
     state.currentPreviewScene = sceneName;
     renderTopSceneButtons();
     renderCategoryGrid();
@@ -780,51 +922,68 @@ function setupObsEvents() {
     }
   });
 
-  state.obs.on('studioModeChanged', (enabled) => {
-    state.studioMode = enabled;
+  state.obs.on('StudioModeStateChanged', ({ studioModeEnabled }) => {
+    state.studioMode = !!studioModeEnabled;
     syncStudioModeCheckbox();
     renderTopSceneButtons();
   });
 
-  state.obs.on('sceneItemsChanged', () => {
+  const handleSceneItemsEvent = () => {
     loadSourcesForScene(state.selectedCategoryScene);
-  });
+  };
+  state.obs.on('SceneItemEnableStateChanged', handleSceneItemsEvent);
+  state.obs.on('SceneItemCreated', handleSceneItemsEvent);
+  state.obs.on('SceneItemRemoved', handleSceneItemsEvent);
+  state.obs.on('SceneItemListReindexed', handleSceneItemsEvent);
 
-  state.obs.on('streamStateChanged', ({ outputActive }) => {
+  state.obs.on('StreamStateChanged', ({ outputActive }) => {
     state.isStreaming = outputActive;
     el.textMenuStream.textContent = outputActive ? 'Stop Streaming' : 'Start Streaming';
   });
 
-  state.obs.on('recordStateChanged', ({ outputActive }) => {
+  state.obs.on('RecordStateChanged', ({ outputActive }) => {
     state.isRecording = outputActive;
     el.textMenuRecord.textContent = outputActive ? 'Stop Recording' : 'Start Recording';
   });
 
-  state.obs.on('scenesUpdated', (scenes) => {
-    state.scenes = scenes;
-    renderTopSceneButtons();
-    renderCategoryGrid();
-    if (state.selectedCategoryScene === '__CURRENT__') {
-      loadSourcesForScene('__CURRENT__');
-    }
-  });
+  const handleSceneListEvent = () => {
+    state.obs
+      .call('GetSceneList')
+      .then((res) => {
+        state.scenes = res?.scenes || [];
+        renderTopSceneButtons();
+        renderCategoryGrid();
+        if (state.selectedCategoryScene === '__CURRENT__') {
+          loadSourcesForScene('__CURRENT__');
+        }
+      })
+      .catch(() => {});
+  };
+  state.obs.on('SceneListChanged', handleSceneListEvent);
+  state.obs.on('SceneCreated', handleSceneListEvent);
+  state.obs.on('SceneRemoved', handleSceneListEvent);
+  state.obs.on('SceneNameChanged', handleSceneListEvent);
 
-  state.obs.on('filterChanged', (data) => {
+  const handleFilterChanged = (data) => {
     if (data?.sourceName) {
       thumbnailCache.delete(data.sourceName);
     }
-    if (activeFiltersTarget && activeFiltersTarget.name === data.sourceName) {
+    if (activeFiltersTarget && activeFiltersTarget.name === data?.sourceName) {
       loadFiltersForTarget(activeFiltersTarget);
     }
-  });
+  };
+  state.obs.on('SourceFilterCreated', handleFilterChanged);
+  state.obs.on('SourceFilterRemoved', handleFilterChanged);
+  state.obs.on('SourceFilterEnableStateChanged', handleFilterChanged);
+  state.obs.on('SourceFilterListReindexed', handleFilterChanged);
 
-  state.obs.on('filterSettingsChanged', (data) => {
+  state.obs.on('SourceFilterSettingsChanged', (data) => {
     if (data?.sourceName) {
       thumbnailCache.delete(data.sourceName);
     }
   });
 
-  state.obs.on('inputNameChanged', () => {
+  state.obs.on('InputNameChanged', () => {
     loadSourcesForScene(state.selectedCategoryScene);
   });
 }
@@ -837,7 +996,7 @@ function setupEventListeners() {
     if (typeof closeFullPreviewModal === 'function') closeFullPreviewModal();
     if (typeof closeRenameModal === 'function') closeRenameModal();
     if (typeof closeSettingsModal === 'function') closeSettingsModal();
-    state.obs.disconnect();
+    disconnectObs(true);
     openConnectionModal();
   });
 
@@ -890,7 +1049,7 @@ function setupEventListeners() {
     e.preventDefault();
     closeDropdownMenu();
     try {
-      await state.obs.toggleStream();
+      await state.obs.call('ToggleStream');
     } catch (err) {
       alert(`Stream error: ${err.message}`);
     }
@@ -899,7 +1058,7 @@ function setupEventListeners() {
     e.preventDefault();
     closeDropdownMenu();
     try {
-      await state.obs.toggleRecord();
+      await state.obs.call('ToggleRecord');
     } catch (err) {
       alert(`Record error: ${err.message}`);
     }
@@ -934,7 +1093,7 @@ function setupEventListeners() {
     e.preventDefault();
     const next = !state.studioMode;
     try {
-      await state.obs.setStudioModeEnabled(next);
+      await state.obs.call('SetStudioModeEnabled', { studioModeEnabled: next });
       state.studioMode = next;
       syncStudioModeCheckbox();
       renderTopSceneButtons();
@@ -947,7 +1106,7 @@ function setupEventListeners() {
   el.btnTriggerTransition.addEventListener('click', async (e) => {
     e.preventDefault();
     try {
-      await state.obs.triggerStudioModeTransition();
+      await state.obs.call('TriggerStudioModeTransition');
       if (state.isPreviewExpanded) {
         setTimeout(fetchPreviewSnapshot, 300);
       }
@@ -1181,7 +1340,7 @@ function setupEventListeners() {
       state.password = effective.password;
       state.isRealObs = state.url.includes('/obs-real-ws');
 
-      state.obs.connect(state.url, state.password);
+      connectObs(state.url, state.password);
       closeConnectionModal();
 
       // Non-blocking asynchronous verification of File Browser server
@@ -1241,7 +1400,12 @@ function setupEventListeners() {
       if (!name || !targetScene) return;
 
       try {
-        await state.obs.createInput(targetScene, name, kind);
+        await state.obs.call('CreateInput', {
+          sceneName: targetScene,
+          inputName: name,
+          inputKind: kind,
+          inputSettings: {},
+        });
         closeCreateSourceModal();
         loadSourcesForScene(state.selectedCategoryScene);
       } catch (err) {
@@ -1344,7 +1508,12 @@ function setupEventListeners() {
       if (!name) return;
 
       try {
-        await state.obs.createSourceFilter(activeFiltersTarget.name, name, kind);
+        await state.obs.call('CreateSourceFilter', {
+          sourceName: activeFiltersTarget.name,
+          filterName: name,
+          filterKind: kind,
+          filterSettings: {},
+        });
         el.formAddFilter.style.display = 'none';
         el.btnToggleAddFilter.style.display = 'flex';
         loadFiltersForTarget(activeFiltersTarget);
@@ -1374,7 +1543,10 @@ function setupEventListeners() {
 
       try {
         if (activeRenameTarget.type === 'scene') {
-          await state.obs.setSceneName(activeRenameTarget.name, newName);
+          await state.obs.call('SetSceneName', {
+            sceneName: activeRenameTarget.name,
+            newSceneName: newName,
+          });
           if (state.currentProgramScene === activeRenameTarget.name) {
             state.currentProgramScene = newName;
           }
@@ -1387,16 +1559,19 @@ function setupEventListeners() {
           renderTopSceneButtons();
           renderCategoryGrid();
         } else if (activeRenameTarget.type === 'filter') {
-          await state.obs.setSourceFilterName(
-            activeRenameTarget.sourceName,
-            activeRenameTarget.name,
-            newName
-          );
+          await state.obs.call('SetSourceFilterName', {
+            sourceName: activeRenameTarget.sourceName,
+            filterName: activeRenameTarget.name,
+            newFilterName: newName,
+          });
           if (activeFiltersTarget) {
             loadFiltersForTarget(activeFiltersTarget);
           }
         } else {
-          await state.obs.setInputName(activeRenameTarget.name, newName);
+          await state.obs.call('SetInputName', {
+            inputName: activeRenameTarget.name,
+            newInputName: newName,
+          });
           thumbnailCache.delete(activeRenameTarget.name);
           loadSourcesForScene(activeRenameTarget.sceneName || state.selectedCategoryScene);
         }
@@ -1422,9 +1597,9 @@ function setupEventListeners() {
       if (!sceneName) return;
 
       try {
-        await state.obs.createScene(sceneName);
+        await state.obs.call('CreateScene', { sceneName });
         closeCreateSceneModal();
-        const res = await state.obs.getSceneList();
+        const res = await state.obs.call('GetSceneList');
         state.scenes = res.scenes || [];
         renderTopSceneButtons();
         renderCategoryGrid();
@@ -1449,8 +1624,8 @@ function setupEventListeners() {
 
       try {
         if (activeDeleteTarget.type === 'scene') {
-          await state.obs.removeScene(activeDeleteTarget.name);
-          const res = await state.obs.getSceneList();
+          await state.obs.call('RemoveScene', { sceneName: activeDeleteTarget.name });
+          const res = await state.obs.call('GetSceneList');
           state.scenes = res.scenes || [];
           if (state.selectedCategoryScene === activeDeleteTarget.name) {
             state.selectedCategoryScene = '__CURRENT__';
@@ -1459,10 +1634,10 @@ function setupEventListeners() {
           renderCategoryGrid();
           loadSourcesForScene(state.selectedCategoryScene);
         } else {
-          await state.obs.removeSceneItem(
-            activeDeleteTarget.sceneName,
-            activeDeleteTarget.itemId
-          );
+          await state.obs.call('RemoveSceneItem', {
+            sceneName: activeDeleteTarget.sceneName,
+            sceneItemId: activeDeleteTarget.itemId,
+          });
           loadSourcesForScene(activeDeleteTarget.sceneName || state.selectedCategoryScene);
         }
         closeDeleteModal();
@@ -2310,7 +2485,11 @@ function openSourceContextMenu(x, y, sceneName, item) {
     onClick: async () => {
       try {
         const next = !item.sceneItemEnabled;
-        await state.obs.setSceneItemEnabled(sceneName, item.sceneItemId, next);
+        await state.obs.call('SetSceneItemEnabled', {
+          sceneName,
+          sceneItemId: item.sceneItemId,
+          sceneItemEnabled: next,
+        });
         item.sceneItemEnabled = next;
         renderSourcesList(sceneName, state.sceneItems);
       } catch (err) {
@@ -2398,7 +2577,7 @@ async function loadFiltersForTarget(target) {
   `;
 
   try {
-    const res = await state.obs.getSourceFilterList(target.name);
+    const res = await state.obs.call('GetSourceFilterList', { sourceName: target.name });
     const filters = res.filters || [];
     renderFiltersList(target, filters);
   } catch (err) {
@@ -2473,7 +2652,11 @@ function renderFiltersList(target, filters) {
     checkbox.addEventListener('change', async (e) => {
       const next = e.target.checked;
       try {
-        await state.obs.setSourceFilterEnabled(target.name, filter.filterName, next);
+        await state.obs.call('SetSourceFilterEnabled', {
+          sourceName: target.name,
+          filterName: filter.filterName,
+          filterEnabled: next,
+        });
         filter.filterEnabled = next;
       } catch (err) {
         console.error(err);
@@ -2499,7 +2682,10 @@ function renderFiltersList(target, filters) {
         btnTrash.addEventListener('click', async (e) => {
           e.preventDefault();
           try {
-            await state.obs.removeSourceFilter(target.name, filter.filterName);
+            await state.obs.call('RemoveSourceFilter', {
+              sourceName: target.name,
+              filterName: filter.filterName,
+            });
             loadFiltersForTarget(target);
           } catch (err) {
             console.error(err);
@@ -2630,11 +2816,11 @@ function renderTopSceneButtons() {
       e.preventDefault();
       try {
         if (state.clientStudioModeControls && state.studioMode) {
-          await state.obs.setCurrentPreviewScene(scene.sceneName);
+          await state.obs.call('SetCurrentPreviewScene', { sceneName: scene.sceneName });
           state.currentPreviewScene = scene.sceneName;
         } else {
           // Direct Program output switch (no preview monitoring on client)
-          await state.obs.setCurrentProgramScene(scene.sceneName);
+          await state.obs.call('SetCurrentProgramScene', { sceneName: scene.sceneName });
           state.currentProgramScene = scene.sceneName;
         }
         // Do not force-track current scene in individual scene tabs
@@ -2731,7 +2917,7 @@ let ptzScreenshotTrimCanvas = null;
 
 function isConnectedToLocalSimulator() {
   try {
-    const rawUrl = state.obs?.url || state.url || '';
+    const rawUrl = state.url || '';
     if (!rawUrl) return false;
     const parsed = new URL(rawUrl, location.href);
     return parsed.pathname === '/obs-ws';
@@ -2888,10 +3074,10 @@ async function fetchCroppedSourceScreenshot(sourceName, imageWidth, options = {}
     (!options.reuseCachedBaseSize || !cachedBase);
 
   const [shotRes, filterRes, transRes] = await Promise.all([
-    state.obs.getSourceScreenshot(sourceName, 'jpg', imageWidth),
-    isSim ? Promise.resolve(null) : state.obs.getSourceFilterList(sourceName).catch(() => null),
+    state.obs.call('GetSourceScreenshot', { sourceName, imageFormat: 'jpg', imageWidth }),
+    isSim ? Promise.resolve(null) : state.obs.call('GetSourceFilterList', { sourceName }).catch(() => null),
     needTransform
-      ? state.obs.getSceneItemTransform(resolvedScene, resolvedItemId).catch(() => null)
+      ? state.obs.call('GetSceneItemTransform', { sceneName: resolvedScene, sceneItemId: resolvedItemId }).catch(() => null)
       : Promise.resolve(null),
   ]);
 
@@ -3163,7 +3349,7 @@ async function loadSourcesForScene(sceneName) {
   if (!target) return;
 
   try {
-    const res = await state.obs.getSceneItemList(target);
+    const res = await state.obs.call('GetSceneItemList', { sceneName: target });
     state.sceneItems = res.sceneItems || [];
     renderSourcesList(target, state.sceneItems);
   } catch (err) {
@@ -3254,7 +3440,11 @@ function renderSourcesList(sceneName, items) {
       e.stopPropagation();
       try {
         const next = !item.sceneItemEnabled;
-        await state.obs.setSceneItemEnabled(sceneName, item.sceneItemId, next);
+        await state.obs.call('SetSceneItemEnabled', {
+          sceneName,
+          sceneItemId: item.sceneItemId,
+          sceneItemEnabled: next,
+        });
         item.sceneItemEnabled = next;
         renderSourcesList(sceneName, items);
       } catch (err) {
@@ -3363,7 +3553,11 @@ async function fetchPreviewSnapshot() {
   if (!target) return;
 
   try {
-    const res = await state.obs.getSourceScreenshot(target, 'jpg', 640);
+    const res = await state.obs.call('GetSourceScreenshot', {
+      sourceName: target,
+      imageFormat: 'jpg',
+      imageWidth: 640,
+    });
     if (res.imageData) {
       el.previewLiveImg.src = res.imageData;
       el.previewLiveImg.style.display = 'block';
@@ -3384,7 +3578,7 @@ async function runExpanderAutoRefreshLoop() {
       el.chkExpanderAutoRefresh &&
       el.chkExpanderAutoRefresh.checked &&
       state.isPreviewExpanded &&
-      state.obs.status === 'connected'
+      state.obsStatus === 'connected'
     ) {
       const frameStart = performance.now();
       try {
@@ -3417,7 +3611,7 @@ async function runFullPreviewAutoRefreshLoop() {
       activePreviewTarget.item &&
       el.modalFullPreview &&
       el.modalFullPreview.classList.contains('open') &&
-      state.obs.status === 'connected'
+      state.obsStatus === 'connected'
     ) {
       const frameStart = performance.now();
       try {
@@ -3671,7 +3865,11 @@ async function applyDirectPasteTransform(sceneName, sceneItemId) {
     cropBottom: state.copiedTransform.cropBottom,
   };
 
-  await state.obs.setSceneItemTransform(sceneName, sceneItemId, payload);
+  await state.obs.call('SetSceneItemTransform', {
+    sceneName,
+    sceneItemId,
+    sceneItemTransform: payload,
+  });
   if (state.isPreviewExpanded) {
     setTimeout(fetchPreviewSnapshot, 250);
   }
@@ -3713,14 +3911,17 @@ async function openEditTransformModal(sceneName, item) {
 
   try {
     try {
-      const vid = await state.obs.getVideoSettings();
+      const vid = await state.obs.call('GetVideoSettings');
       if (vid && vid.baseWidth) {
         state.activeEditTransform.baseWidth = vid.baseWidth;
         state.activeEditTransform.baseHeight = vid.baseHeight;
       }
     } catch (_) {}
 
-    const res = await state.obs.getSceneItemTransform(resolvedScene, item.sceneItemId);
+    const res = await state.obs.call('GetSceneItemTransform', {
+      sceneName: resolvedScene,
+      sceneItemId: item.sceneItemId,
+    });
     const trans = res?.sceneItemTransform || {};
 
     const normalized = {
@@ -3842,7 +4043,11 @@ async function applyTransformAction() {
 
   try {
     if (el.btnApplyTransform) el.btnApplyTransform.textContent = 'Applying...';
-    await state.obs.setSceneItemTransform(sceneName, item.sceneItemId, payload);
+    await state.obs.call('SetSceneItemTransform', {
+      sceneName,
+      sceneItemId: item.sceneItemId,
+      sceneItemTransform: payload,
+    });
     showTransformBanner('✓ Transform successfully applied in OBS Studio!', false);
 
     if (state.isPreviewExpanded) {
@@ -4083,9 +4288,9 @@ async function openPtzModal(sceneName, item) {
   let rawSourceH = null;
   const [transRes, filterListRes] = await Promise.all([
     item.sceneItemId != null
-      ? state.obs.getSceneItemTransform(resolvedScene, item.sceneItemId).catch(() => null)
+      ? state.obs.call('GetSceneItemTransform', { sceneName: resolvedScene, sceneItemId: item.sceneItemId }).catch(() => null)
       : Promise.resolve(null),
-    state.obs.getSourceFilterList(item.sourceName).catch(() => null),
+    state.obs.call('GetSourceFilterList', { sourceName: item.sourceName }).catch(() => null),
   ]);
 
   if (transRes?.sceneItemTransform) {
@@ -4102,10 +4307,10 @@ async function openPtzModal(sceneName, item) {
   const filters = filterListRes?.filters || [];
   let { ptzFilter, totalCropX, totalCropY, allRelative } = summarizeSourceCropFilters(filters);
   if (!ptzFilter) {
-    ptzFilter = await state.obs.getSourceFilter(item.sourceName, LIVE_PTZ_FILTER_NAME).catch(() => null);
+    ptzFilter = await state.obs.call('GetSourceFilter', { sourceName: item.sourceName, filterName: LIVE_PTZ_FILTER_NAME }).catch(() => null);
     if (!ptzFilter) {
       for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
-        ptzFilter = await state.obs.getSourceFilter(item.sourceName, legacy).catch(() => null);
+        ptzFilter = await state.obs.call('GetSourceFilter', { sourceName: item.sourceName, filterName: legacy }).catch(() => null);
         if (ptzFilter) break;
       }
     }
@@ -4239,14 +4444,14 @@ async function closePtzModal() {
     const wasModified = !!activePtzSession.hasPtzModified;
     const shouldRemove = !activePtzSession.hasPtzModified || activePtzSession.zoom <= 1.001;
     if (shouldRemove) {
-      state.obs.removeSourceFilter(srcName, LIVE_PTZ_FILTER_NAME).catch(() => null);
+      state.obs.call('RemoveSourceFilter', { sourceName: srcName, filterName: LIVE_PTZ_FILTER_NAME }).catch(() => null);
       for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
-        state.obs.removeSourceFilter(srcName, legacy).catch(() => null);
+        state.obs.call('RemoveSourceFilter', { sourceName: srcName, filterName: legacy }).catch(() => null);
       }
     }
     if (wasModified) {
       thumbnailCache.delete(srcName);
-      if (state.obs.status === 'connected') {
+      if (state.obsStatus === 'connected') {
         setTimeout(() => {
           const item = (state.sceneItems || []).find((i) => i.sourceName === srcName);
           const scene = getCurrentTargetScene();
@@ -4310,7 +4515,11 @@ async function fetchPtzPreviewFrame(sourceName) {
 
     // 1. Fetch fresh direct source screenshot from OBS
     try {
-      const res = await state.obs.getSourceScreenshot(sourceName, 'jpg', 1280);
+      const res = await state.obs.call('GetSourceScreenshot', {
+        sourceName,
+        imageFormat: 'jpg',
+        imageWidth: 1280,
+      });
       if (!activePtzSession || activePtzSession.sourceName !== sourceName) return;
 
       if (res && res.imageData) {
@@ -4359,7 +4568,11 @@ async function fetchPtzPreviewFrame(sourceName) {
     // 2. Fallback to active scene screenshot if direct source screenshot failed
     if (!gotImage && activePtzSession?.sceneName) {
       try {
-        const sceneRes = await state.obs.getSourceScreenshot(activePtzSession.sceneName, 'jpg', 1280);
+        const sceneRes = await state.obs.call('GetSourceScreenshot', {
+          sourceName: activePtzSession.sceneName,
+          imageFormat: 'jpg',
+          imageWidth: 1280,
+        });
         if (!activePtzSession || activePtzSession.sourceName !== sourceName) return;
         if (sceneRes && sceneRes.imageData) {
           activePtzSession.capturedCrop = { left: 0, right: 0, top: 0, bottom: 0 };
@@ -4634,9 +4847,9 @@ async function executePtzDispatch() {
 
   // If zoomed all the way out (no crop on any edge), remove the temporary filter as requested
   if (geom.left === 0 && geom.right === 0 && geom.top === 0 && geom.bottom === 0) {
-    await state.obs.removeSourceFilter(sourceName, LIVE_PTZ_FILTER_NAME).catch(() => null);
+    await state.obs.call('RemoveSourceFilter', { sourceName, filterName: LIVE_PTZ_FILTER_NAME }).catch(() => null);
     for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
-      await state.obs.removeSourceFilter(sourceName, legacy).catch(() => null);
+      await state.obs.call('RemoveSourceFilter', { sourceName, filterName: legacy }).catch(() => null);
     }
     if (activePtzSession && activePtzSession.sourceName === sourceName) {
       activePtzSession.obsAppliedCrop = { left: 0, right: 0, top: 0, bottom: 0 };
@@ -4654,19 +4867,42 @@ async function executePtzDispatch() {
 
   // Fast path: Try updating existing filter settings directly
   try {
-    await state.obs.setSourceFilterSettings(sourceName, LIVE_PTZ_FILTER_NAME, cropSettings);
-    await state.obs.setSourceFilterEnabled(sourceName, LIVE_PTZ_FILTER_NAME, true).catch(() => null);
+    await state.obs.call('SetSourceFilterSettings', {
+      sourceName,
+      filterName: LIVE_PTZ_FILTER_NAME,
+      filterSettings: cropSettings,
+      overlay: true,
+    });
+    await state.obs.call('SetSourceFilterEnabled', {
+      sourceName,
+      filterName: LIVE_PTZ_FILTER_NAME,
+      filterEnabled: true,
+    }).catch(() => null);
   } catch (setErr) {
     // If filter does not exist yet (code 600 or "not found"), create it
     try {
-      await state.obs.createSourceFilter(sourceName, LIVE_PTZ_FILTER_NAME, 'crop_filter', cropSettings);
+      await state.obs.call('CreateSourceFilter', {
+        sourceName,
+        filterName: LIVE_PTZ_FILTER_NAME,
+        filterKind: 'crop_filter',
+        filterSettings: cropSettings,
+      });
     } catch (createErr) {
       // If it already exists (code 601 or "already exists"), update its settings safely
-      const isAlreadyExists = createErr?.code === 601 || 
+      const isAlreadyExists = createErr?.code === 601 ||
         (createErr?.message && createErr.message.toLowerCase().includes('already exists'));
       if (isAlreadyExists) {
-        await state.obs.setSourceFilterSettings(sourceName, LIVE_PTZ_FILTER_NAME, cropSettings).catch(() => null);
-        await state.obs.setSourceFilterEnabled(sourceName, LIVE_PTZ_FILTER_NAME, true).catch(() => null);
+        await state.obs.call('SetSourceFilterSettings', {
+          sourceName,
+          filterName: LIVE_PTZ_FILTER_NAME,
+          filterSettings: cropSettings,
+          overlay: true,
+        }).catch(() => null);
+        await state.obs.call('SetSourceFilterEnabled', {
+          sourceName,
+          filterName: LIVE_PTZ_FILTER_NAME,
+          filterEnabled: true,
+        }).catch(() => null);
       } else {
         console.warn('[PTZ Filter Create Notice]', createErr?.message || createErr);
       }
@@ -4718,9 +4954,9 @@ async function returnToWideAction() {
   const { sourceName } = activePtzSession;
   try {
     // User requirement: "remove this filter as soon as reset called"
-    await state.obs.removeSourceFilter(sourceName, LIVE_PTZ_FILTER_NAME).catch(() => null);
+    await state.obs.call('RemoveSourceFilter', { sourceName, filterName: LIVE_PTZ_FILTER_NAME }).catch(() => null);
     for (const legacy of LEGACY_PTZ_FILTER_NAMES) {
-      await state.obs.removeSourceFilter(sourceName, legacy).catch(() => null);
+      await state.obs.call('RemoveSourceFilter', { sourceName, filterName: legacy }).catch(() => null);
     }
 
     if (activePtzSession && activePtzSession.sourceName === sourceName) {
@@ -4746,7 +4982,7 @@ async function returnToWideAction() {
 
 async function loadPtzPresetsList(sourceName) {
   if (!el.ptzPresetsListContainer) return;
-  if (!sourceName || state.obs.status !== 'connected') {
+  if (!sourceName || state.obsStatus !== 'connected') {
     el.ptzPresetsListContainer.innerHTML = `
       <div style="font-size: 11.5px; color: var(--obs-text-gray); padding: 8px 0; text-align: center;">
         OBS Studio is offline. Connect to view presets.
@@ -4761,7 +4997,7 @@ async function loadPtzPresetsList(sourceName) {
   `;
 
   try {
-    const res = await state.obs.getSourceFilterList(sourceName);
+    const res = await state.obs.call('GetSourceFilterList', { sourceName });
     const filters = res?.filters || [];
     const ptzFilters = filters.filter(
       (f) =>
@@ -4818,11 +5054,19 @@ async function loadPtzPresetsList(sourceName) {
             // Disable other PTZ filters for exclusive activation
             for (const other of ptzFilters) {
               if (other.filterName !== filter.filterName && other.filterEnabled) {
-                await state.obs.setSourceFilterEnabled(sourceName, other.filterName, false);
+                await state.obs.call('SetSourceFilterEnabled', {
+                  sourceName,
+                  filterName: other.filterName,
+                  filterEnabled: false,
+                });
               }
             }
           }
-          await state.obs.setSourceFilterEnabled(sourceName, filter.filterName, next);
+          await state.obs.call('SetSourceFilterEnabled', {
+            sourceName,
+            filterName: filter.filterName,
+            filterEnabled: next,
+          });
           await loadPtzPresetsList(sourceName);
           showPtzBanner(`✓ Preset "${filter.filterName}" ${next ? 'activated' : 'disabled'}`, false);
         } catch (err) {
@@ -4835,7 +5079,10 @@ async function loadPtzPresetsList(sourceName) {
       btnTrash.addEventListener('click', async (e) => {
         e.preventDefault();
         try {
-          await state.obs.removeSourceFilter(sourceName, filter.filterName);
+          await state.obs.call('RemoveSourceFilter', {
+            sourceName,
+            filterName: filter.filterName,
+          });
           await loadPtzPresetsList(sourceName);
           showPtzBanner(`Removed preset filter "${filter.filterName}"`, false);
         } catch (err) {
@@ -4847,11 +5094,11 @@ async function loadPtzPresetsList(sourceName) {
     });
   } catch (err) {
     if (
-      err?.isDisconnect ||
-      err?.code === 'DISCONNECTED' ||
+      !state.obs.identified ||
+      err?.message?.includes('Not connected') ||
       err?.message?.includes('disconnect') ||
       err?.message?.includes('closed') ||
-      state.obs.status !== 'connected'
+      state.obsStatus !== 'connected'
     ) {
       if (el.ptzPresetsListContainer) {
         el.ptzPresetsListContainer.innerHTML = `
@@ -4889,7 +5136,12 @@ async function saveCurrentPtzPreset(presetName) {
   };
 
   try {
-    await state.obs.createSourceFilter(sourceName, cleanName, 'crop_filter', cropSettings);
+    await state.obs.call('CreateSourceFilter', {
+      sourceName,
+      filterName: cleanName,
+      filterKind: 'crop_filter',
+      filterSettings: cropSettings,
+    });
     showPtzBanner(`✓ Created PTZ filter preset "${cleanName}" in OBS Studio!`, false);
     await loadPtzPresetsList(sourceName);
     closeSavePtzPresetModal();
@@ -4897,8 +5149,17 @@ async function saveCurrentPtzPreset(presetName) {
     const isAlreadyExists = err?.code === 601 || (err?.message && err.message.toLowerCase().includes('already exists'));
     if (isAlreadyExists) {
       try {
-        await state.obs.setSourceFilterSettings(sourceName, cleanName, cropSettings);
-        await state.obs.setSourceFilterEnabled(sourceName, cleanName, true).catch(() => null);
+        await state.obs.call('SetSourceFilterSettings', {
+          sourceName,
+          filterName: cleanName,
+          filterSettings: cropSettings,
+          overlay: true,
+        });
+        await state.obs.call('SetSourceFilterEnabled', {
+          sourceName,
+          filterName: cleanName,
+          filterEnabled: true,
+        }).catch(() => null);
         showPtzBanner(`✓ Updated existing PTZ preset "${cleanName}" in OBS Studio!`, false);
         await loadPtzPresetsList(sourceName);
         closeSavePtzPresetModal();
@@ -5199,7 +5460,7 @@ async function openEditMediaModal(sourceName, sceneName, item) {
   el.modalEditMedia.classList.add('open');
 
   try {
-    const res = await state.obs.getInputSettings(sourceName);
+    const res = await state.obs.call('GetInputSettings', { inputName: sourceName });
     const kind = res.inputKind || (item ? item.inputKind : '');
     activeEditMediaKind = kind;
 
@@ -5255,7 +5516,11 @@ async function applyEditMedia() {
       el.btnApplyEditMedia.textContent = 'Applying...';
     }
 
-    await state.obs.setInputSettings(activeEditMediaSource, newSettings);
+    await state.obs.call('SetInputSettings', {
+      inputName: activeEditMediaSource,
+      inputSettings: newSettings,
+      overlay: true,
+    });
 
     el.editMediaCurrentPath.textContent = newPath;
     thumbnailCache.delete(activeEditMediaSource);
@@ -5317,7 +5582,7 @@ async function openMediaModal(sourceName, sceneName, item) {
   el.modalMediaFile.classList.add('open');
 
   try {
-    const res = await state.obs.getInputSettings(sourceName);
+    const res = await state.obs.call('GetInputSettings', { inputName: sourceName });
     const kind = res.inputKind || (item ? item.inputKind : 'image_source');
     activePropertiesInputKind = kind;
 
@@ -5328,7 +5593,7 @@ async function openMediaModal(sourceName, sceneName, item) {
 
     let defRes = { defaultInputSettings: {} };
     try {
-      defRes = await state.obs.getInputDefaultSettings(kind);
+      defRes = await state.obs.call('GetInputDefaultSettings', { inputKind: kind });
     } catch (_) {}
 
     activePropertiesDefaults = defRes.defaultInputSettings || {};
@@ -5349,7 +5614,7 @@ async function openMediaModal(sourceName, sceneName, item) {
       onTriggerButton: async (actionOrKey) => {
         if (actionOrKey === 'refresh_browser') {
           try {
-            await state.obs.request('PressInputPropertiesButton', {
+            await state.obs.call('PressInputPropertiesButton', {
               inputName: sourceName,
               propertyName: 'refreshnocache',
             });
@@ -5359,7 +5624,10 @@ async function openMediaModal(sourceName, sceneName, item) {
           }
         } else {
           try {
-            await state.obs.pressInputPropertiesButton(sourceName, actionOrKey);
+            await state.obs.call('PressInputPropertiesButton', {
+              inputName: sourceName,
+              propertyName: actionOrKey,
+            });
             showPropertiesBanner(`✓ Action "${actionOrKey}" triggered in OBS`, false);
           } catch (err) {
             showPropertiesBanner(`Action error: ${err.message}`, true);
@@ -5391,7 +5659,11 @@ async function applyPropertiesChanges() {
       el.btnPropertiesApply.textContent = 'Applying...';
     }
 
-    await state.obs.setInputSettings(state.selectedMediaSource, activePropertiesDraftSettings);
+    await state.obs.call('SetInputSettings', {
+      inputName: state.selectedMediaSource,
+      inputSettings: activePropertiesDraftSettings,
+      overlay: true,
+    });
 
     thumbnailCache.delete(state.selectedMediaSource);
     loadSourcesForScene(state.selectedCategoryScene);
@@ -5435,7 +5707,10 @@ async function resetPropertiesDefaults() {
     },
     onTriggerButton: async (key) => {
       try {
-        await state.obs.pressInputPropertiesButton(state.selectedMediaSource, key);
+        await state.obs.call('PressInputPropertiesButton', {
+          inputName: state.selectedMediaSource,
+          propertyName: key,
+        });
         showPropertiesBanner(`✓ Action "${key}" triggered in OBS`, false);
       } catch (err) {
         showPropertiesBanner(`Action error: ${err.message}`, true);

@@ -837,9 +837,12 @@ async function createPropertyRow({
       let optionsList = propDef.options ? [...propDef.options] : [];
 
       // If dynamic property items can be queried from OBS
-      if (propDef.fetchItems && obsClient && typeof obsClient.getInputPropertiesListPropertyItems === 'function') {
+      if (propDef.fetchItems && obsClient && typeof obsClient.call === 'function') {
         try {
-          const res = await obsClient.getInputPropertiesListPropertyItems(sourceName, propDef.key);
+          const res = await obsClient.call('GetInputPropertiesListPropertyItems', {
+            inputName: sourceName,
+            propertyName: propDef.key,
+          });
           if (res && Array.isArray(res.propertyItems) && res.propertyItems.length > 0) {
             optionsList = res.propertyItems.map((item) => ({
               name: item.itemName,
