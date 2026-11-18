@@ -64,6 +64,7 @@ const el = {
   dropdownMenuCard: document.getElementById('dropdown-menu-card'),
   btnMenuEditButtons: document.getElementById('btn-menu-edit-buttons'),
   btnMenuEditTabs: document.getElementById('btn-menu-edit-tabs'),
+  btnMenuAddScene: document.getElementById('btn-menu-add-scene'),
   btnMenuConnection: document.getElementById('btn-menu-connection'),
   btnMenuSettings: document.getElementById('btn-menu-settings'),
   btnMenuToggleStream: document.getElementById('btn-menu-toggle-stream'),
@@ -878,6 +879,13 @@ function setupEventListeners() {
     closeDropdownMenu();
     openEditTabsModal();
   });
+  if (el.btnMenuAddScene) {
+    el.btnMenuAddScene.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeDropdownMenu();
+      openCreateSceneModal();
+    });
+  }
   el.btnMenuToggleStream.addEventListener('click', async (e) => {
     e.preventDefault();
     closeDropdownMenu();
@@ -2555,6 +2563,9 @@ function applyAdvancedOptionsVisibility() {
   if (el.sourcesHeaderBar) {
     el.sourcesHeaderBar.style.display = state.advancedOptionsEnabled ? 'flex' : 'none';
   }
+  if (el.btnMenuAddScene) {
+    el.btnMenuAddScene.hidden = !state.advancedOptionsEnabled;
+  }
   renderTopSceneButtons();
   if (state.sceneItems && state.sceneItems.length > 0) {
     renderSourcesList(state.selectedCategoryScene, state.sceneItems);
@@ -2640,20 +2651,6 @@ function renderTopSceneButtons() {
 
     el.scenesGridTop.appendChild(btn);
   });
-
-  // Dedicated "+" Add Scene button at the end of the top grid (Advanced only)
-  if (state.advancedOptionsEnabled) {
-    const btnAdd = document.createElement('button');
-    btnAdd.type = 'button';
-    btnAdd.className = 'scene-block-btn btn-add-scene';
-    btnAdd.title = 'Add New Scene';
-    btnAdd.textContent = '+';
-    btnAdd.addEventListener('click', (e) => {
-      e.preventDefault();
-      openCreateSceneModal();
-    });
-    el.scenesGridTop.appendChild(btnAdd);
-  }
 }
 
 function getCurrentTargetScene() {
@@ -5708,6 +5705,9 @@ function formatFileSize(bytes) {
 
 // Three-Dots Anchored Dropdown Menu
 function toggleDropdownMenu() {
+  if (el.btnMenuAddScene) {
+    el.btnMenuAddScene.hidden = !state.advancedOptionsEnabled;
+  }
   el.dropdownMenuOverlay.classList.toggle('open');
 }
 

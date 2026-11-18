@@ -468,7 +468,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 6px 16px;
   border-bottom: 1px solid #11141b;
 }
 
@@ -1450,25 +1450,6 @@ body {
 /* Compact Modal Variation for Rename & Prompts */
 .blade-dialog-compact {
   max-width: 380px !important;
-}
-
-/* Add Scene Button in Top Grid */
-.scene-block-btn.btn-add-scene {
-  background: rgba(33, 150, 243, 0.06);
-  border: 1px dashed rgba(33, 150, 243, 0.35);
-  color: #60a5fa;
-  font-size: 20px;
-  font-weight: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.scene-block-btn.btn-add-scene:hover,
-.scene-block-btn.btn-add-scene:active {
-  background: rgba(33, 150, 243, 0.15);
-  border-color: var(--obs-blue);
-  color: #fff;
 }
 
 /* Filters Modal Elements */
