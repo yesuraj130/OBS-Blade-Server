@@ -25,6 +25,7 @@ const state = {
   hiddenSceneTabs: new Set(),
   wakeLockEnabled: false,
   clientStudioModeControls: true,
+  showSourceTypeInList: false,
   advancedOptionsEnabled: false,
   copiedTransform: null,
   activeEditTransform: null,
@@ -111,6 +112,7 @@ const el = {
   btnCloseSettings: document.getElementById('btn-close-settings'),
   toggleWakeLock: document.getElementById('toggle-wake-lock'),
   toggleClientStudio: document.getElementById('toggle-client-studio'),
+  toggleShowSourceType: document.getElementById('toggle-show-source-type'),
 
   // Edit Source / Source Settings Modal (Native Dynamic OBS Properties)
   modalMediaFile: document.getElementById('modal-media-file'),
@@ -499,6 +501,9 @@ function loadSavedPreferences() {
 
     const rawStudioControls = localStorage.getItem('obs_blade_client_studio_mode_controls');
     state.clientStudioModeControls = rawStudioControls === null ? true : rawStudioControls === 'true';
+
+    const rawShowSourceType = localStorage.getItem('obs_blade_show_source_type_in_list');
+    state.showSourceTypeInList = rawShowSourceType === 'true'; // Default disabled
 
     const rawAdvanced = localStorage.getItem('obs_blade_advanced_options');
     state.advancedOptionsEnabled = rawAdvanced === 'true'; // Default disabled
@@ -1298,6 +1303,26 @@ function setupEventListeners() {
       } catch (_) {}
 
       applyClientStudioModeControls();
+    });
+  }
+
+  if (el.toggleShowSourceType) {
+    el.toggleShowSourceType.addEventListener('change', (e) => {
+      state.showSourceTypeInList = e.target.checked;
+      try {
+        localStorage.setItem(
+          'obs_blade_show_source_type_in_list',
+          String(state.showSourceTypeInList)
+        );
+      } catch (_) {}
+
+      const target =
+        state.selectedCategoryScene === '__CURRENT__'
+          ? getCurrentTargetScene()
+          : state.selectedCategoryScene;
+      if (target) {
+        renderSourcesList(target, state.sceneItems);
+      }
     });
   }
 
@@ -3454,7 +3479,7 @@ function renderSourcesList(sceneName, items) {
         </button>
         <div class="source-name-col">
           <span class="source-name-blade">${escapeHtml(item.sourceName)}</span>
-          <span class="source-type-subtext">${categoryLabel}</span>
+          ${state.showSourceTypeInList ? `<span class="source-type-subtext">${categoryLabel}</span>` : ''}
         </div>
       </div>
       <div class="source-right-actions">
@@ -6057,6 +6082,9 @@ function openSettingsModal() {
   }
   if (el.toggleClientStudio) {
     el.toggleClientStudio.checked = state.clientStudioModeControls;
+  }
+  if (el.toggleShowSourceType) {
+    el.toggleShowSourceType.checked = state.showSourceTypeInList;
   }
   if (el.toggleAdvancedOptions) {
     el.toggleAdvancedOptions.checked = state.advancedOptionsEnabled;
