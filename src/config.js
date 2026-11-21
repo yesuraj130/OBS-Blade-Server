@@ -11,4 +11,6 @@ window.OBS_BLADE_CONFIG = {
   obsPassword: '',
   fileServerUrl: '',
   fileServerPassword: '',
+  hiddenSceneButtons: [], // Scene names hidden from top scene buttons by default
+  hiddenSceneTabs: [], // Scene names hidden from lower scene tabs by default
 };

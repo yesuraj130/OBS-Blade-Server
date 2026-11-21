@@ -94,12 +94,14 @@ const el = {
   modalEditScenes: document.getElementById('modal-edit-scenes'),
   btnBackEditScenes: document.getElementById('btn-back-edit-scenes'),
   btnCloseEditScenes: document.getElementById('btn-close-edit-scenes'),
+  btnResetEditScenes: document.getElementById('btn-reset-edit-scenes'),
   editScenesCheckboxList: document.getElementById('edit-scenes-checkbox-list'),
 
   // Edit Scene Tabs Modal
   modalEditTabs: document.getElementById('modal-edit-tabs'),
   btnBackEditTabs: document.getElementById('btn-back-edit-tabs'),
   btnCloseEditTabs: document.getElementById('btn-close-edit-tabs'),
+  btnResetEditTabs: document.getElementById('btn-reset-edit-tabs'),
   editTabsCheckboxList: document.getElementById('edit-tabs-checkbox-list'),
 
   // Settings Modal
@@ -313,6 +315,12 @@ function getConfiguredDefaults() {
     fileServerUrl: typeof cfg.fileServerUrl === 'string' ? cfg.fileServerUrl.trim() : '',
     fileServerPassword:
       typeof cfg.fileServerPassword === 'string' ? cfg.fileServerPassword : '',
+    hiddenSceneButtons: Array.isArray(cfg.hiddenSceneButtons)
+      ? cfg.hiddenSceneButtons.filter((name) => typeof name === 'string' && name !== '')
+      : [],
+    hiddenSceneTabs: Array.isArray(cfg.hiddenSceneTabs)
+      ? cfg.hiddenSceneTabs.filter((name) => typeof name === 'string' && name !== '')
+      : [],
   };
 }
 
@@ -675,11 +683,14 @@ function saveCredentials({ ip, port, password, fileUrl, filePassword }) {
 }
 
 function loadHiddenScenePreferences() {
+  state.hiddenSceneButtons = new Set(getConfiguredDefaults().hiddenSceneButtons);
   try {
     const raw = localStorage.getItem('obs_hidden_scene_buttons');
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      state.hiddenSceneButtons = new Set(parsed);
+      if (Array.isArray(parsed)) {
+        state.hiddenSceneButtons = new Set(parsed);
+      }
     }
   } catch (e) {}
 }
@@ -693,12 +704,22 @@ function saveHiddenScenePreferences() {
   } catch (e) {}
 }
 
+function resetHiddenScenePreferences() {
+  try {
+    localStorage.removeItem('obs_hidden_scene_buttons');
+  } catch (e) {}
+  state.hiddenSceneButtons = new Set(getConfiguredDefaults().hiddenSceneButtons);
+}
+
 function loadHiddenTabPreferences() {
+  state.hiddenSceneTabs = new Set(getConfiguredDefaults().hiddenSceneTabs);
   try {
     const raw = localStorage.getItem('obs_hidden_scene_tabs');
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      state.hiddenSceneTabs = new Set(parsed);
+      if (Array.isArray(parsed)) {
+        state.hiddenSceneTabs = new Set(parsed);
+      }
     }
   } catch (e) {}
 }
@@ -710,6 +731,13 @@ function saveHiddenTabPreferences() {
       JSON.stringify(Array.from(state.hiddenSceneTabs))
     );
   } catch (e) {}
+}
+
+function resetHiddenTabPreferences() {
+  try {
+    localStorage.removeItem('obs_hidden_scene_tabs');
+  } catch (e) {}
+  state.hiddenSceneTabs = new Set(getConfiguredDefaults().hiddenSceneTabs);
 }
 
 let obsReconnectTimer = null;
@@ -1075,6 +1103,14 @@ function setupEventListeners() {
     e.preventDefault();
     closeEditScenesModal();
   });
+  if (el.btnResetEditScenes) {
+    el.btnResetEditScenes.addEventListener('click', (e) => {
+      e.preventDefault();
+      resetHiddenScenePreferences();
+      renderTopSceneButtons();
+      openEditScenesModal();
+    });
+  }
 
   // Edit Scene Tabs Modal
   if (el.btnBackEditTabs) {
@@ -1087,6 +1123,14 @@ function setupEventListeners() {
     e.preventDefault();
     closeEditTabsModal();
   });
+  if (el.btnResetEditTabs) {
+    el.btnResetEditTabs.addEventListener('click', (e) => {
+      e.preventDefault();
+      resetHiddenTabPreferences();
+      renderCategoryGrid();
+      openEditTabsModal();
+    });
+  }
 
   // Studio Mode Checkbox Toggle
   el.studioModeToggle.addEventListener('click', async (e) => {
