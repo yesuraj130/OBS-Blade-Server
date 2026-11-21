@@ -87,6 +87,7 @@ const el = {
   chkOverrideFileUrl: document.getElementById('chk-override-file-url'),
   setFilePass: document.getElementById('set-file-pass'),
   chkOverrideFilePass: document.getElementById('chk-override-file-pass'),
+  btnResetConnection: document.getElementById('btn-reset-connection'),
   btnUseRealObs: document.getElementById('btn-use-real-obs'),
   btnUseSim: document.getElementById('btn-use-sim'),
 
@@ -1389,6 +1390,21 @@ function setupEventListeners() {
 
       // Non-blocking asynchronous verification of File Browser server
       checkFileBrowserStatus(effective.fileUrl, effective.filePassword);
+    });
+  }
+
+  if (el.btnResetConnection) {
+    el.btnResetConnection.addEventListener('click', (e) => {
+      e.preventDefault();
+      saveCredentials({
+        ip: null,
+        port: null,
+        password: null,
+        fileUrl: null,
+        filePassword: null,
+      });
+      loadSavedCredentials();
+      showGlobalNotice('Connection settings reset to default.', false, 2500);
     });
   }
 
