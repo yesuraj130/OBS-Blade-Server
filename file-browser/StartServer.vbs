@@ -13,8 +13,30 @@ CurrentDirectory = FSO.GetParentFolderName(WScript.ScriptFullName)
 WshShell.CurrentDirectory = CurrentDirectory
 LogPath = CurrentDirectory & "\server.log"
 
+Function ReadConfigPort(configFilePath)
+    ReadConfigPort = ""
+    On Error Resume Next
+    If FSO.FileExists(configFilePath) Then
+        Dim ts, content, re, matches
+        Set ts = FSO.OpenTextFile(configFilePath, 1)
+        content = ts.ReadAll()
+        ts.Close
+        Set re = New RegExp
+        re.Pattern = "\bport\s*:\s*(\d+)"
+        re.IgnoreCase = True
+        Set matches = re.Execute(content)
+        If matches.Count > 0 Then
+            ReadConfigPort = matches(0).SubMatches(0)
+        End If
+    End If
+    On Error GoTo 0
+End Function
+
 ServerPort = WshShell.ExpandEnvironmentStrings("%PORT%")
 If ServerPort = "" Or ServerPort = "%PORT%" Then
+    ServerPort = ReadConfigPort(CurrentDirectory & "\config.js")
+End If
+If ServerPort = "" Then
     ServerPort = "3000"
 End If
 

@@ -599,6 +599,22 @@ svg { display: block; flex-shrink: 0; }
   font-weight: 600;
   color: var(--text-muted);
 }
+.drawer-sec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.drawer-sec-reset {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--blue-bright);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.drawer-sec-reset:hover {
+  background: rgba(33, 150, 243, 0.14);
+}
 .drawer-bm-wrap {
   display: flex;
   align-items: center;
@@ -1117,7 +1133,10 @@ svg { display: block; flex-shrink: 0; }
       </span>
     </button>
 
-    <div class="drawer-sec">Bookmarks</div>
+    <div class="drawer-sec drawer-sec-row">
+      <span>Bookmarks</span>
+      <button type="button" id="btn-reset-bookmarks" class="drawer-sec-reset" title="Reset bookmarks to server defaults">Reset to Default</button>
+    </div>
     <div id="drawer-bookmarks"></div>
 
     <div class="drawer-sec">Session & Safety</div>
@@ -1261,6 +1280,8 @@ svg { display: block; flex-shrink: 0; }
     entries: [],
     selected: {},
     clipboard: null, // { mode: 'copy'|'cut', items: [...] }
+    defaultDir: '',
+    defaultBookmarks: [],
     bookmarks: (function () {
       try {
         var raw = localStorage.getItem(BM_KEY);
@@ -1451,8 +1472,45 @@ svg { display: block; flex-shrink: 0; }
     return list;
   }
 
+  function hasSavedBookmarks() {
+    try { return localStorage.getItem(BM_KEY) !== null; } catch (_) { return false; }
+  }
+
   function saveBookmarks() {
     try { localStorage.setItem(BM_KEY, JSON.stringify(state.bookmarks)); } catch (_) {}
+  }
+
+  function cloneDefaultBookmarks() {
+    return state.defaultBookmarks.map(function (b) {
+      return { name: b.name || folderNameForPath(b.path), path: b.path };
+    });
+  }
+
+  function applyServerDefaults(data) {
+    if (!data || typeof data !== 'object') return;
+    if (typeof data.defaultDir === 'string') {
+      state.defaultDir = data.defaultDir.trim();
+    }
+    if (Array.isArray(data.defaultBookmarks)) {
+      state.defaultBookmarks = data.defaultBookmarks
+        .filter(function (b) { return b && typeof b.path === 'string' && b.path.trim() !== ''; })
+        .map(function (b) {
+          var p = b.path.trim();
+          return { name: (typeof b.name === 'string' && b.name.trim()) ? b.name.trim() : folderNameForPath(p), path: p };
+        });
+      if (!hasSavedBookmarks()) {
+        state.bookmarks = cloneDefaultBookmarks();
+        renderBookmarks();
+      }
+    }
+  }
+
+  function resetBookmarksToDefault() {
+    try { localStorage.removeItem(BM_KEY); } catch (_) {}
+    state.bookmarks = cloneDefaultBookmarks();
+    renderBookmarks();
+    renderHeader();
+    showToast('Bookmarks reset to default');
   }
 
   function isBookmarked(dirPath) {
@@ -2185,9 +2243,10 @@ svg { display: block; flex-shrink: 0; }
         }
         state.password = pw;
         try { localStorage.setItem(PW_KEY, pw); } catch (_) {}
+        applyServerDefaults(res.d);
         loginPass.value = '';
         loginOverlay.classList.add('hidden');
-        browse('__PROJECT__');
+        browse(state.defaultDir || '__PROJECT__');
       })
       .catch(function () {
         loginErr.textContent = 'Connection failed';
@@ -2377,6 +2436,7 @@ svg { display: block; flex-shrink: 0; }
   // Drawer Nav
   $('nav-project').addEventListener('click', function () { browse('__PROJECT__'); });
   $('nav-drives').addEventListener('click', function () { browse('__DRIVES__'); });
+  $('btn-reset-bookmarks').addEventListener('click', function () { resetBookmarksToDefault(); });
   $('nav-lock').addEventListener('click', function () { setDrawerOpen(false); toggleDeleteLock(); });
   $('nav-obs').addEventListener('click', function () { if (state.dashboardUrl) window.location.href = state.dashboardUrl; });
   $('nav-logout').addEventListener('click', doLogout);
@@ -2462,7 +2522,8 @@ svg { display: block; flex-shrink: 0; }
       if (st.authRequired && !st.authValid) {
         showLogin('');
       } else {
-        browse('__PROJECT__');
+        applyServerDefaults(st);
+        browse(state.defaultDir || '__PROJECT__');
       }
     })
     .catch(function () {

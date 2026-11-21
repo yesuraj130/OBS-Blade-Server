@@ -2,8 +2,6 @@
 title OBS Host File Browser
 cd /d "%~dp0"
 
-if "%PORT%"=="" set PORT=3000
-
 echo ===================================================
 echo   OBS Host File Browser Microservice
 echo ===================================================
@@ -29,8 +27,14 @@ if not exist "node_modules" (
     echo.
 )
 
-echo Starting File Browser server on port %PORT%...
-echo Access standalone file manager at: http://localhost:%PORT%/
+set DISPLAY_PORT=%PORT%
+if "%DISPLAY_PORT%"=="" (
+    for /f "usebackq delims=" %%i in (`node -e "import('./config.js').then(m=>console.log(Number(m.default?.port)||3000)).catch(()=>console.log(3000))"`) do set DISPLAY_PORT=%%i
+)
+if "%DISPLAY_PORT%"=="" set DISPLAY_PORT=3000
+
+echo Starting File Browser server on port %DISPLAY_PORT%...
+echo Access standalone file manager at: http://localhost:%DISPLAY_PORT%/
 echo.
 node server.js
 

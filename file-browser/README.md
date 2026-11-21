@@ -16,14 +16,18 @@ This folder is **completely detached from OBS Studio**. It runs independently on
 
 ---
 
-## Configuration (Environment Variables)
+## Configuration (`config.js` & Environment Variables)
 
-| Variable | Default | Purpose |
-| :--- | :--- | :--- |
-| `PORT` | `3000` | HTTP port to listen on |
-| `FILE_SERVER_PASSWORD` (or `OBS_PASSWORD`) | *(empty)* | Enforces password authentication across all upload, browse, preview, and delete endpoints |
-| `MAX_UPLOAD_MB` | `2048` | Maximum single upload file size in MB (default 2 GB) |
-| `ALLOW_SYSTEM_DELETE` | `false` | Set `true` to allow deleting files outside `./uploads` when unlocked |
+Edit `config.js` directly to configure defaults without touching `server.js` (`config.js` is loaded server-side only and is never served over HTTP). Environment variables override `config.js` if explicitly set.
+
+| `config.js` Key | Environment Variable | Default | Purpose |
+| :--- | :--- | :--- | :--- |
+| `port` | `PORT` | `3000` | HTTP port to listen on |
+| `password` | `FILE_SERVER_PASSWORD` (or `OBS_PASSWORD`) | *(empty)* | Enforces password authentication across all upload, browse, preview, and delete endpoints |
+| `maxUploadMb` | `MAX_UPLOAD_MB` | `2048` | Maximum single upload file size in MB (default 2 GB) |
+| `allowSystemDelete` | `ALLOW_SYSTEM_DELETE` | `false` | Set `true` to allow deleting files outside `./uploads` when unlocked |
+| `defaultDir` | — | *(empty)* | Folder opened automatically on startup (empty = Project Folder, or `__UPLOADS__`, `__DRIVES__`, or a folder path) |
+| `defaultBookmarks` | — | `[]` | Default bookmarks (`[{ name, path }]`) shown until customized in the browser (can be restored via **Reset to Default**) |
 
 ---
 

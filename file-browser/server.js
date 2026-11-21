@@ -3,16 +3,45 @@ import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = Number(process.env.PORT) || 3000;
-const MAX_UPLOAD_MB = Math.max(1, Number(process.env.MAX_UPLOAD_MB) || 2048);
+let fileConfig = {};
+try {
+  const configPath = path.resolve(__dirname, 'config.js');
+  if (fs.existsSync(configPath)) {
+    const mod = await import(pathToFileURL(configPath).href);
+    if (mod && mod.default && typeof mod.default === 'object') {
+      fileConfig = mod.default;
+    }
+  }
+} catch (err) {
+  console.warn('[File Server] Failed to load config.js, using defaults:', err.message);
+}
+
+const PORT = Number(process.env.PORT) || Number(fileConfig.port) || 3000;
+const MAX_UPLOAD_MB = Math.max(
+  1,
+  Number(process.env.MAX_UPLOAD_MB) || Number(fileConfig.maxUploadMb) || 2048
+);
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
-const ALLOW_SYSTEM_DELETE = process.env.ALLOW_SYSTEM_DELETE === 'true';
+const ALLOW_SYSTEM_DELETE =
+  process.env.ALLOW_SYSTEM_DELETE !== undefined
+    ? process.env.ALLOW_SYSTEM_DELETE === 'true'
+    : Boolean(fileConfig.allowSystemDelete);
+const DEFAULT_DIR =
+  typeof fileConfig.defaultDir === 'string' ? fileConfig.defaultDir.trim() : '';
+const DEFAULT_BOOKMARKS = Array.isArray(fileConfig.defaultBookmarks)
+  ? fileConfig.defaultBookmarks
+      .filter((b) => b && typeof b.path === 'string' && b.path.trim() !== '')
+      .map((b) => ({
+        name: typeof b.name === 'string' ? b.name.trim() : '',
+        path: b.path.trim(),
+      }))
+  : [];
 
 const uploadsDir = path.resolve(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -27,7 +56,9 @@ const PREVIEWABLE_EXTS = new Set([
 ]);
 
 function getConfiguredPassword() {
-  return process.env.FILE_SERVER_PASSWORD || process.env.OBS_PASSWORD || '';
+  if (process.env.FILE_SERVER_PASSWORD) return process.env.FILE_SERVER_PASSWORD;
+  if (process.env.OBS_PASSWORD) return process.env.OBS_PASSWORD;
+  return typeof fileConfig.password === 'string' ? fileConfig.password : '';
 }
 
 function extractRequestPassword(req) {
@@ -170,8 +201,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve standalone UI static files (HTML/JS/CSS)
-app.use(express.static(__dirname, { index: 'index.html' }));
+// Serve standalone UI entry only (never expose server.js / config.js over HTTP)
+app.get(['/', '/index.html'], (_req, res) => {
+  res.sendFile(path.resolve(__dirname, 'index.html'));
+});
 
 // Protect uploaded media static route when password is enabled
 app.use('/uploads', requireAuth, express.static(uploadsDir));
@@ -195,6 +228,12 @@ app.get('/api/status', (req, res) => {
     allowSystemDelete: ALLOW_SYSTEM_DELETE,
     authRequired: Boolean(configuredPass),
     authValid,
+    ...(authValid
+      ? {
+          defaultDir: DEFAULT_DIR,
+          defaultBookmarks: DEFAULT_BOOKMARKS,
+        }
+      : {}),
     time: new Date().toISOString(),
   });
 });
@@ -212,6 +251,8 @@ app.post('/api/auth/login', (req, res) => {
     success: true,
     authRequired: Boolean(configuredPass),
     authValid: true,
+    defaultDir: DEFAULT_DIR,
+    defaultBookmarks: DEFAULT_BOOKMARKS,
   });
 });
 
@@ -732,6 +773,11 @@ app.put('/api/fs/content', requireAuth, (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to save file content', details: err.message });
   }
+});
+
+// Block direct access to server-side config/source files
+app.get(['/config.js', '/server.js', '/package.json', '/server.log', '/StartServer.bat', '/StartServer.vbs'], (_req, res) => {
+  res.status(404).end();
 });
 
 // Fallback to standalone web UI
