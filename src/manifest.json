@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "OBS Blade Web",
-  "short_name": "OBS Blade",
+  "name": "OBS Blade Server",
+  "short_name": "OBS Blade Server",
   "description": "Mobile-first OBS Studio Web Remote with scene switching, source control, live thumbnails, filters, and media management.",
   "start_url": "./",
   "scope": "./",

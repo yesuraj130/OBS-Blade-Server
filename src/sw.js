@@ -3,7 +3,7 @@
 // Subfolder-safe for IIS subsite deployment & root Node hosting
 // ===========================================================================
 
-const CACHE_NAME = 'obs-blade-v3';
+const CACHE_NAME = 'obs-blade-v4';
 
 const STATIC_ASSETS = [
   './',

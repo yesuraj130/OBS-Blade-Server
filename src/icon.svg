@@ -1,33 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#060911"/>
+      <stop offset="0%" stop-color="#0b1322"/>
+      <stop offset="100%" stop-color="#070f1a"/>
     </linearGradient>
-    <linearGradient id="bladeBlue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#2196f3"/>
+    <linearGradient id="bladeLight" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="55%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#7dd3fc"/>
     </linearGradient>
-    <linearGradient id="bladeCoral" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ff6b81"/>
-      <stop offset="100%" stop-color="#ff4766"/>
+    <linearGradient id="bladeDark" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#2563eb"/>
     </linearGradient>
+    <radialGradient id="coreGlow" cx="42%" cy="38%" r="60%">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="55%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </radialGradient>
   </defs>
 
   <!-- Rounded App Icon Surface -->
   <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bgGrad)"/>
-  <rect x="10" y="10" width="492" height="492" rx="104" fill="none" stroke="#1e293b" stroke-width="6"/>
 
-  <!-- Outer Broadcast Ring -->
-  <circle cx="256" cy="256" r="168" fill="#0b1120" stroke="#1e293b" stroke-width="10"/>
+  <!-- OBS Outer Ring (Silver + Coral Inner Accent) -->
+  <circle cx="256" cy="256" r="176" fill="#070f1a" stroke="#e2e8f0" stroke-width="18"/>
+  <circle cx="256" cy="256" r="161" fill="none" stroke="#ff4766" stroke-width="10"/>
 
-  <!-- Three Stylized OBS-Inspired Aperture Blades -->
-  <path d="M256 118 A138 138 0 0 1 380 198 L294 238 A54 54 0 0 0 256 202 Z" fill="url(#bladeBlue)"/>
-  <path d="M388 218 A138 138 0 0 1 268 394 L276 300 A54 54 0 0 0 310 254 Z" fill="url(#bladeCoral)"/>
-  <path d="M244 394 A138 138 0 0 1 124 218 L202 254 A54 54 0 0 0 236 300 Z" fill="#e2e8f0"/>
+  <!-- Three Interlocking OBS Swirl Crescents -->
+  <g fill="#e2e8f0">
+    <path d="M256 122 C188 126 156 184 196 242 C214 268 232 254 222 224 C202 184 218 148 256 122 Z"/>
+    <path d="M256 122 C188 126 156 184 196 242 C214 268 232 254 222 224 C202 184 218 148 256 122 Z" transform="rotate(120 256 256)"/>
+    <path d="M256 122 C188 126 156 184 196 242 C214 268 232 254 222 224 C202 184 218 148 256 122 Z" transform="rotate(240 256 256)"/>
+  </g>
 
-  <!-- Center Lens Core -->
-  <circle cx="256" cy="256" r="56" fill="#090e17" stroke="#334155" stroke-width="8"/>
-  <circle cx="256" cy="256" r="24" fill="#ff4766"/>
-  <circle cx="248" cy="248" r="7" fill="#ffffff" opacity="0.8"/>
+  <!-- Diagonal OBS Blade Slash (Dark Halo + Two-Tone Metallic Edge) -->
+  <g>
+    <polygon points="434,78 408,142 138,412 78,434 100,374 370,104" fill="#070f1a" stroke="#070f1a" stroke-width="20" stroke-linejoin="round"/>
+    <polygon points="434,78 370,104 100,374 78,434 256,256" fill="url(#bladeLight)"/>
+    <polygon points="434,78 408,142 138,412 78,434 256,256" fill="url(#bladeDark)"/>
+  </g>
+
+  <!-- Center Studio Lens Core -->
+  <circle cx="256" cy="256" r="52" fill="#070f1a"/>
+  <circle cx="256" cy="256" r="42" fill="#e2e8f0"/>
+  <circle cx="256" cy="256" r="30" fill="#0b1322"/>
+  <circle cx="256" cy="256" r="22" fill="url(#coreGlow)"/>
+  <circle cx="249" cy="249" r="6" fill="#ffffff" opacity="0.85"/>
 </svg>
