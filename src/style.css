@@ -462,6 +462,17 @@ body {
 .sources-list-section {
   background-color: #000000;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#sources-list-container {
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: 60vh;
+  max-height: clamp(260px, 60dvh, calc(100dvh - 52px - var(--safe-top)));
 }
 
 .source-item-row-blade {
