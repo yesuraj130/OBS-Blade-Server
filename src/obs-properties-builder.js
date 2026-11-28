@@ -812,6 +812,7 @@ async function createPropertyRow({
         if (onBrowseLocal) {
           onBrowseLocal({
             propKey: propDef.key,
+            currentPath: input.value,
             accept: propDef.accept || '*/*',
             onUploaded: (uploadedPath) => {
               input.value = uploadedPath;

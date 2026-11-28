@@ -134,6 +134,8 @@ const el = {
   editMediaTypeBadge: document.getElementById('edit-media-type-badge'),
   editMediaStatusBanner: document.getElementById('edit-media-status-banner'),
   editMediaCurrentPath: document.getElementById('edit-media-current-path'),
+  editMediaUploadDir: document.getElementById('edit-media-upload-dir'),
+  btnMediaChangeFolder: document.getElementById('btn-media-change-folder'),
   inputEditMediaPath: document.getElementById('input-edit-media-path'),
   btnMediaBrowseHost: document.getElementById('btn-media-browse-host'),
   btnMediaBrowseLocal: document.getElementById('btn-media-browse-local'),
@@ -1771,6 +1773,29 @@ function setupEventListeners() {
         pathType: 'file',
         onSelect: (selectedPath) => {
           el.inputEditMediaPath.value = selectedPath;
+          if (!activeEditMediaUploadDirCustom) {
+            const derived = getParentDirectoryFromPath(selectedPath);
+            if (derived) {
+              activeEditMediaUploadDir = derived;
+              updateEditMediaUploadDirUI();
+            }
+          }
+        },
+      });
+    });
+  }
+
+  if (el.btnMediaChangeFolder) {
+    el.btnMediaChangeFolder.addEventListener('click', (e) => {
+      e.preventDefault();
+      openHostFileBrowser({
+        propKey: 'media_upload_dir',
+        currentPath: activeEditMediaUploadDir || getParentDirectoryFromPath(el.inputEditMediaPath.value),
+        pathType: 'folder',
+        onSelect: (selectedDir) => {
+          activeEditMediaUploadDir = selectedDir;
+          activeEditMediaUploadDirCustom = true;
+          updateEditMediaUploadDirUI();
         },
       });
     });
@@ -1783,14 +1808,41 @@ function setupEventListeners() {
         activeEditMediaKind === 'ffmpeg_source' ||
         activeEditMediaKind === 'vlc_source' ||
         activeEditMediaKind.includes('video');
-      openLocalFileBrowser({
-        propKey: 'media_file',
-        accept: isVideo ? 'video/*,audio/*' : 'image/*',
-        onUploaded: (uploadedPath) => {
-          el.inputEditMediaPath.value = uploadedPath;
-          showEditMediaBanner(`✓ Uploaded file selected. Click "Apply Media" to save.`, false);
-        },
-      });
+      const accept = isVideo ? 'video/*,audio/*' : 'image/*';
+      const targetDir = activeEditMediaUploadDir || getParentDirectoryFromPath(el.inputEditMediaPath.value);
+      const onUploaded = (uploadedPath) => {
+        el.inputEditMediaPath.value = uploadedPath;
+        showEditMediaBanner(`✓ Uploaded file selected. Click "Apply Media" to save.`, false);
+      };
+
+      if (targetDir) {
+        activeEditMediaUploadDir = targetDir;
+        updateEditMediaUploadDirUI();
+        openLocalFileBrowser({
+          propKey: 'media_file',
+          accept,
+          uploadDir: targetDir,
+          onUploaded,
+        });
+      } else {
+        showEditMediaBanner('Select a destination folder on the OBS host to upload into.', false);
+        openHostFileBrowser({
+          propKey: 'media_upload_dir',
+          currentPath: '',
+          pathType: 'folder',
+          onSelect: (selectedDir) => {
+            activeEditMediaUploadDir = selectedDir;
+            activeEditMediaUploadDirCustom = true;
+            updateEditMediaUploadDirUI();
+            openLocalFileBrowser({
+              propKey: 'media_file',
+              accept,
+              uploadDir: selectedDir,
+              onUploaded,
+            });
+          },
+        });
+      }
     });
   }
 
@@ -1809,6 +1861,12 @@ function setupEventListeners() {
 
       const isEditMediaOpen = el.modalEditMedia && el.modalEditMedia.classList.contains('open');
       const showBanner = isEditMediaOpen ? showEditMediaBanner : showPropertiesBanner;
+
+      if (!activeLocalUploadDir || activeLocalUploadDir === '__DRIVES__') {
+        showBanner('Please select a destination folder on the OBS host first.', true);
+        el.propLocalFileInput.value = '';
+        return;
+      }
 
       const maxBytes = fileServerMaxUploadMb * 1024 * 1024;
       if (file.size > maxBytes) {
@@ -1834,7 +1892,7 @@ function setupEventListeners() {
       formData.append('media', file);
 
       try {
-        const uploadUrl = getFileServerApiUrl('/api/upload');
+        const uploadUrl = getFileServerApiUrl(`/api/upload?dir=${encodeURIComponent(activeLocalUploadDir)}`);
         const filePw = getFileServerPassword();
 
         const data = await uploadFileWithProgress(uploadUrl, formData, filePw, (loaded, total) => {
@@ -1845,7 +1903,7 @@ function setupEventListeners() {
           );
         });
 
-        showBanner(`✓ Uploaded "${file.name}" to host!`, false);
+        showBanner(`✓ Uploaded "${data.filename || file.name}" to host!`, false);
 
         if (activeLocalUploadCallback) {
           activeLocalUploadCallback(data.path);
@@ -1903,10 +1961,18 @@ function setupEventListeners() {
   if (el.btnSelectCurrentFolder) {
     el.btnSelectCurrentFolder.addEventListener('click', (e) => {
       e.preventDefault();
-      if (activeHostBrowserTarget && activeHostBrowserTarget.onSelect && currentHostDir) {
-        activeHostBrowserTarget.onSelect(currentHostDir);
+      if (!currentHostDir || currentHostDir === '__DRIVES__') {
+        if (el.hostBrowserBreadcrumb) {
+          el.hostBrowserBreadcrumb.textContent = 'Open a drive or folder first';
+        }
+        return;
       }
+      const target = activeHostBrowserTarget;
+      const chosenDir = currentHostDir;
       closeHostFileBrowser();
+      if (target && target.onSelect) {
+        target.onSelect(chosenDir);
+      }
     });
   }
 
@@ -5508,6 +5574,7 @@ let activePropertiesDefaults = {};
 let activePropertiesInputKind = '';
 let activeHostBrowserTarget = null;
 let activeLocalUploadCallback = null;
+let activeLocalUploadDir = '';
 let currentHostDir = '';
 let currentHostParentDir = null;
 
@@ -5515,6 +5582,29 @@ let currentHostParentDir = null;
 let activeEditMediaSource = null;
 let activeEditMediaScene = null;
 let activeEditMediaKind = '';
+let activeEditMediaUploadDir = '';
+let activeEditMediaUploadDirCustom = false;
+
+function getParentDirectoryFromPath(filePath) {
+  if (!filePath || typeof filePath !== 'string') return '';
+  const trimmed = filePath.trim();
+  if (!trimmed) return '';
+  const sep = trimmed.includes('\\') ? '\\' : '/';
+  const normalized = trimmed.replace(/[\\/]+$/, '');
+  if (!normalized) return sep === '/' ? '/' : '';
+  if (/^[a-zA-Z]:$/.test(normalized)) return `${normalized}\\`;
+  const lastSep = Math.max(normalized.lastIndexOf('\\'), normalized.lastIndexOf('/'));
+  if (lastSep === -1) return '';
+  if (lastSep === 0) return '/';
+  const parent = normalized.slice(0, lastSep);
+  if (/^[a-zA-Z]:$/.test(parent)) return `${parent}\\`;
+  return parent;
+}
+
+function updateEditMediaUploadDirUI() {
+  if (!el.editMediaUploadDir) return;
+  el.editMediaUploadDir.textContent = activeEditMediaUploadDir || '(Select folder when uploading)';
+}
 
 function showEditMediaBanner(message, isError = false) {
   if (!el.editMediaStatusBanner) return;
@@ -5533,10 +5623,13 @@ function showEditMediaBanner(message, isError = false) {
 async function openEditMediaModal(sourceName, sceneName, item) {
   activeEditMediaSource = sourceName;
   activeEditMediaScene = sceneName || state.selectedCategoryScene;
+  activeEditMediaUploadDir = '';
+  activeEditMediaUploadDirCustom = false;
 
   el.editMediaTitle.textContent = `Edit Media: ${sourceName}`;
   el.editMediaCurrentPath.textContent = 'Loading path...';
   el.inputEditMediaPath.value = '';
+  updateEditMediaUploadDirUI();
 
   if (el.editMediaStatusBanner) {
     el.editMediaStatusBanner.style.display = 'none';
@@ -5564,6 +5657,8 @@ async function openEditMediaModal(sourceName, sceneName, item) {
 
     el.editMediaCurrentPath.textContent = currentPath || '(No media file path configured)';
     el.inputEditMediaPath.value = currentPath;
+    activeEditMediaUploadDir = getParentDirectoryFromPath(currentPath);
+    updateEditMediaUploadDirUI();
   } catch (err) {
     console.error('Failed to get input settings for media edit:', err);
     el.editMediaCurrentPath.textContent = 'Failed to load media settings: ' + err.message;
@@ -5574,6 +5669,8 @@ function closeEditMediaModal() {
   el.modalEditMedia.classList.remove('open');
   activeEditMediaSource = null;
   activeEditMediaScene = null;
+  activeEditMediaUploadDir = '';
+  activeEditMediaUploadDirCustom = false;
 }
 
 async function applyEditMedia() {
@@ -5877,7 +5974,20 @@ function uploadFileWithProgress(uploadUrl, formData, password, onProgress) {
 }
 
 // Local Device File Picker / Upload Helper
-function openLocalFileBrowser({ propKey, accept, onUploaded }) {
+function openLocalFileBrowser({ propKey, currentPath, uploadDir, accept, onUploaded }) {
+  const targetDir = (uploadDir && String(uploadDir).trim()) || getParentDirectoryFromPath(currentPath);
+  if (!targetDir || targetDir === '__DRIVES__') {
+    openHostFileBrowser({
+      propKey,
+      currentPath: '',
+      pathType: 'folder',
+      onSelect: (selectedDir) => {
+        openLocalFileBrowser({ propKey, uploadDir: selectedDir, accept, onUploaded });
+      },
+    });
+    return;
+  }
+  activeLocalUploadDir = targetDir;
   activeLocalUploadCallback = onUploaded;
   if (el.propLocalFileInput) {
     el.propLocalFileInput.accept = accept || '*/*';
@@ -5907,7 +6017,7 @@ async function openHostFileBrowser({ propKey, currentPath, pathType, accept, onS
   }
 
   el.modalHostFileBrowser.classList.add('open');
-  await loadHostDirectory(startDir || '__UPLOADS__');
+  await loadHostDirectory(startDir || '__DRIVES__');
 }
 
 function closeHostFileBrowser() {

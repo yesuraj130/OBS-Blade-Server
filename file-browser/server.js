@@ -28,10 +28,6 @@ const MAX_UPLOAD_MB = Math.max(
   Number(process.env.MAX_UPLOAD_MB) || Number(fileConfig.maxUploadMb) || 2048
 );
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
-const ALLOW_SYSTEM_DELETE =
-  process.env.ALLOW_SYSTEM_DELETE !== undefined
-    ? process.env.ALLOW_SYSTEM_DELETE === 'true'
-    : Boolean(fileConfig.allowSystemDelete);
 const DEFAULT_DIR =
   typeof fileConfig.defaultDir === 'string' ? fileConfig.defaultDir.trim() : '';
 const DEFAULT_BOOKMARKS = Array.isArray(fileConfig.defaultBookmarks)
@@ -42,11 +38,6 @@ const DEFAULT_BOOKMARKS = Array.isArray(fileConfig.defaultBookmarks)
         path: b.path.trim(),
       }))
   : [];
-
-const uploadsDir = path.resolve(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
 
 const PREVIEWABLE_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico',
@@ -59,6 +50,11 @@ function getConfiguredPassword() {
   if (process.env.FILE_SERVER_PASSWORD) return process.env.FILE_SERVER_PASSWORD;
   if (process.env.OBS_PASSWORD) return process.env.OBS_PASSWORD;
   return typeof fileConfig.password === 'string' ? fileConfig.password : '';
+}
+
+function getConfiguredDeletePassword() {
+  if (process.env.DELETE_PASSWORD !== undefined) return process.env.DELETE_PASSWORD;
+  return typeof fileConfig.deletePassword === 'string' ? fileConfig.deletePassword : '';
 }
 
 function extractRequestPassword(req) {
@@ -80,6 +76,13 @@ function isPasswordValid(provided, configured) {
   return crypto.timingSafeEqual(a, b);
 }
 
+function isDeletePasswordValid(provided, configured) {
+  if (typeof provided !== 'string') return false;
+  const a = crypto.createHash('sha256').update(provided).digest();
+  const b = crypto.createHash('sha256').update(String(configured)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 function requireAuth(req, res, next) {
   const configured = getConfiguredPassword();
   if (!configured) return next();
@@ -90,11 +93,81 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function requireDeleteAuth(req, res, next) {
+  if (req.headers['x-delete-unlocked'] !== 'true') {
+    return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
+  }
+  const provided = typeof req.headers['x-delete-password'] === 'string' ? req.headers['x-delete-password'] : '';
+  if (!isDeletePasswordValid(provided, getConfiguredDeletePassword())) {
+    return res.status(403).json({ error: 'Invalid delete password.' });
+  }
+  next();
+}
+
 function isPathInside(targetPath, baseDir) {
   const resolvedTarget = path.resolve(targetPath);
   const resolvedBase = path.resolve(baseDir);
   const rel = path.relative(resolvedBase, resolvedTarget);
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+function resolveExistingDirectory(rawDir) {
+  const trimmed = rawDir ? String(rawDir).trim() : '';
+  if (!trimmed || trimmed === '__DRIVES__') {
+    return null;
+  }
+  let candidate = trimmed === '__PROJECT__' || trimmed === '__ROOT__' ? __dirname : trimmed;
+  if (process.platform === 'win32' && /^[a-zA-Z]:$/.test(candidate)) {
+    candidate = `${candidate}\\`;
+  }
+  try {
+    const resolved = path.resolve(candidate);
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+      return resolved;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function resolveUniqueFilename(destDir, originalName) {
+  let safeName = path.basename(originalName || 'upload.bin').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim();
+  if (!safeName || safeName === '.' || safeName === '..') {
+    safeName = 'upload.bin';
+  }
+  const ext = path.extname(safeName);
+  const stem = ext ? safeName.slice(0, safeName.length - ext.length) : safeName;
+  let candidate = safeName;
+  let idx = 1;
+  while (fs.existsSync(path.join(destDir, candidate))) {
+    candidate = `${stem} (${idx})${ext}`;
+    idx++;
+  }
+  return candidate;
+}
+
+function validateDeletableTarget(targetPath) {
+  if (path.dirname(targetPath) === targetPath) {
+    return { status: 400, error: 'Cannot delete a filesystem root or drive.' };
+  }
+  if (!fs.existsSync(targetPath)) {
+    return { status: 404, error: 'File or folder not found' };
+  }
+  const st = fs.lstatSync(targetPath);
+  if (st.isDirectory()) {
+    const children = fs.readdirSync(targetPath);
+    if (children.length > 0) {
+      return { status: 400, error: 'Folder is not empty. Delete its contents first.' };
+    }
+  }
+  return { ok: true, isDirectory: st.isDirectory() };
+}
+
+function deleteValidatedTarget(targetPath, isDirectory) {
+  if (isDirectory) {
+    fs.rmdirSync(targetPath);
+  } else {
+    fs.unlinkSync(targetPath);
+  }
 }
 
 function getWindowsDrives() {
@@ -146,28 +219,26 @@ function moveEntrySync(src, dest) {
   }
 }
 
-// Multer disk storage streams uploads directly to target dir (or ./uploads default)
+// Multer disk storage streams uploads directly to the requested target directory
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const rawDir = req.query?.dir ? String(req.query.dir).trim() : '';
-    if (rawDir && rawDir !== '__UPLOADS__' && rawDir !== '__DRIVES__') {
-      try {
-        const resolved = path.resolve(rawDir);
-        if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-          return cb(null, resolved);
-        }
-      } catch (_) {}
+    const resolved = resolveExistingDirectory(req.query?.dir);
+    if (!resolved) {
+      const err = new Error('Target directory is required and must be an existing folder');
+      err.statusCode = 400;
+      return cb(err);
     }
-    cb(null, uploadsDir);
+    req.uploadTargetDir = resolved;
+    cb(null, resolved);
   },
   filename: (req, file, cb) => {
-    const keepOriginal = req.query?.keepName === 'true';
-    const safeName = path.basename(file.originalname || 'upload.bin').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
-    if (keepOriginal) {
-      return cb(null, safeName);
+    const destDir = req.uploadTargetDir || resolveExistingDirectory(req.query?.dir);
+    if (!destDir) {
+      const err = new Error('Target directory is required and must be an existing folder');
+      err.statusCode = 400;
+      return cb(err);
     }
-    const uniquePrefix = `${Date.now()}-${Math.round(Math.random() * 1e4)}`;
-    cb(null, `${uniquePrefix}_${safeName}`);
+    cb(null, resolveUniqueFilename(destDir, file.originalname));
   },
 });
 
@@ -193,7 +264,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Delete-Unlocked'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Delete-Unlocked, X-Delete-Password'
   );
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -205,9 +276,6 @@ app.use((req, res, next) => {
 app.get(['/', '/index.html'], (_req, res) => {
   res.sendFile(path.resolve(__dirname, 'index.html'));
 });
-
-// Protect uploaded media static route when password is enabled
-app.use('/uploads', requireAuth, express.static(uploadsDir));
 
 /**
  * Health & Auth Check API
@@ -222,10 +290,8 @@ app.get('/api/status', (req, res) => {
     status: 'online',
     platform: process.platform,
     port: PORT,
-    uploadsDir,
     maxUploadBytes: MAX_UPLOAD_BYTES,
     maxUploadMb: MAX_UPLOAD_MB,
-    allowSystemDelete: ALLOW_SYSTEM_DELETE,
     authRequired: Boolean(configuredPass),
     authValid,
     ...(authValid
@@ -257,10 +323,26 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 /**
+ * Delete Mode Password Verification API
+ */
+app.post('/api/auth/verify-delete', requireAuth, (req, res) => {
+  const provided = typeof req.body?.password === 'string' ? req.body.password : null;
+  if (provided === null || !isDeletePasswordValid(provided, getConfiguredDeletePassword())) {
+    return res.status(403).json({ success: false, error: 'Invalid delete password' });
+  }
+  res.json({ success: true });
+});
+
+/**
  * Direct File Upload API
- * Streams multipart/form-data ('media') directly to ./uploads
+ * Streams multipart/form-data ('media') directly to the specified target directory (?dir=...)
  */
 app.post('/api/upload', requireAuth, (req, res) => {
+  const destDir = resolveExistingDirectory(req.query?.dir);
+  if (!destDir) {
+    return res.status(400).json({ error: 'Target directory is required and must be an existing folder' });
+  }
+  req.uploadTargetDir = destDir;
   let aborted = false;
   const cleanupPartial = () => {
     if (req.file?.path) {
@@ -294,6 +376,9 @@ app.post('/api/upload', requireAuth, (req, res) => {
         }
         return res.status(400).json({ error: err.message, code: err.code });
       }
+      if (err.statusCode === 400) {
+        return res.status(400).json({ error: err.message });
+      }
       if (err.code === 'ENOSPC') {
         return res.status(507).json({ error: 'Insufficient disk space on OBS host' });
       }
@@ -305,7 +390,6 @@ app.post('/api/upload', requireAuth, (req, res) => {
     }
 
     const absolutePath = path.resolve(req.file.path);
-    const publicUrl = `/uploads/${encodeURIComponent(req.file.filename)}`;
 
     console.log(`[Upload] Saved (${req.file.size} bytes): ${absolutePath}`);
 
@@ -316,106 +400,31 @@ app.post('/api/upload', requireAuth, (req, res) => {
       size: req.file.size,
       mimetype: req.file.mimetype,
       path: absolutePath,
-      url: publicUrl,
     });
   });
 });
 
 /**
- * Media Library API (files inside ./uploads)
+ * Delete File or Empty Folder from Filesystem Browser (requires unlock header & delete password)
  */
-app.get('/api/media', requireAuth, (_req, res) => {
-  try {
-    const entries = fs.readdirSync(uploadsDir, { withFileTypes: true });
-    const mediaList = [];
-
-    for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
-      const filePath = path.join(uploadsDir, entry.name);
-      try {
-        const stats = fs.statSync(filePath);
-        if (!stats.isFile()) continue;
-        mediaList.push({
-          filename: entry.name,
-          path: filePath,
-          url: `/uploads/${encodeURIComponent(entry.name)}`,
-          size: stats.size,
-          updatedAt: stats.mtime,
-        });
-      } catch (_) {}
-    }
-
-    mediaList.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    res.json({ files: mediaList });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read media library', details: err.message });
-  }
-});
-
-/**
- * Delete Uploaded Media (requires unlock header)
- */
-app.delete('/api/media/:filename', requireAuth, (req, res) => {
-  if (req.headers['x-delete-unlocked'] !== 'true') {
-    return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
-  }
-
-  const safeFilename = path.basename(req.params.filename || '');
-  if (!safeFilename || safeFilename === '.' || safeFilename === '..') {
-    return res.status(400).json({ error: 'Invalid filename' });
-  }
-
-  const targetPath = path.join(uploadsDir, safeFilename);
-  if (!isPathInside(targetPath, uploadsDir) || !fs.existsSync(targetPath)) {
-    return res.status(404).json({ error: 'File not found' });
-  }
-
-  try {
-    const st = fs.statSync(targetPath);
-    if (!st.isFile()) {
-      return res.status(400).json({ error: 'Target is not a file' });
-    }
-    fs.unlinkSync(targetPath);
-    console.log(`[Delete] Removed upload: ${targetPath}`);
-    res.json({ success: true, message: 'File deleted' });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete file', details: err.message });
-  }
-});
-
-/**
- * Delete File from Filesystem Browser (requires unlock header; scoped to uploadsDir unless ALLOW_SYSTEM_DELETE=true)
- */
-app.delete('/api/fs/file', requireAuth, (req, res) => {
-  if (req.headers['x-delete-unlocked'] !== 'true') {
-    return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
-  }
-
+app.delete('/api/fs/file', requireAuth, requireDeleteAuth, (req, res) => {
   const rawPath = req.query.path ? String(req.query.path) : '';
   if (!rawPath) {
     return res.status(400).json({ error: 'Missing file path' });
   }
 
   const targetPath = path.resolve(rawPath);
-  if (!ALLOW_SYSTEM_DELETE && !isPathInside(targetPath, uploadsDir)) {
-    return res.status(403).json({
-      error: 'Delete is restricted to the uploads folder (set ALLOW_SYSTEM_DELETE=true to override).',
-    });
-  }
 
   try {
-    if (!fs.existsSync(targetPath)) {
-      return res.status(404).json({ error: 'File not found' });
+    const check = validateDeletableTarget(targetPath);
+    if (!check.ok) {
+      return res.status(check.status).json({ error: check.error });
     }
-    const st = fs.statSync(targetPath);
-    if (!st.isFile()) {
-      return res.status(400).json({ error: 'Only files can be deleted, not directories' });
-    }
-    fs.unlinkSync(targetPath);
-    console.log(`[Delete] Removed file: ${targetPath}`);
+    deleteValidatedTarget(targetPath, check.isDirectory);
+    console.log(`[Delete] Removed ${check.isDirectory ? 'empty folder' : 'file'}: ${targetPath}`);
     res.json({ success: true, path: targetPath });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete file', details: err.message });
+    res.status(500).json({ error: 'Failed to delete item', details: err.message });
   }
 });
 
@@ -464,34 +473,41 @@ app.get('/api/fs/browse', requireAuth, (req, res) => {
     let requestedDir = req.query.dir ? String(req.query.dir).trim() : '';
     const isWindows = process.platform === 'win32';
 
-    if (requestedDir === '__DRIVES__' || (isWindows && requestedDir === '/')) {
+    if (!requestedDir || requestedDir === '__DRIVES__' || (isWindows && requestedDir === '/')) {
       if (isWindows) {
         return res.json({
           currentDir: '__DRIVES__',
           parentDir: null,
-          uploadsDir,
           platform: process.platform,
           entries: getWindowsDrives(),
         });
       }
       requestedDir = '/';
-    }
-
-    if (!requestedDir || requestedDir === '__UPLOADS__') {
-      requestedDir = uploadsDir;
     } else if (requestedDir === '__ROOT__' || requestedDir === '__PROJECT__') {
       requestedDir = __dirname;
     } else if (isWindows && /^[a-zA-Z]:$/.test(requestedDir)) {
       requestedDir = `${requestedDir}\\`;
     }
 
-    let targetDir = uploadsDir;
+    let targetDir = null;
     if (fs.existsSync(requestedDir)) {
       try {
         if (fs.statSync(requestedDir).isDirectory()) {
           targetDir = path.resolve(requestedDir);
         }
       } catch (_) {}
+    }
+
+    if (!targetDir) {
+      if (isWindows) {
+        return res.json({
+          currentDir: '__DRIVES__',
+          parentDir: null,
+          platform: process.platform,
+          entries: getWindowsDrives(),
+        });
+      }
+      targetDir = '/';
     }
 
     const entries = fs.readdirSync(targetDir, { withFileTypes: true });
@@ -520,7 +536,7 @@ app.get('/api/fs/browse', requireAuth, (req, res) => {
           itemCount,
           mtime: st.mtime ? st.mtime.toISOString() : null,
           ext: isDir ? '' : path.extname(entry.name).toLowerCase(),
-          deletable: ALLOW_SYSTEM_DELETE || isPathInside(fullPath, uploadsDir),
+          deletable: !isDir || itemCount === 0,
         });
       } catch (_) {}
     }
@@ -540,7 +556,6 @@ app.get('/api/fs/browse', requireAuth, (req, res) => {
     res.json({
       currentDir: targetDir,
       parentDir,
-      uploadsDir,
       platform: process.platform,
       entries: items,
     });
@@ -575,7 +590,10 @@ app.post('/api/fs/mkdir', requireAuth, (req, res) => {
   if (!name || /[<>:"/\\|?*\x00-\x1F]/.test(name) || name === '.' || name === '..') {
     return res.status(400).json({ error: 'Invalid folder name' });
   }
-  const baseDir = !parentDir || parentDir === '__UPLOADS__' ? uploadsDir : path.resolve(parentDir);
+  const baseDir = resolveExistingDirectory(parentDir);
+  if (!baseDir) {
+    return res.status(400).json({ error: 'Target directory is required and must be an existing folder' });
+  }
   const targetPath = path.join(baseDir, name);
   try {
     if (fs.existsSync(targetPath)) {
@@ -598,7 +616,10 @@ app.post('/api/fs/mkfile', requireAuth, (req, res) => {
   if (!name || /[<>:"/\\|?*\x00-\x1F]/.test(name) || name === '.' || name === '..') {
     return res.status(400).json({ error: 'Invalid file name' });
   }
-  const baseDir = !parentDir || parentDir === '__UPLOADS__' ? uploadsDir : path.resolve(parentDir);
+  const baseDir = resolveExistingDirectory(parentDir);
+  if (!baseDir) {
+    return res.status(400).json({ error: 'Target directory is required and must be an existing folder' });
+  }
   const targetPath = path.join(baseDir, name);
   try {
     if (fs.existsSync(targetPath)) {
@@ -647,11 +668,11 @@ app.post('/api/fs/copy', requireAuth, (req, res) => {
   if (!sources.length || !rawDestDir) {
     return res.status(400).json({ error: 'Missing source items or destination directory' });
   }
-  const destDir = rawDestDir === '__UPLOADS__' ? uploadsDir : path.resolve(rawDestDir);
+  const destDir = resolveExistingDirectory(rawDestDir);
+  if (!destDir) {
+    return res.status(400).json({ error: 'Destination directory does not exist' });
+  }
   try {
-    if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
-      return res.status(404).json({ error: 'Destination directory does not exist' });
-    }
     const copied = [];
     for (const rawSrc of sources) {
       const srcPath = path.resolve(String(rawSrc));
@@ -683,11 +704,11 @@ app.post('/api/fs/move', requireAuth, (req, res) => {
   if (!sources.length || !rawDestDir) {
     return res.status(400).json({ error: 'Missing source items or destination directory' });
   }
-  const destDir = rawDestDir === '__UPLOADS__' ? uploadsDir : path.resolve(rawDestDir);
+  const destDir = resolveExistingDirectory(rawDestDir);
+  if (!destDir) {
+    return res.status(400).json({ error: 'Destination directory does not exist' });
+  }
   try {
-    if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
-      return res.status(404).json({ error: 'Destination directory does not exist' });
-    }
     const moved = [];
     for (const rawSrc of sources) {
       const srcPath = path.resolve(String(rawSrc));
@@ -716,14 +737,11 @@ app.post('/api/fs/backup', requireAuth, (req, res) => {
   if (!sources.length) {
     return res.status(400).json({ error: 'No items provided' });
   }
+  const baseDir = resolveExistingDirectory(rawDir);
+  if (!baseDir) {
+    return res.status(400).json({ error: 'Current directory is required and must exist' });
+  }
   try {
-    const firstValidSrc = path.resolve(String(sources[0]));
-    const baseDir = rawDir && rawDir !== '__DRIVES__'
-      ? (rawDir === '__UPLOADS__' ? uploadsDir : rawDir === '__PROJECT__' ? projectRoot : path.resolve(rawDir))
-      : path.dirname(firstValidSrc);
-    if (!fs.existsSync(baseDir) || !fs.statSync(baseDir).isDirectory()) {
-      return res.status(404).json({ error: 'Current directory does not exist' });
-    }
     const backupDir = path.join(baseDir, 'BackUp');
     if (fs.existsSync(backupDir) && !fs.statSync(backupDir).isDirectory()) {
       return res.status(409).json({ error: 'A file named BackUp already exists in this folder' });
@@ -768,12 +786,9 @@ app.post('/api/fs/backup', requireAuth, (req, res) => {
 });
 
 /**
- * Delete Multiple Files or Folders
+ * Delete Multiple Files or Empty Folders (requires unlock header & delete password)
  */
-app.post('/api/fs/delete', requireAuth, (req, res) => {
-  if (req.headers['x-delete-unlocked'] !== 'true') {
-    return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
-  }
+app.post('/api/fs/delete', requireAuth, requireDeleteAuth, (req, res) => {
   const paths = Array.isArray(req.body?.paths)
     ? req.body.paths
     : req.body?.path ? [req.body.path] : [];
@@ -781,18 +796,19 @@ app.post('/api/fs/delete', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'No paths provided to delete' });
   }
   try {
-    const deleted = [];
+    const validated = [];
     for (const raw of paths) {
       const targetPath = path.resolve(String(raw));
-      if (!ALLOW_SYSTEM_DELETE && !isPathInside(targetPath, uploadsDir)) {
-        return res.status(403).json({
-          error: 'Delete is restricted to the uploads folder (set ALLOW_SYSTEM_DELETE=true to override).',
-        });
+      const check = validateDeletableTarget(targetPath);
+      if (!check.ok) {
+        return res.status(check.status).json({ error: check.error, path: targetPath });
       }
-      if (fs.existsSync(targetPath)) {
-        fs.rmSync(targetPath, { recursive: true, force: true });
-        deleted.push(targetPath);
-      }
+      validated.push({ targetPath, isDirectory: check.isDirectory });
+    }
+    const deleted = [];
+    for (const item of validated) {
+      deleteValidatedTarget(item.targetPath, item.isDirectory);
+      deleted.push(item.targetPath);
     }
     res.json({ success: true, deleted });
   } catch (err) {
@@ -851,7 +867,7 @@ app.get('*', (_req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[File Server] Standalone File Browser running on http://0.0.0.0:${PORT}`);
-  console.log(`[File Server] Uploads: ${uploadsDir} (Max: ${MAX_UPLOAD_MB} MB, Auth: ${Boolean(getConfiguredPassword())})`);
+  console.log(`[File Server] Max Upload: ${MAX_UPLOAD_MB} MB, Auth: ${Boolean(getConfiguredPassword())}`);
 });
 
 function shutdown(signal) {

@@ -3,7 +3,7 @@
 // Subfolder-safe for IIS subsite deployment & root Node hosting
 // ===========================================================================
 
-const CACHE_NAME = 'obs-blade-v5';
+const CACHE_NAME = 'obs-blade-v6';
 
 const STATIC_ASSETS = [
   './',
@@ -59,10 +59,9 @@ self.addEventListener('fetch', (event) => {
   const basePath = new URL('./', self.location.href).pathname;
   if (!url.pathname.startsWith(basePath)) return;
 
-  // 1. Bypass Service Worker for APIs, uploads, file-browser, and WebSocket endpoints
+  // 1. Bypass Service Worker for APIs, file-browser, and WebSocket endpoints
   if (
     url.pathname.includes('/api/') ||
-    url.pathname.includes('/uploads/') ||
     url.pathname.includes('/file-browser') ||
     url.pathname.endsWith('/obs-ws') ||
     url.pathname.endsWith('/obs-real-ws')

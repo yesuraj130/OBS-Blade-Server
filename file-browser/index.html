@@ -1278,8 +1278,7 @@ svg { display: block; flex-shrink: 0; }
     password: (function () { try { return localStorage.getItem(PW_KEY) || ''; } catch (_) { return ''; } })(),
     authRequired: false,
     platform: 'linux',
-    uploadsDir: '',
-    currentDir: '__PROJECT__',
+    currentDir: '__DRIVES__',
     parentDir: null,
     entries: [],
     selected: {},
@@ -1294,7 +1293,7 @@ svg { display: block; flex-shrink: 0; }
       } catch (_) { return []; }
     })(),
     deleteUnlocked: false,
-    allowSystemDelete: false,
+    deletePassword: '',
     viewMode: (function () { try { return localStorage.getItem(VIEW_KEY) || 'list'; } catch (_) { return 'list'; } })(),
     sortBy: (function () { try { return localStorage.getItem(SORT_KEY) || 'name'; } catch (_) { return 'name'; } })(),
     sortAsc: true,
@@ -1368,7 +1367,10 @@ svg { display: block; flex-shrink: 0; }
   function authHeaders(extra) {
     var h = extra ? Object.assign({}, extra) : {};
     if (state.password) h['Authorization'] = 'Bearer ' + state.password;
-    if (state.deleteUnlocked) h['X-Delete-Unlocked'] = 'true';
+    if (state.deleteUnlocked) {
+      h['X-Delete-Unlocked'] = 'true';
+      h['X-Delete-Password'] = state.deletePassword;
+    }
     return h;
   }
 
@@ -1880,7 +1882,7 @@ svg { display: block; flex-shrink: 0; }
   }
 
   function browse(dir, opts) {
-    var target = dir || state.currentDir || '__PROJECT__';
+    var target = dir || state.currentDir || '__DRIVES__';
     var historyMode = (opts && opts.historyMode) || (dir ? 'push' : 'replace');
     state.selected = {};
     closeMenus();
@@ -1891,9 +1893,6 @@ svg { display: block; flex-shrink: 0; }
         if (data.error) throw new Error(data.error);
         state.currentDir = data.currentDir;
         state.parentDir = data.parentDir;
-        if (data.uploadsDir) {
-          state.uploadsDir = data.uploadsDir;
-        }
         if (data.platform) {
           state.platform = data.platform;
           $('nav-drives-title').textContent = data.platform === 'win32' ? 'System Drives' : 'Root /';
@@ -1941,10 +1940,13 @@ svg { display: block; flex-shrink: 0; }
         msgEl.classList.add('hidden');
       }
       if (opts.prompt) {
+        inp.type = opts.inputType || 'text';
         inp.value = opts.defaultValue || '';
         inp.placeholder = opts.placeholder || '';
         inp.classList.remove('hidden');
       } else {
+        inp.type = 'text';
+        inp.value = '';
         inp.classList.add('hidden');
       }
       okBtn.textContent = opts.okText || 'OK';
@@ -1957,6 +1959,8 @@ svg { display: block; flex-shrink: 0; }
 
       function cleanup(val) {
         modal.classList.add('hidden');
+        inp.type = 'text';
+        inp.value = '';
         okBtn.removeEventListener('click', onOk);
         cancelBtn.removeEventListener('click', onCancel);
         inp.removeEventListener('keydown', onKey);
@@ -2114,20 +2118,40 @@ svg { display: block; flex-shrink: 0; }
     closeMenus();
     if (state.deleteUnlocked) {
       state.deleteUnlocked = false;
+      state.deletePassword = '';
       renderHeader();
       showToast('Delete lock enabled');
       return;
     }
     openDialog({
       title: 'Unlock Delete Mode',
-      message: 'Allow permanent deletion of files and folders? Use carefully.',
+      message: 'Enter the delete password to allow deleting files and empty folders.',
+      prompt: true,
+      inputType: 'password',
+      placeholder: 'Delete password',
       okText: 'Unlock',
       danger: true,
-    }).then(function (ok) {
-      if (!ok) return;
-      state.deleteUnlocked = true;
-      renderHeader();
-      showToast('Delete unlocked');
+    }).then(function (entered) {
+      if (entered === null) return;
+      return apiFetch('/api/auth/verify-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: entered }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            showToast(res.data.error || 'Invalid delete password');
+            return;
+          }
+          state.deleteUnlocked = true;
+          state.deletePassword = entered;
+          renderHeader();
+          showToast('Delete unlocked');
+        })
+        .catch(function (err) {
+          if (err.message !== 'Unauthorized') showToast(err.message || 'Failed to verify delete password');
+        });
     });
   }
 
@@ -2151,7 +2175,7 @@ svg { display: block; flex-shrink: 0; }
     }
     openDialog({
       title: 'Delete ' + sel.length + (sel.length === 1 ? ' item?' : ' items?'),
-      message: sel.length === 1 ? sel[0].name : 'Selected files and folders will be permanently removed.',
+      message: sel.length === 1 ? sel[0].name : 'Selected files and empty folders will be permanently removed.',
       okText: 'Delete',
       danger: true,
     }).then(function (ok) {
@@ -2241,7 +2265,7 @@ svg { display: block; flex-shrink: 0; }
       fillEl.style.width = '0%';
 
       var xhr = new XMLHttpRequest();
-      var url = '/api/upload?dir=' + encodeURIComponent(state.currentDir) + '&keepName=true';
+      var url = '/api/upload?dir=' + encodeURIComponent(state.currentDir);
       xhr.open('POST', url, true);
       if (state.password) xhr.setRequestHeader('Authorization', 'Bearer ' + state.password);
       xhr.upload.onprogress = function (e) {
@@ -2302,7 +2326,7 @@ svg { display: block; flex-shrink: 0; }
         applyServerDefaults(res.d);
         loginPass.value = '';
         loginOverlay.classList.add('hidden');
-        browse(getDirFromUrl() || state.defaultDir || '__PROJECT__', { historyMode: 'replace' });
+        browse(getDirFromUrl() || state.defaultDir || '__DRIVES__', { historyMode: 'replace' });
       })
       .catch(function () {
         loginErr.textContent = 'Connection failed';
@@ -2407,6 +2431,8 @@ svg { display: block; flex-shrink: 0; }
     closeMenus();
     setDrawerOpen(false);
     state.password = '';
+    state.deleteUnlocked = false;
+    state.deletePassword = '';
     try { localStorage.removeItem(PW_KEY); } catch (_) {}
     showLogin('');
   }
@@ -2469,6 +2495,7 @@ svg { display: block; flex-shrink: 0; }
   });
   btnRelock.addEventListener('click', function () {
     state.deleteUnlocked = false;
+    state.deletePassword = '';
     renderHeader();
     showToast('Delete lock enabled');
   });
@@ -2568,7 +2595,7 @@ svg { display: block; flex-shrink: 0; }
   // Browser Back / Forward folder navigation
   window.addEventListener('popstate', function (e) {
     if (!loginOverlay.classList.contains('hidden')) return;
-    var target = (e.state && e.state.fbDir) || getDirFromUrl() || state.defaultDir || '__PROJECT__';
+    var target = (e.state && e.state.fbDir) || getDirFromUrl() || state.defaultDir || '__DRIVES__';
     if (target && target !== state.currentDir) {
       browse(target, { historyMode: 'none' });
     }
@@ -2580,20 +2607,16 @@ svg { display: block; flex-shrink: 0; }
     .then(function (r) { return r.json(); })
     .then(function (st) {
       state.authRequired = Boolean(st.authRequired);
-      state.allowSystemDelete = Boolean(st.allowSystemDelete);
       state.platform = st.platform || state.platform;
-      if (st.uploadsDir) {
-        state.uploadsDir = st.uploadsDir;
-      }
       if (st.authRequired && !st.authValid) {
         showLogin('');
       } else {
         applyServerDefaults(st);
-        browse(getDirFromUrl() || state.defaultDir || '__PROJECT__', { historyMode: 'replace' });
+        browse(getDirFromUrl() || state.defaultDir || '__DRIVES__', { historyMode: 'replace' });
       }
     })
     .catch(function () {
-      browse(getDirFromUrl() || '__PROJECT__', { historyMode: 'replace' });
+      browse(getDirFromUrl() || '__DRIVES__', { historyMode: 'replace' });
     });
 })();
 </script>

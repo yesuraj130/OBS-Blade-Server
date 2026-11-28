@@ -8,10 +8,10 @@ This folder is **completely detached from OBS Studio**. It runs independently on
 
 ## What This Service Does
 
-1. **Media Uploads (`POST /api/upload`)**: Streams video, audio, and image files directly to `./uploads` (low RAM usage) and returns the exact absolute disk path needed by OBS Studio sources.
-2. **Filesystem & All-Drives Browsing (`GET /api/fs/browse`)**: Allows remote web clients to browse folders and all mounted Windows drives (`C:\`, `D:\`, etc.) on the host machine.
+1. **Media Uploads (`POST /api/upload?dir=...`)**: Streams video, audio, and image files directly to the chosen destination folder (low RAM usage) using the sanitized original filename (appending ` (n)` if duplicate) and returns the exact absolute disk path needed by OBS Studio sources.
+2. **Filesystem & All-Drives Browsing (`GET /api/fs/browse`)**: Allows remote web clients to browse folders and all mounted Windows drives (`C:\`, `D:\`, etc.) or `/` on Linux/macOS.
 3. **Low-Memory Media Preview (`GET /api/fs/preview`)**: Streams images, audio, and video via HTTP Range requests (`206 Partial Content`) without buffering files into memory.
-4. **Locked Delete Protection (`DELETE /api/fs/file`, `DELETE /api/media/:filename`)**: Disabled until explicitly unlocked in the UI, and restricted to `./uploads` by default unless `ALLOW_SYSTEM_DELETE=true`.
+4. **Password-Protected Locked Delete (`DELETE /api/fs/file`, `POST /api/fs/delete`)**: Locked by default; unlocking always prompts for `deletePassword`. Only individual files and completely empty folders can be deleted (non-empty folders are blocked for safety).
 5. **Standalone Web Manager**: Provides an independent drag-and-drop web UI at `http://<this-machine-ip>:3000`.
 
 ---
@@ -24,9 +24,9 @@ Edit `config.js` directly to configure defaults without touching `server.js` (`c
 | :--- | :--- | :--- | :--- |
 | `port` | `PORT` | `3000` | HTTP port to listen on |
 | `password` | `FILE_SERVER_PASSWORD` (or `OBS_PASSWORD`) | *(empty)* | Enforces password authentication across all upload, browse, preview, and delete endpoints |
+| `deletePassword` | `DELETE_PASSWORD` | *(empty)* | Password required when unlocking Delete Mode (even if empty, unlocking prompts and only accepts an empty value) |
 | `maxUploadMb` | `MAX_UPLOAD_MB` | `2048` | Maximum single upload file size in MB (default 2 GB) |
-| `allowSystemDelete` | `ALLOW_SYSTEM_DELETE` | `false` | Set `true` to allow deleting files outside `./uploads` when unlocked |
-| `defaultDir` | — | *(empty)* | Folder opened automatically on startup (empty = Project Folder, or `__UPLOADS__`, `__DRIVES__`, or a folder path) |
+| `defaultDir` | — | *(empty)* | Folder opened automatically on startup (empty = System Drives / Root, or `__DRIVES__`, `__PROJECT__`, or a folder path) |
 | `defaultBookmarks` | — | `[]` | Default bookmarks (`[{ name, path }]`) shown until customized in the browser (can be restored via **Reset to Default**) |
 
 ---

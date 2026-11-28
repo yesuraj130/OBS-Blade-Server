@@ -11,7 +11,8 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import { fileURLToPath, pathToFileURL } from 'url';
 import multer from 'multer';
 import { WebSocketServer, WebSocket } from 'ws';
 import { execFile, exec, spawn } from 'child_process';
@@ -34,34 +35,121 @@ process.on('unhandledRejection', (reason) => {
   console.warn('[Server] Unhandled rejection caught safely:', reason?.message || reason);
 });
 
-// Ensure uploads directory exists
-const uploadsDir = path.resolve(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+let fileBrowserConfig = {};
+try {
+  const fbConfigPath = path.resolve(__dirname, 'file-browser', 'config.js');
+  if (fs.existsSync(fbConfigPath)) {
+    const mod = await import(pathToFileURL(fbConfigPath).href);
+    if (mod && mod.default && typeof mod.default === 'object') {
+      fileBrowserConfig = mod.default;
+    }
+  }
+} catch (err) {
+  console.warn('[Server] Failed to load file-browser/config.js, using defaults:', err.message);
 }
 
-// Multer storage configuration (supports ?dir= and ?keepName=true for File Browser)
+function getConfiguredDeletePassword() {
+  if (process.env.DELETE_PASSWORD !== undefined) return process.env.DELETE_PASSWORD;
+  return typeof fileBrowserConfig.deletePassword === 'string' ? fileBrowserConfig.deletePassword : '';
+}
+
+function isDeletePasswordValid(provided, configured) {
+  if (typeof provided !== 'string') return false;
+  const a = crypto.createHash('sha256').update(provided).digest();
+  const b = crypto.createHash('sha256').update(String(configured)).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+function requireDeleteAuth(req, res, next) {
+  if (req.headers['x-delete-unlocked'] !== 'true') {
+    return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
+  }
+  const provided = typeof req.headers['x-delete-password'] === 'string' ? req.headers['x-delete-password'] : '';
+  if (!isDeletePasswordValid(provided, getConfiguredDeletePassword())) {
+    return res.status(403).json({ error: 'Invalid delete password.' });
+  }
+  next();
+}
+
+function resolveExistingDirectory(rawDir) {
+  const trimmed = rawDir ? String(rawDir).trim() : '';
+  if (!trimmed || trimmed === '__DRIVES__') {
+    return null;
+  }
+  let candidate = trimmed === '__PROJECT__' || trimmed === '__ROOT__' ? __dirname : trimmed;
+  if (process.platform === 'win32' && /^[a-zA-Z]:$/.test(candidate)) {
+    candidate = `${candidate}\\`;
+  }
+  try {
+    const resolved = path.resolve(candidate);
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+      return resolved;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function resolveUniqueFilename(destDir, originalName) {
+  let safeName = path.basename(originalName || 'upload.bin').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim();
+  if (!safeName || safeName === '.' || safeName === '..') {
+    safeName = 'upload.bin';
+  }
+  const ext = path.extname(safeName);
+  const stem = ext ? safeName.slice(0, safeName.length - ext.length) : safeName;
+  let candidate = safeName;
+  let idx = 1;
+  while (fs.existsSync(path.join(destDir, candidate))) {
+    candidate = `${stem} (${idx})${ext}`;
+    idx++;
+  }
+  return candidate;
+}
+
+function validateDeletableTarget(targetPath) {
+  if (path.dirname(targetPath) === targetPath) {
+    return { status: 400, error: 'Cannot delete a filesystem root or drive.' };
+  }
+  if (!fs.existsSync(targetPath)) {
+    return { status: 404, error: 'File or folder not found' };
+  }
+  const st = fs.lstatSync(targetPath);
+  if (st.isDirectory()) {
+    const children = fs.readdirSync(targetPath);
+    if (children.length > 0) {
+      return { status: 400, error: 'Folder is not empty. Delete its contents first.' };
+    }
+  }
+  return { ok: true, isDirectory: st.isDirectory() };
+}
+
+function deleteValidatedTarget(targetPath, isDirectory) {
+  if (isDirectory) {
+    fs.rmdirSync(targetPath);
+  } else {
+    fs.unlinkSync(targetPath);
+  }
+}
+
+// Multer storage configuration (requires explicit ?dir= and uses sanitized original name with (n) suffix)
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
-    const rawDir = req.query?.dir ? String(req.query.dir).trim() : '';
-    if (rawDir && rawDir !== '__UPLOADS__' && rawDir !== '__DRIVES__') {
-      try {
-        const resolved = path.resolve(rawDir);
-        if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-          return cb(null, resolved);
-        }
-      } catch (_) {}
+    const resolved = resolveExistingDirectory(req.query?.dir);
+    if (!resolved) {
+      const err = new Error('Target directory is required and must be an existing folder');
+      err.statusCode = 400;
+      return cb(err);
     }
-    cb(null, uploadsDir);
+    req.uploadTargetDir = resolved;
+    cb(null, resolved);
   },
   filename: (req, file, cb) => {
-    const keepOriginal = req.query?.keepName === 'true';
-    const safeName = path.basename(file.originalname || 'upload.bin').replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
-    if (keepOriginal) {
-      return cb(null, safeName);
+    const destDir = req.uploadTargetDir || resolveExistingDirectory(req.query?.dir);
+    if (!destDir) {
+      const err = new Error('Target directory is required and must be an existing folder');
+      err.statusCode = 400;
+      return cb(err);
     }
-    const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1e4);
-    cb(null, `${uniquePrefix}_${safeName}`);
+    cb(null, resolveUniqueFilename(destDir, file.originalname));
   },
 });
 
@@ -82,15 +170,12 @@ async function startServer() {
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Delete-Unlocked');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Delete-Unlocked, X-Delete-Password');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
     }
     next();
   });
-
-  // Serve uploaded media files publicly for browser preview
-  app.use('/uploads', express.static(uploadsDir));
 
   // File Browser directory path (mounted cleanly in frontend routes below)
   const fileBrowserDir = path.resolve(__dirname, 'file-browser');
@@ -705,13 +790,19 @@ async function startServer() {
     res.json({
       service: 'OBS Host File Browser',
       status: 'online',
+      platform: process.platform,
       nodeVersion: process.version,
       port: PORT,
-      uploadsDir: uploadsDir,
       maxUploadMb: 2048,
       simulatorAttached: true,
       authRequired: Boolean(configuredPass),
       authValid: authValid,
+      ...(authValid
+        ? {
+            defaultDir: typeof fileBrowserConfig.defaultDir === 'string' ? fileBrowserConfig.defaultDir.trim() : '',
+            defaultBookmarks: Array.isArray(fileBrowserConfig.defaultBookmarks) ? fileBrowserConfig.defaultBookmarks : [],
+          }
+        : {}),
       time: new Date().toISOString(),
     });
   });
@@ -724,82 +815,66 @@ async function startServer() {
     if (configuredPass && provided !== configuredPass) {
       return res.status(401).json({ success: false, error: 'Invalid password' });
     }
-    res.json({ success: true, authRequired: Boolean(configuredPass), authValid: true });
+    res.json({
+      success: true,
+      authRequired: Boolean(configuredPass),
+      authValid: true,
+      defaultDir: typeof fileBrowserConfig.defaultDir === 'string' ? fileBrowserConfig.defaultDir.trim() : '',
+      defaultBookmarks: Array.isArray(fileBrowserConfig.defaultBookmarks) ? fileBrowserConfig.defaultBookmarks : [],
+    });
+  });
+
+  app.post('/api/auth/verify-delete', (req, res) => {
+    const provided = typeof req.body?.password === 'string' ? req.body.password : null;
+    if (provided === null || !isDeletePasswordValid(provided, getConfiguredDeletePassword())) {
+      return res.status(403).json({ success: false, error: 'Invalid delete password' });
+    }
+    res.json({ success: true });
   });
 
   /**
    * Direct File Upload API
-   * Accepts multipart/form-data with field 'media'
+   * Accepts multipart/form-data with field 'media' and required ?dir=<existing folder>
    * Returns the exact local disk path required by OBS Studio
    */
-  app.post('/api/upload', upload.single('media'), (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No media file provided' });
+  app.post('/api/upload', (req, res) => {
+    const destDir = resolveExistingDirectory(req.query?.dir);
+    if (!destDir) {
+      return res.status(400).json({ error: 'Target directory is required and must be an existing folder' });
     }
+    req.uploadTargetDir = destDir;
 
-    const absolutePath = path.resolve(req.file.path);
-    const publicUrl = `/uploads/${req.file.filename}`;
+    upload.single('media')(req, res, (err) => {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ error: 'File exceeds server limit of 2048 MB', code: err.code });
+          }
+          return res.status(400).json({ error: err.message, code: err.code });
+        }
+        if (err.statusCode === 400) {
+          return res.status(400).json({ error: err.message });
+        }
+        return res.status(500).json({ error: 'Upload failed', details: err.message });
+      }
 
-    console.log(`[Upload] File saved to ${absolutePath}`);
+      if (!req.file) {
+        return res.status(400).json({ error: 'No media file provided' });
+      }
 
-    res.json({
-      success: true,
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-      path: absolutePath, // Absolute disk path for OBS SetInputSettings
-      url: publicUrl,
+      const absolutePath = path.resolve(req.file.path);
+
+      console.log(`[Upload] File saved to ${absolutePath}`);
+
+      res.json({
+        success: true,
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        path: absolutePath, // Absolute disk path for OBS SetInputSettings
+      });
     });
-  });
-
-  /**
-   * Media Library API
-   * Lists all uploaded assets with paths, previews, and sizes
-   */
-  app.get('/api/media', (_req, res) => {
-    try {
-      const files = fs.readdirSync(uploadsDir);
-      const mediaList = files
-        .filter((file) => !file.startsWith('.'))
-        .map((file) => {
-          const filePath = path.join(uploadsDir, file);
-          const stats = fs.statSync(filePath);
-          return {
-            filename: file,
-            path: filePath,
-            url: `/uploads/${file}`,
-            size: stats.size,
-            updatedAt: stats.mtime,
-          };
-        })
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-      res.json({ files: mediaList });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to read media library', details: err.message });
-    }
-  });
-
-  /**
-   * Delete uploaded media
-   */
-  app.delete('/api/media/:filename', (req, res) => {
-    const filename = req.params.filename;
-    // Prevent path traversal
-    const safeFilename = path.basename(filename);
-    const targetPath = path.join(uploadsDir, safeFilename);
-
-    if (!fs.existsSync(targetPath)) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    try {
-      fs.unlinkSync(targetPath);
-      res.json({ success: true, message: 'File deleted' });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to delete file', details: err.message });
-    }
   });
 
   /**
@@ -811,7 +886,7 @@ async function startServer() {
       let requestedDir = req.query.dir ? String(req.query.dir).trim() : '';
       const isWindows = process.platform === 'win32';
 
-      if (requestedDir === '__DRIVES__') {
+      if (!requestedDir || requestedDir === '__DRIVES__' || (isWindows && requestedDir === '/')) {
         if (isWindows) {
           const drives = [];
           for (let code = 65; code <= 90; code++) {
@@ -825,25 +900,48 @@ async function startServer() {
           return res.json({
             currentDir: '__DRIVES__',
             parentDir: null,
-            uploadsDir: uploadsDir,
+            platform: process.platform,
             projectDir: __dirname,
             entries: drives,
           });
         }
         requestedDir = '/';
-      }
-
-      if (!requestedDir || requestedDir === '__UPLOADS__') {
-        requestedDir = uploadsDir;
-      } else if (requestedDir === '__PROJECT__') {
+      } else if (requestedDir === '__PROJECT__' || requestedDir === '__ROOT__') {
         requestedDir = __dirname;
       } else if (isWindows && /^[a-zA-Z]:$/.test(requestedDir)) {
         requestedDir = `${requestedDir}\\`;
       }
 
-      const targetDir = fs.existsSync(requestedDir) && fs.statSync(requestedDir).isDirectory()
-        ? path.resolve(requestedDir)
-        : uploadsDir;
+      let targetDir = null;
+      if (fs.existsSync(requestedDir)) {
+        try {
+          if (fs.statSync(requestedDir).isDirectory()) {
+            targetDir = path.resolve(requestedDir);
+          }
+        } catch (_) {}
+      }
+
+      if (!targetDir) {
+        if (isWindows) {
+          const drives = [];
+          for (let code = 65; code <= 90; code++) {
+            const driveRoot = `${String.fromCharCode(code)}:\\`;
+            try {
+              if (fs.statSync(driveRoot).isDirectory()) {
+                drives.push({ name: driveRoot, path: driveRoot, isDirectory: true, isDrive: true, size: 0, ext: '' });
+              }
+            } catch (_) {}
+          }
+          return res.json({
+            currentDir: '__DRIVES__',
+            parentDir: null,
+            platform: process.platform,
+            projectDir: __dirname,
+            entries: drives,
+          });
+        }
+        targetDir = '/';
+      }
 
       const entries = fs.readdirSync(targetDir, { withFileTypes: true });
       const items = [];
@@ -863,10 +961,6 @@ async function startServer() {
               itemCount = null;
             }
           }
-          const isInsideUploads = (() => {
-            const rel = path.relative(path.resolve(uploadsDir), path.resolve(fullPath));
-            return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-          })();
           items.push({
             name: entry.name,
             path: fullPath,
@@ -875,7 +969,7 @@ async function startServer() {
             itemCount,
             mtime: st.mtime ? st.mtime.toISOString() : null,
             ext: isDir ? '' : path.extname(entry.name).toLowerCase(),
-            deletable: isInsideUploads,
+            deletable: !isDir || itemCount === 0,
           });
         } catch (_) {}
       }
@@ -891,7 +985,7 @@ async function startServer() {
       res.json({
         currentDir: targetDir,
         parentDir: parentDir !== targetDir ? parentDir : (isWindows ? '__DRIVES__' : null),
-        uploadsDir: uploadsDir,
+        platform: process.platform,
         projectDir: __dirname,
         entries: items,
       });
@@ -948,7 +1042,10 @@ async function startServer() {
     if (!name || /[<>:"/\\|?*\x00-\x1F]/.test(name) || name === '.' || name === '..') {
       return res.status(400).json({ error: 'Invalid folder name' });
     }
-    const baseDir = !parentDir || parentDir === '__UPLOADS__' ? uploadsDir : path.resolve(parentDir);
+    const baseDir = resolveExistingDirectory(parentDir);
+    if (!baseDir) {
+      return res.status(400).json({ error: 'Target directory is required and must be an existing folder' });
+    }
     const targetPath = path.join(baseDir, name);
     try {
       if (fs.existsSync(targetPath)) {
@@ -968,7 +1065,10 @@ async function startServer() {
     if (!name || /[<>:"/\\|?*\x00-\x1F]/.test(name) || name === '.' || name === '..') {
       return res.status(400).json({ error: 'Invalid file name' });
     }
-    const baseDir = !parentDir || parentDir === '__UPLOADS__' ? uploadsDir : path.resolve(parentDir);
+    const baseDir = resolveExistingDirectory(parentDir);
+    if (!baseDir) {
+      return res.status(400).json({ error: 'Target directory is required and must be an existing folder' });
+    }
     const targetPath = path.join(baseDir, name);
     try {
       if (fs.existsSync(targetPath)) {
@@ -1023,7 +1123,10 @@ async function startServer() {
     if (!sources.length || !rawDestDir) {
       return res.status(400).json({ error: 'Missing source items or destination directory' });
     }
-    const destDir = rawDestDir === '__UPLOADS__' ? uploadsDir : path.resolve(rawDestDir);
+    const destDir = resolveExistingDirectory(rawDestDir);
+    if (!destDir) {
+      return res.status(400).json({ error: 'Destination directory does not exist' });
+    }
     try {
       const copied = [];
       for (const rawSrc of sources) {
@@ -1053,7 +1156,10 @@ async function startServer() {
     if (!sources.length || !rawDestDir) {
       return res.status(400).json({ error: 'Missing source items or destination directory' });
     }
-    const destDir = rawDestDir === '__UPLOADS__' ? uploadsDir : path.resolve(rawDestDir);
+    const destDir = resolveExistingDirectory(rawDestDir);
+    if (!destDir) {
+      return res.status(400).json({ error: 'Destination directory does not exist' });
+    }
     try {
       const moved = [];
       for (const rawSrc of sources) {
@@ -1080,14 +1186,11 @@ async function startServer() {
     if (!sources.length) {
       return res.status(400).json({ error: 'No items provided' });
     }
+    const baseDir = resolveExistingDirectory(rawDir);
+    if (!baseDir) {
+      return res.status(400).json({ error: 'Current directory is required and must exist' });
+    }
     try {
-      const firstValidSrc = path.resolve(String(sources[0]));
-      const baseDir = rawDir && rawDir !== '__DRIVES__'
-        ? (rawDir === '__UPLOADS__' ? uploadsDir : rawDir === '__PROJECT__' ? __dirname : path.resolve(rawDir))
-        : path.dirname(firstValidSrc);
-      if (!fs.existsSync(baseDir) || !fs.statSync(baseDir).isDirectory()) {
-        return res.status(404).json({ error: 'Current directory does not exist' });
-      }
       const backupDir = path.join(baseDir, 'BackUp');
       if (fs.existsSync(backupDir) && !fs.statSync(backupDir).isDirectory()) {
         return res.status(409).json({ error: 'A file named BackUp already exists in this folder' });
@@ -1140,26 +1243,25 @@ async function startServer() {
     }
   });
 
-  app.post('/api/fs/delete', (req, res) => {
-    if (req.headers['x-delete-unlocked'] !== 'true') {
-      return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
-    }
+  app.post('/api/fs/delete', requireDeleteAuth, (req, res) => {
     const paths = Array.isArray(req.body?.paths)
       ? req.body.paths
       : req.body?.path ? [req.body.path] : [];
     if (!paths.length) return res.status(400).json({ error: 'No paths provided' });
     try {
-      const deleted = [];
+      const validated = [];
       for (const raw of paths) {
         const targetPath = path.resolve(String(raw));
-        const rel = path.relative(path.resolve(uploadsDir), targetPath);
-        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
-          return res.status(403).json({ error: 'Delete is restricted to the uploads folder.' });
+        const check = validateDeletableTarget(targetPath);
+        if (!check.ok) {
+          return res.status(check.status).json({ error: check.error, path: targetPath });
         }
-        if (fs.existsSync(targetPath)) {
-          fs.rmSync(targetPath, { recursive: true, force: true });
-          deleted.push(targetPath);
-        }
+        validated.push({ targetPath, isDirectory: check.isDirectory });
+      }
+      const deleted = [];
+      for (const item of validated) {
+        deleteValidatedTarget(item.targetPath, item.isDirectory);
+        deleted.push(item.targetPath);
       }
       res.json({ success: true, deleted });
     } catch (err) {
@@ -1203,26 +1305,20 @@ async function startServer() {
     }
   });
 
-  // Locked Delete API for File Browser tab in AI Studio preview (uploadsDir only)
-  app.delete('/api/fs/file', (req, res) => {
-    if (req.headers['x-delete-unlocked'] !== 'true') {
-      return res.status(403).json({ error: 'Delete lock is enabled. Unlock delete mode first.' });
-    }
+  // Locked Delete API (files and empty folders only; requires unlock + delete password)
+  app.delete('/api/fs/file', requireDeleteAuth, (req, res) => {
     const rawPath = req.query.path ? String(req.query.path) : '';
     if (!rawPath) return res.status(400).json({ error: 'Missing file path' });
     const targetPath = path.resolve(rawPath);
-    const rel = path.relative(path.resolve(uploadsDir), targetPath);
-    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
-      return res.status(403).json({ error: 'Delete is restricted to the uploads folder.' });
-    }
     try {
-      if (!fs.existsSync(targetPath)) {
-        return res.status(404).json({ error: 'File not found' });
+      const check = validateDeletableTarget(targetPath);
+      if (!check.ok) {
+        return res.status(check.status).json({ error: check.error });
       }
-      fs.rmSync(targetPath, { recursive: true, force: true });
+      deleteValidatedTarget(targetPath, check.isDirectory);
       res.json({ success: true, path: targetPath });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to delete file', details: err.message });
+      res.status(500).json({ error: 'Failed to delete item', details: err.message });
     }
   });
 

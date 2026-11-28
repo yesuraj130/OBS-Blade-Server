@@ -439,6 +439,19 @@
             </div>
           </div>
 
+          <!-- Upload Destination Folder -->
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <label style="font-size: 12px; font-weight: 600; color: var(--obs-text-gray);">Upload Destination Folder</label>
+              <button id="btn-media-change-folder" type="button" class="btn-blue-outline" style="padding: 4px 10px; font-size: 11px;">
+                Change Folder
+              </button>
+            </div>
+            <div id="edit-media-upload-dir" style="font-size: 12px; color: #cbd5e1; background: #080c14; padding: 8px 12px; border-radius: 8px; border: 1px solid #1a2233; word-break: break-all; font-family: monospace; margin-top: 4px;">
+              (Select folder when uploading)
+            </div>
+          </div>
+
           <!-- Select / Change Media Path -->
           <div style="display: flex; flex-direction: column; gap: 8px;">
             <label style="font-size: 12px; font-weight: 600; color: #e2e8f0;" for="input-edit-media-path">Change Media File</label>
@@ -557,7 +570,6 @@
 
         <!-- Quick location chips -->
         <div class="host-quick-locations">
-          <button type="button" class="btn-quick-loc" data-dir="__UPLOADS__">📂 Uploads</button>
           <button type="button" class="btn-quick-loc" data-dir="__DRIVES__">💾 Drives</button>
           <button type="button" class="btn-quick-loc" data-dir="__PROJECT__">📁 Workspace</button>
           <button type="button" class="btn-quick-loc" data-dir="/">💻 Root</button>
