@@ -1851,8 +1851,32 @@ svg { display: block; flex-shrink: 0; }
     drawer.classList.toggle('hidden', !open);
   }
 
-  function browse(dir) {
+  function getDirFromUrl() {
+    try {
+      var d = new URLSearchParams(window.location.search).get('dir');
+      return d && d.trim() ? d.trim() : '';
+    } catch (_) { return ''; }
+  }
+
+  function syncUrlDir(dirPath, mode) {
+    if (!dirPath || mode === 'none') return;
+    try {
+      if (!window.history || !window.history.replaceState) return;
+      var url = new URL(window.location.href);
+      var currentParam = url.searchParams.get('dir') || '';
+      url.searchParams.set('dir', dirPath);
+      var nextUrl = url.pathname + url.search + url.hash;
+      if (mode === 'push' && currentParam !== dirPath && window.history.pushState) {
+        window.history.pushState({ fbDir: dirPath }, '', nextUrl);
+      } else {
+        window.history.replaceState({ fbDir: dirPath }, '', nextUrl);
+      }
+    } catch (_) {}
+  }
+
+  function browse(dir, opts) {
     var target = dir || state.currentDir || '__PROJECT__';
+    var historyMode = (opts && opts.historyMode) || (dir ? 'push' : 'replace');
     state.selected = {};
     closeMenus();
     setDrawerOpen(false);
@@ -1870,6 +1894,7 @@ svg { display: block; flex-shrink: 0; }
           $('nav-drives-title').textContent = data.platform === 'win32' ? 'System Drives' : 'Root /';
         }
         state.entries = Array.isArray(data.entries) ? data.entries : [];
+        syncUrlDir(state.currentDir, historyMode);
         renderBookmarks();
         renderAll();
       })
@@ -2246,7 +2271,7 @@ svg { display: block; flex-shrink: 0; }
         applyServerDefaults(res.d);
         loginPass.value = '';
         loginOverlay.classList.add('hidden');
-        browse(state.defaultDir || '__PROJECT__');
+        browse(getDirFromUrl() || state.defaultDir || '__PROJECT__', { historyMode: 'replace' });
       })
       .catch(function () {
         loginErr.textContent = 'Connection failed';
@@ -2508,6 +2533,15 @@ svg { display: block; flex-shrink: 0; }
     }
   });
 
+  // Browser Back / Forward folder navigation
+  window.addEventListener('popstate', function (e) {
+    if (!loginOverlay.classList.contains('hidden')) return;
+    var target = (e.state && e.state.fbDir) || getDirFromUrl() || state.defaultDir || '__PROJECT__';
+    if (target && target !== state.currentDir) {
+      browse(target, { historyMode: 'none' });
+    }
+  });
+
   // Startup initialization
   renderBookmarks();
   fetch('/api/status', { headers: authHeaders() })
@@ -2523,11 +2557,11 @@ svg { display: block; flex-shrink: 0; }
         showLogin('');
       } else {
         applyServerDefaults(st);
-        browse(state.defaultDir || '__PROJECT__');
+        browse(getDirFromUrl() || state.defaultDir || '__PROJECT__', { historyMode: 'replace' });
       }
     })
     .catch(function () {
-      browse('__PROJECT__');
+      browse(getDirFromUrl() || '__PROJECT__', { historyMode: 'replace' });
     });
 })();
 </script>
