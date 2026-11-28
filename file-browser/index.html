@@ -468,6 +468,7 @@ svg { display: block; flex-shrink: 0; }
 .bottom-action:hover { background: rgba(255, 255, 255, 0.06); }
 .bottom-action:disabled { opacity: 0.3; pointer-events: none; }
 .bottom-action.danger { color: var(--danger); }
+.bottom-action.backup { color: var(--amber); }
 
 /* Bottom Paste Bar */
 .paste-bar {
@@ -1059,6 +1060,9 @@ svg { display: block; flex-shrink: 0; }
     <button type="button" id="ba-copy" class="bottom-action" title="Copy">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     </button>
+    <button type="button" id="ba-backup" class="bottom-action backup" title="Move to BackUp">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+    </button>
     <button type="button" id="ba-delete" class="bottom-action danger" title="Delete">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
     </button>
@@ -1610,6 +1614,7 @@ svg { display: block; flex-shrink: 0; }
       searchWrap.classList.add('hidden');
       folderTitle.textContent = sel.length === 1 ? '1 item selected' : sel.length + ' items selected';
       folderSub.textContent = sel.length === 1 ? sel[0].name : 'Tap actions below';
+      $('ba-backup').disabled = state.currentDir === '__DRIVES__';
       $('ba-rename').disabled = sel.length !== 1;
       $('sm-open').disabled = sel.length !== 1;
       $('sm-download').disabled = sel.length !== 1 || sel[0].isDirectory;
@@ -2130,16 +2135,17 @@ svg { display: block; flex-shrink: 0; }
     var sel = selectedItems();
     if (!sel.length) return;
     if (!state.deleteUnlocked) {
+      if (state.currentDir === '__DRIVES__') {
+        showToast('Delete lock is enabled. Unlock Delete from the sidebar or menu first.');
+        return;
+      }
       openDialog({
         title: 'Delete Locked',
-        message: 'Delete lock is currently enabled for safety. Unlock delete mode and permanently delete ' + sel.length + ' item(s)?',
-        okText: 'Unlock & Delete',
-        danger: true,
+        message: 'Delete lock is enabled for safety. Unlock Delete from the sidebar or menu to permanently delete, or move ' + sel.length + (sel.length === 1 ? ' item' : ' items') + ' to the BackUp folder instead.',
+        okText: 'Move to BackUp',
+        danger: false,
       }).then(function (ok) {
-        if (!ok) return;
-        state.deleteUnlocked = true;
-        renderHeader();
-        executeDelete(sel);
+        if (ok) executeBackup(sel);
       });
       return;
     }
@@ -2164,6 +2170,31 @@ svg { display: block; flex-shrink: 0; }
         browse();
       })
       .catch(function (e) { showToast(e.message || 'Delete failed'); });
+  }
+
+  function doBackup() {
+    var sel = selectedItems();
+    if (!sel.length || state.currentDir === '__DRIVES__') return;
+    executeBackup(sel);
+  }
+
+  function executeBackup(items) {
+    apiFetch('/api/fs/backup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sources: items.map(function (i) { return i.path; }),
+        dir: state.currentDir,
+      }),
+    }).then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error); return d; }); })
+      .then(function (d) {
+        var count = d.moved ? d.moved.length : items.length;
+        var msg = 'Moved ' + count + (count === 1 ? ' item' : ' items') + ' to BackUp';
+        if (d.skipped) msg += ' (skipped BackUp folder)';
+        showToast(msg);
+        browse();
+      })
+      .catch(function (e) { showToast(e.message || 'Move to BackUp failed'); });
   }
 
   function doPaste() {
@@ -2395,6 +2426,7 @@ svg { display: block; flex-shrink: 0; }
     clearSelection();
     showToast('Copied ' + sel.length + ' item(s)');
   });
+  $('ba-backup').addEventListener('click', doBackup);
   $('ba-delete').addEventListener('click', doDelete);
   $('ba-rename').addEventListener('click', doRename);
 

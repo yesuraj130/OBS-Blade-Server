@@ -704,6 +704,70 @@ app.post('/api/fs/move', requireAuth, (req, res) => {
 });
 
 /**
+ * Move File(s) or Folder(s) to BackUp folder inside current directory
+ */
+app.post('/api/fs/backup', requireAuth, (req, res) => {
+  const sources = Array.isArray(req.body?.sources)
+    ? req.body.sources
+    : Array.isArray(req.body?.paths)
+      ? req.body.paths
+      : req.body?.sourcePath ? [req.body.sourcePath] : [];
+  const rawDir = req.body?.dir ? String(req.body.dir).trim() : '';
+  if (!sources.length) {
+    return res.status(400).json({ error: 'No items provided' });
+  }
+  try {
+    const firstValidSrc = path.resolve(String(sources[0]));
+    const baseDir = rawDir && rawDir !== '__DRIVES__'
+      ? (rawDir === '__UPLOADS__' ? uploadsDir : rawDir === '__PROJECT__' ? projectRoot : path.resolve(rawDir))
+      : path.dirname(firstValidSrc);
+    if (!fs.existsSync(baseDir) || !fs.statSync(baseDir).isDirectory()) {
+      return res.status(404).json({ error: 'Current directory does not exist' });
+    }
+    const backupDir = path.join(baseDir, 'BackUp');
+    if (fs.existsSync(backupDir) && !fs.statSync(backupDir).isDirectory()) {
+      return res.status(409).json({ error: 'A file named BackUp already exists in this folder' });
+    }
+
+    const resolvedBackup = path.resolve(backupDir);
+    const validSources = [];
+    let skipped = 0;
+    for (const rawSrc of sources) {
+      const srcPath = path.resolve(String(rawSrc));
+      if (!fs.existsSync(srcPath)) continue;
+      if (srcPath === resolvedBackup) {
+        skipped++;
+        continue;
+      }
+      validSources.push(srcPath);
+    }
+    if (!validSources.length) {
+      return res.status(400).json({ error: 'Cannot move the BackUp folder into itself' });
+    }
+
+    fs.mkdirSync(backupDir, { recursive: true });
+    const moved = [];
+    for (const srcPath of validSources) {
+      const stat = fs.statSync(srcPath);
+      const baseName = path.basename(srcPath);
+      const ext = stat.isDirectory() ? '' : path.extname(baseName);
+      const stem = ext ? baseName.slice(0, baseName.length - ext.length) : baseName;
+      let targetPath = path.join(backupDir, baseName);
+      let idx = 1;
+      while (fs.existsSync(targetPath)) {
+        targetPath = path.join(backupDir, `${stem} (${idx})${ext}`);
+        idx++;
+      }
+      moveEntrySync(srcPath, targetPath);
+      moved.push(targetPath);
+    }
+    res.json({ success: true, backupDir, moved, skipped });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to move items to BackUp', details: err.message });
+  }
+});
+
+/**
  * Delete Multiple Files or Folders
  */
 app.post('/api/fs/delete', requireAuth, (req, res) => {
